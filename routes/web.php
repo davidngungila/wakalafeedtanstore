@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\CashPointController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FloatController;
@@ -19,6 +20,10 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', fn () => auth()->check()
     ? redirect()->route('dashboard')
     : redirect()->route('login'));
+
+Route::get('/avatars/{file}', [AvatarController::class, 'show'])
+    ->name('avatar.show')
+    ->where('file', '.*');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');

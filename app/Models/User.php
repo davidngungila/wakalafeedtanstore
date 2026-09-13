@@ -46,7 +46,7 @@ class User extends Authenticatable
     public function avatarUrl(): string
     {
         return $this->profile_photo_path
-            ? asset('storage/'.ltrim($this->profile_photo_path, '/'))
+            ? route('avatar.show', ['file' => str_replace('avatars/', '', ltrim($this->profile_photo_path, '/'))])
             : '';
     }
 }
