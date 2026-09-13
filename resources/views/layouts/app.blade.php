@@ -182,6 +182,22 @@
             70%{box-shadow:0 0 0 7px rgba(94,110,63,0);}
             100%{box-shadow:0 0 0 0 rgba(94,110,63,0);}
         }
+        .tb-user{
+            display:flex;align-items:center;gap:9px;text-decoration:none;
+            background:var(--white);border:1.5px solid var(--line);border-radius:11px;padding:5px 10px 5px 5px;
+            transition:background .15s;
+        }
+        .tb-user:hover{background:var(--sand-100);}
+        .tb-user-avatar{
+            width:30px;height:30px;border-radius:50%;flex:none;
+            background:linear-gradient(155deg,var(--terracotta-600),var(--gold-500));
+            display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px;
+        }
+        .tb-user-avatar.acacia{background:linear-gradient(155deg,var(--acacia-500),var(--acacia-600));}
+        .tb-user-avatar.gold{background:linear-gradient(155deg,#C2912F,var(--gold-500));}
+        .tb-user-text{overflow:hidden;white-space:nowrap;}
+        .tb-user-text b{display:block;color:var(--coffee-900);font-size:12.5px;line-height:1.25;}
+        .tb-user-text span{display:block;color:var(--ink-soft);font-size:11px;}
         .view-wrap{padding:28px;flex:1;}
         .view{animation:fadeUp .35s ease;}
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
@@ -433,6 +449,7 @@
             .topbar{padding:0 14px;gap:10px;}
             .form-row,.detail-grid{grid-template-columns:1fr;}
             .tb-live span{display:none;}
+            .tb-user-text{display:none;}
             .view-head h2{font-size:22px;}
         }
         @media (prefers-reduced-motion:reduce){
@@ -542,17 +559,6 @@
                     </div>
                 </div>
             </nav>
-            <div class="sb-footer">
-                <a href="{{ route('profile.index') }}" class="sb-user" style="text-decoration:none;">
-                    <div class="sb-avatar">
-                        {{ $initials }}
-                    </div>
-                    <div class="sb-user-text">
-                        <strong>{{ $currentUser->name }}</strong>
-                        <span>{{ ucfirst($currentUser->role) }}</span>
-                    </div>
-                </a>
-            </div>
         </aside>
 
         <!-- Main -->
@@ -570,6 +576,13 @@
                     <a href="{{ route('transactions.index') }}" class="tb-iconbtn" aria-label="Alert icons" title="New transactions">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
                         <span class="tb-dot"></span>
+                    </a>
+                    <a href="{{ route('profile.index') }}" class="tb-user" title="My profile">
+                        <div class="tb-user-avatar {{ $currentUser->role === 'admin' ? 'gold' : ($currentUser->role === 'supervisor' ? 'acacia' : '') }}">{{ $initials }}</div>
+                        <div class="tb-user-text">
+                            <b>{{ $currentUser->name }}</b>
+                            <span>{{ ucfirst($currentUser->role) }}</span>
+                        </div>
                     </a>
                     <form method="POST" action="{{ route('logout') }}" style="display:inline;">
                         @csrf
