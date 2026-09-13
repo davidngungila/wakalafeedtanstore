@@ -95,9 +95,15 @@
                             <th>Enabled</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="rateRows">
                         @forelse ($rates as $rate)
-                            <tr>
+                            <tr data-network="{{ $rate->network?->name }}"
+                                data-color="{{ $rate->network?->color }}"
+                                data-type="{{ txn_type_label($rate->transaction_type) }}"
+                                data-rawtype="{{ $rate->transaction_type }}"
+                                data-rate="{{ $rate->rate }}"
+                                data-structure="{{ $rate->rate_structure }}"
+                                data-active="{{ $rate->is_active ? '1' : '0' }}">
                                 <td>
                                     <span class="net-dot" style="background:{{ $rate->network?->color }};"></span>
                                     {{ $rate->network?->name }}
@@ -244,5 +250,16 @@
                 submitForm(form, { method: 'POST', done: () => toast('Rates saved offline', 'success') });
             });
         });
+
+        bindRowClick('#rateRows tr[data-rawtype]', tr => {
+            return [
+                ['Network', tr.dataset.network ? { __html: `<span class="net-dot" style="background:${tr.dataset.color || '#999'};"></span> ${tr.dataset.network}` } : '—'],
+                ['Type', tr.dataset.type],
+                ['Type code', tr.dataset.rawtype],
+                ['Rate', Number(tr.dataset.rate).toLocaleString('en-US', { maximumFractionDigits: 2 }) + '%'],
+                ['Structure', tr.dataset.structure + ' (% of amount)'],
+                ['Enabled', { __html: tr.dataset.active === '1' ? '<span class="tag tag-green">Active</span>' : '<span class="tag tag-grey">Disabled</span>' }],
+            ];
+        }, 'Commission rate');
     </script>
 @endsection

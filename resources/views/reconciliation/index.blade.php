@@ -50,9 +50,17 @@
                         <th>By</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="reconRows">
                     @forelse ($records as $record)
-                        <tr>
+                        <tr data-date="{{ $record->reconciliation_date }}"
+                            data-code="{{ $record->code }}"
+                            data-expected="{{ $record->expected_cash }}"
+                            data-counted="{{ $record->counted_cash }}"
+                            data-cashvar="{{ $record->cash_variance }}"
+                            data-floatvar="{{ $record->float_variance }}"
+                            data-status="{{ $record->status }}"
+                            data-reconciler="{{ $record->reconciler?->name }}"
+                            data-notes="{{ $record->notes }}">
                             <td>
                                 <div class="cell-title">{{ $record->reconciliation_date }}</div>
                                 <div class="cell-sub">#{{ $record->code }}</div>
@@ -137,6 +145,33 @@
 @section('scripts')
     <script>
         function openReconModal() { openModal('reconModal'); }
+
+        function reconFmt(n) { return 'TZS ' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+
+        bindRowClick('#reconRows tr[data-code]', tr => {
+            const cashVar = parseFloat(tr.dataset.cashvar) || 0;
+            const floatVar = parseFloat(tr.dataset.floatvar) || 0;
+            const cashTag = cashVar === 0
+                ? '<span class="tag tag-green">Balanced</span>'
+                : (cashVar > 0
+                    ? '<span class="tag tag-gold">+' + reconFmt(cashVar) + '</span>'
+                    : '<span class="tag tag-red">' + reconFmt(cashVar) + '</span>');
+            const floatTag = floatVar === 0
+                ? '<span class="tag tag-green">Balanced</span>'
+                : '<span class="tag tag-terracotta">' + (floatVar > 0 ? '+' : '') + reconFmt(floatVar) + '</span>';
+            return [
+                ['Date', tr.dataset.date],
+                ['Code', '#' + tr.dataset.code],
+                ['Expected cash', reconFmt(parseFloat(tr.dataset.expected) || 0)],
+                ['Counted cash', reconFmt(parseFloat(tr.dataset.counted) || 0)],
+                ['Cash variance', { __html: cashTag }],
+                ['Float variance', { __html: floatTag }],
+                ['Status', { __html: statusBadgeHtml(tr.dataset.status) }],
+                ['Reconciled by', tr.dataset.reconciler || '—'],
+                ['Notes', tr.dataset.notes || '—'],
+            ];
+        }, 'Reconciliation session');
+
         document.querySelectorAll('[data-recon-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();

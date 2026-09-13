@@ -47,7 +47,11 @@
                 </thead>
                 <tbody id="usersBody">
                     @forelse ($users as $user)
-                        <tr data-id="{{ $user->id }}" data-name="{{ strtolower($user->name) }}" data-role="{{ $user->role }}">
+                        <tr data-id="{{ $user->id }}" data-name="{{ strtolower($user->name) }}" data-role="{{ $user->role }}"
+                            data-email="{{ $user->email }}" data-phone="{{ $user->phone ?? '' }}"
+                            data-agent="{{ $user->agent?->name ?? '' }}" data-agentcode="{{ $user->agent?->code ?? '' }}"
+                            data-active="{{ $user->is_active ? '1' : '0' }}"
+                            data-lastlogin="{{ $user->last_login_at?->format('d M Y H:i') ?? '' }}">
                             <td>
                                 <div class="cell-main">
                                     <div class="avatar {{ $user->role === 'admin' ? 'gold' : ($user->role === 'supervisor' ? 'acacia' : '') }}">{{ strtoupper(substr($user->name, 0, 2)) }}</div>
@@ -263,6 +267,23 @@
             if (pendingDeleteFunc) pendingDeleteFunc();
             closeModal('confirmModalBackdrop');
         }
+
+        bindRowClick('#usersBody tr[data-id]', tr => {
+            const roleTag = tr.dataset.role === 'admin'
+                ? '<span class="tag tag-gold">Admin</span>'
+                : (tr.dataset.role === 'supervisor'
+                    ? '<span class="tag tag-green">Supervisor</span>'
+                    : '<span class="tag tag-terracotta">Cashier</span>');
+            return [
+                ['Name', tr.dataset.name],
+                ['Email', tr.dataset.email],
+                ['Role', { __html: roleTag }],
+                ['Cash point', tr.dataset.agent ? tr.dataset.agent + ' (' + tr.dataset.agentcode + ')' : '—'],
+                ['Phone', tr.dataset.phone || '—'],
+                ['Status', { __html: tr.dataset.active === '1' ? '<span class="tag tag-green">Active</span>' : '<span class="tag tag-grey">Disabled</span>' }],
+                ['Last login', tr.dataset.lastlogin || 'Never'],
+            ];
+        }, 'User details');
 
         document.querySelectorAll('[data-user-form]').forEach(form => {
             form.addEventListener('submit', (e) => {

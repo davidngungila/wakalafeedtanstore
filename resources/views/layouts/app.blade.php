@@ -596,6 +596,21 @@
         </div>
     </div>
     <div id="toastHost"></div>
+
+    <!-- Generic row details drawer -->
+    <div class="modal-backdrop" id="rowDetailsModal">
+        <div class="modal">
+            <div class="modal-head">
+                <h3 id="rowDetailsTitle">Details</h3>
+                <button class="modal-close" onclick="closeModal('rowDetailsModal')">✕</button>
+            </div>
+            <div class="modal-body" id="rowDetailsBody"></div>
+            <div class="modal-foot">
+                <button class="btn btn-primary" onclick="closeModal('rowDetailsModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const CSRF_TOKEN = '{{ csrf_token() }}';
 
@@ -634,6 +649,56 @@
                 e.target.classList.remove('show');
             }
         });
+
+        function openRowDetails(entries, title = 'Details') {
+            const body = document.getElementById('rowDetailsBody');
+            document.getElementById('rowDetailsTitle').textContent = title;
+            body.innerHTML = '';
+            const receipt = document.createElement('div');
+            receipt.className = 'receipt';
+            if (!entries || !entries.length) {
+                const p = document.createElement('p');
+                p.className = 'empty-state';
+                p.textContent = 'Nothing to show for this row.';
+                receipt.appendChild(p);
+            } else {
+                entries.forEach(([label, value]) => {
+                    const row = document.createElement('div');
+                    row.className = 'receipt-row';
+                    const s = document.createElement('span');
+                    s.textContent = label;
+                    const b = document.createElement('b');
+                    if (value && value.__html) {
+                        b.innerHTML = value.__html;
+                    } else {
+                        b.textContent = value == null || value === '' ? '—' : value;
+                    }
+                    row.appendChild(s);
+                    row.appendChild(b);
+                    receipt.appendChild(row);
+                });
+            }
+            body.appendChild(receipt);
+            openModal('rowDetailsModal');
+        }
+
+        function bindRowClick(selector, extractor, title = 'Details') {
+            document.querySelectorAll(selector).forEach(tr => {
+                tr.style.cursor = 'pointer';
+                tr.addEventListener('click', (e) => {
+                    if (e.target.closest('a, button, input, select, textarea, label')) return;
+                    const entries = extractor(tr);
+                    if (entries) openRowDetails(entries, typeof title === 'function' ? title(tr) : title);
+                });
+            });
+        }
+
+        function statusBadgeHtml(status) {
+            const cls = status === 'completed' || status === 'active' || status === 'reconciled' ? 'tag-green'
+                : (status === 'reversed' || status === 'inactive' ? 'tag-grey'
+                : (status === 'failed' || status === 'suspended' ? 'tag-red' : 'tag-gold'));
+            return '<span class="tag ' + cls + '">' + status[0].toUpperCase() + status.slice(1) + '</span>';
+        }
 
         async function submitForm(form, { method = 'POST', done = null, csrf = true } = {}) {
             const url = form.getAttribute('action') || window.location.href;

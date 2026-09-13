@@ -327,5 +327,26 @@
                 submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
             });
         });
+
+        bindRowClick('#transactionsBody tr[data-id]', tr => {
+            const t = transactionsData.find(x => Number(x.id) === Number(tr.dataset.id));
+            if (!t) return [];
+            return [
+                ['Reference', t.reference],
+                ['Provider ref', t.provider_reference || '—'],
+                ['Date', t.created_at],
+                ['Type', TYPE_LABEL[t.type] || t.type],
+                ['Network', t.network ? { __html: `<span class="net-dot" style="background:${t.network_color || '#999'};"></span> ${t.network}` } : '—'],
+                ['Customer', t.customer_name || '—'],
+                ['Phone', t.customer_phone],
+                ['Amount', fmt(t.amount)],
+                ['Fee', fmt(t.fee)],
+                ['Commission', fmt(t.commission)],
+                ['Status', { __html: statusBadgeHtml(t.status) }],
+                ...(t.reversal_reason ? [['Reversal reason', t.reversal_reason]] : []),
+                ...(t.notes ? [['Notes', t.notes]] : []),
+                ['Operator', t.operator || authUser],
+            ];
+        }, 'Transaction details');
     </script>
 @endsection

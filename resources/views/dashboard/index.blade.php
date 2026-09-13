@@ -143,9 +143,9 @@
                             <th>Status</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="dashTxnRows">
                         @forelse ($recentTransactions as $txn)
-                            <tr>
+                            <tr data-id="{{ $txn->id }}">
                                 <td>
                                     <div class="cell-title">{{ $txn->reference }}</div>
                                     <div class="cell-sub">{{ $txn->created_at->diffForHumans() }}</div>
@@ -278,6 +278,57 @@
 
 @section('scripts')
     <script>
+        @php
+            $dashTxns = $recentTransactions->map(fn ($t) => [
+                'id' => $t->id,
+                'reference' => $t->reference,
+                'type' => $t->type,
+                'status' => $t->status,
+                'customer_name' => $t->customer_name,
+                'customer_phone' => $t->customer_phone,
+                'amount' => (float) $t->amount,
+                'fee' => (float) $t->fee,
+                'commission' => (float) $t->commission,
+                'provider_reference' => $t->provider_reference,
+                'notes' => $t->notes,
+                'reversal_reason' => $t->reversal_reason,
+                'network' => $t->network?->name,
+                'network_color' => $t->network?->color,
+                'created_at' => $t->created_at->format('d M Y H:i'),
+                'operator' => $t->operator?->name,
+            ])->values();
+        @endphp
+        const dashTxns = @json($dashTxns);
+
+        const DASH_TYPES = {
+            deposit: 'Customer Deposit', withdrawal: 'Customer Withdrawal', send_money: 'Send Money',
+            bill_payment: 'Bill Payment', airtime: 'Airtime', data: 'Data Bundle',
+            bank_to_wallet: 'Bank to Wallet', wallet_to_bank: 'Wallet to Bank',
+        };
+
+        function dashFmt(n) { return 'TZS ' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+
+        bindRowClick('#dashTxnRows tr[data-id]', tr => {
+            const t = dashTxns.find(x => Number(x.id) === Number(tr.dataset.id));
+            if (!t) return [];
+            return [
+                ['Reference', t.reference],
+                ['Provider ref', t.provider_reference || '—'],
+                ['Date', t.created_at],
+                ['Type', DASH_TYPES[t.type] || t.type],
+                ['Network', t.network ? { __html: `<span class="net-dot" style="background:${t.network_color || '#999'};"></span> ${t.network}` } : '—'],
+                ['Customer', t.customer_name || '—'],
+                ['Phone', t.customer_phone],
+                ['Amount', dashFmt(t.amount)],
+                ['Fee', dashFmt(t.fee)],
+                ['Commission', dashFmt(t.commission)],
+                ['Status', { __html: statusBadgeHtml(t.status) }],
+                ...(t.reversal_reason ? [['Reversal reason', t.reversal_reason]] : []),
+                ...(t.notes ? [['Notes', t.notes]] : []),
+                ['Operator', t.operator || '{{ auth()->user()->name }}'],
+            ];
+        }, 'Transaction details');
+
         document.querySelectorAll('[data-process-txn]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();

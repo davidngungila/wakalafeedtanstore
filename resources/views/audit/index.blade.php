@@ -45,7 +45,15 @@
                 </thead>
                 <tbody id="logsBody">
                     @forelse ($logs as $log)
-                        <tr data-search="{{ strtolower($log->action.' '.($log->user?->name ?? '').' '.($log->entity_type ?? '')) }}">
+                        <tr data-search="{{ strtolower($log->action.' '.($log->user?->name ?? '').' '.($log->entity_type ?? '')) }}"
+                            data-when="{{ $log->created_at->format('d M Y H:i') }}"
+                            data-user="{{ $log->user?->name ?? 'System' }}"
+                            data-useremail="{{ $log->user?->email ?? '' }}"
+                            data-action="{{ $log->action }}"
+                            data-entity="{{ $log->entity_type ?? '' }}"
+                            data-entityid="{{ $log->entity_id ?? '' }}"
+                            data-ip="{{ $log->ip_address ?? '' }}"
+                            data-details="{{ json_encode($log->details ?? []) }}">
                             <td>
                                 <div class="cell-title">{{ $log->created_at->format('d M Y H:i') }}</div>
                                 <div class="cell-sub">{{ $log->created_at->diffForHumans() }}</div>
@@ -92,5 +100,21 @@
                 tr.style.display = (!q || tr.dataset.search.includes(q)) ? 'table-row' : 'none';
             });
         }
+
+        bindRowClick('#logsBody tr[data-action]', tr => {
+            let details = tr.dataset.details || '{}';
+            try { details = JSON.parse(details); } catch (err) { details = {}; }
+            const detailEntries = Object.keys(details).map(k =>
+                [k, Array.isArray(details[k]) ? details[k].join(', ') : String(details[k])]);
+            return [
+                ['When', tr.dataset.when],
+                ['User', tr.dataset.user + (tr.dataset.useremail ? ' (' + tr.dataset.useremail + ')' : '')],
+                ['Action', { __html: '<span class="tag tag-terracotta">' + tr.dataset.action + '</span>' }],
+                ['Entity', tr.dataset.entity || '—'],
+                ['Entity ID', tr.dataset.entityid || '—'],
+                ['IP address', tr.dataset.ip || '—'],
+                ...detailEntries,
+            ];
+        }, 'Audit log entry');
     </script>
 @endsection

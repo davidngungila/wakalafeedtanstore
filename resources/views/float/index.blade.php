@@ -47,9 +47,12 @@
                         <th>Variance</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="floatBalRows">
                     @forelse ($balances as $balance)
-                        <tr>
+                        <tr data-network="{{ $balance->network?->name }}"
+                            data-color="{{ $balance->network?->color }}"
+                            data-opening="{{ $balance->opening_balance }}"
+                            data-balance="{{ $balance->balance }}">
                             <td>
                                 <span class="net-dot" style="background:{{ $balance->network?->color }};"></span>
                                 {{ $balance->network?->name }}
@@ -89,9 +92,16 @@
                         <th>Status</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="floatActRows">
                     @forelse ($floatTransactions as $ft)
-                        <tr>
+                        <tr data-ref="{{ $ft->reference }}"
+                            data-date="{{ $ft->created_at->format('d M Y H:i') }}"
+                            data-type="{{ $ft->type }}"
+                            data-network="{{ $ft->network?->name }}"
+                            data-color="{{ $ft->network?->color }}"
+                            data-amount="{{ $ft->amount }}"
+                            data-notes="{{ $ft->notes }}"
+                            data-operator="{{ $ft->operator?->name }}">
                             <td>
                                 <div class="cell-title">{{ $ft->reference }}</div>
                                 <div class="cell-sub">{{ $ft->created_at->format('d M Y · H:i') }}</div>
@@ -166,6 +176,43 @@
 
 @section('scripts')
     <script>
+        function floatFmt(n) { return 'TZS ' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+
+        bindRowClick('#floatBalRows tr[data-network]', tr => {
+            const opening = parseFloat(tr.dataset.opening) || 0;
+            const balance = parseFloat(tr.dataset.balance) || 0;
+            const diff = balance - opening;
+            const tagHtml = diff === 0
+                ? '<span class="tag tag-green">Balanced</span>'
+                : (diff > 0
+                    ? '<span class="tag tag-green">+' + floatFmt(diff) + '</span>'
+                    : '<span class="tag tag-red">-' + floatFmt(Math.abs(diff)) + '</span>');
+            return [
+                ['Network', tr.dataset.network ? { __html: `<span class="net-dot" style="background:${tr.dataset.color || '#999'};"></span> ${tr.dataset.network}` } : '—'],
+                ['Opening balance', floatFmt(opening)],
+                ['Current balance', floatFmt(balance)],
+                ['Variance', { __html: tagHtml }],
+            ];
+        }, 'Float balance');
+
+        const FLOAT_TYPE_LABEL = {
+            float_topup: 'Float top-up', float_pull: 'Float pull',
+            cash_in: 'Cash in', cash_out: 'Cash out',
+        };
+
+        bindRowClick('#floatActRows tr[data-ref]', tr => {
+            return [
+                ['Reference', tr.dataset.ref],
+                ['Date', tr.dataset.date],
+                ['Type', FLOAT_TYPE_LABEL[tr.dataset.type] || tr.dataset.type],
+                ['Network', tr.dataset.network ? { __html: `<span class="net-dot" style="background:${tr.dataset.color || '#999'};"></span> ${tr.dataset.network}` } : '—'],
+                ['Amount', floatFmt(parseFloat(tr.dataset.amount) || 0)],
+                ['Operator', tr.dataset.operator || '—'],
+                ['Notes', tr.dataset.notes || '—'],
+                ['Status', { __html: '<span class="tag tag-green">Completed</span>' }],
+            ];
+        }, 'Float transaction');
+
         document.querySelectorAll('[data-float-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
