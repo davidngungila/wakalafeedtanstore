@@ -1,0 +1,144 @@
+<?php
+
+use App\Models\Agent;
+
+if (! function_exists('money')) {
+    /**
+     * Format a currency amount in Tanzanian Shillings.
+     */
+    function money(float|int|string|null $amount): string
+    {
+        return 'TZS '.number_format((float) $amount, (float) $amount === round((float) $amount) ? 0 : 2, '.', ',');
+    }
+}
+
+if (! function_exists('txn_type_label')) {
+    /**
+     * Human friendly label for a transaction type.
+     */
+    function txn_type_label(string $type): string
+    {
+        return match ($type) {
+            'deposit' => 'Customer Deposit',
+            'withdrawal' => 'Customer Withdrawal',
+            'send_money' => 'Send Money',
+            'bill_payment' => 'Bill Payment',
+            'airtime' => 'Airtime',
+            'data' => 'Data Bundle',
+            'bank_to_wallet' => 'Bank to Wallet',
+            'wallet_to_bank' => 'Wallet to Bank',
+            'cash_in' => 'Cash In',
+            'cash_out' => 'Cash Out',
+            'float_topup' => 'Float Top-up',
+            'float_pull' => 'Float Pull',
+            default => ucwords(str_replace('_', ' ', $type)),
+        };
+    }
+}
+
+if (! function_exists('status_badge')) {
+    /**
+     * Badge CSS class used for a given status.
+     */
+    function status_badge(string $status): string
+    {
+        return match (strtolower($status)) {
+            'completed', 'active', 'reconciled', 'success' => 'tag-green',
+            'pending', 'open', 'silver' => 'tag-gold',
+            'failed', 'suspended', 'variance' => 'tag-red',
+            'reversed', 'inactive', 'draft' => 'tag-grey',
+            default => 'tag-terracotta',
+        };
+    }
+}
+
+if (! function_exists('agent_level_label')) {
+    /**
+     * Human friendly label for an agent level.
+     */
+    function agent_level_label(string $level): string
+    {
+        return ucfirst($level);
+    }
+}
+
+if (! function_exists('agent_level_badge')) {
+    /**
+     * Badge CSS class for an agent level.
+     */
+    function agent_level_badge(string $level): string
+    {
+        return match (strtolower($level)) {
+            'platinum' => 'tag-terracotta',
+            'gold' => 'tag-gold',
+            'silver' => 'tag-green',
+            default => 'tag-grey',
+        };
+    }
+}
+
+if (! function_exists('agent_total_float')) {
+    /**
+     * Sum of float balances across all networks for an agent.
+     */
+    function agent_total_float(Agent $agent): float
+    {
+        return (float) $agent->balances()->sum('balance');
+    }
+}
+
+if (! function_exists('cash_point')) {
+    /**
+     * The single cash point (wakala) this system manages.
+     */
+    function cash_point(): Agent
+    {
+        static $cashPoint = null;
+
+        if ($cashPoint === null) {
+            $cashPoint = Agent::query()->orderBy('id')->first();
+        }
+
+        return $cashPoint;
+    }
+}
+
+if (! function_exists('is_role')) {
+    /**
+     * Whether the authenticated user holds one of the given roles.
+     */
+    function is_role(string ...$roles): bool
+    {
+        return auth()->check() && in_array(auth()->user()->role, $roles, true);
+    }
+}
+
+if (! function_exists('is_admin')) {
+    /**
+     * Whether the authenticated user is an administrator.
+     */
+    function is_admin(): bool
+    {
+        return is_role('admin');
+    }
+}
+
+if (! function_exists('is_supervisor')) {
+    /**
+     * Whether the authenticated user is a supervisor.
+     */
+    function is_supervisor(): bool
+    {
+        return is_role('supervisor');
+    }
+}
+
+if (! function_exists('is_cashier')) {
+    /**
+     * Whether the authenticated user is a cashier.
+     */
+    function is_cashier(): bool
+    {
+        return is_role('cashier');
+    }
+}

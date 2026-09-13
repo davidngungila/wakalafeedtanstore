@@ -1,0 +1,107 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Agent;
+use App\Models\Network;
+use App\Models\NetworkBalance;
+use App\Models\Reconciliation;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+
+class ReconciliationController extends Controller
+{
+    public function index(): View
+    {
+        $records = Reconciliation::with(['agent', 'reconciler'])->latest()->limit(120)->get();
+
+        $totals = [
+            'reconciled' => Reconciliation::where('status', 'reconciled')->count(),
+            'open' => Reconciliation::where('status', 'open')->count(),
+            'variance' => Reconciliation::where('status', 'variance')->count(),
+            'varianceAmount' => (float) Reconciliation::where('status', 'variance')->sum('cash_variance'),
+        ];
+
+        $networks = Network::orderBy('name')->get();
+
+        return view('reconciliation.index', compact('records', 'totals', 'networks'));
+    }
+
+    public function store(Request $request): JsonResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'reconciliation_date' => ['required', 'date'],
+            'counted_cash' => ['required', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:255'],
+            'counted_floats' => ['nullable', 'array'],
+            'counted_floats.*' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $agent = cash_point();
+
+        $expectedCash = (float) $agent->cash_balance;
+        $countedCash = (float) $validated['counted_cash'];
+
+        $networkBalances = $agent->balances()->with('network')->get()->map(function (NetworkBalance $balance) use ($validated) {
+            $counted = $validated['counted_floats'][$balance->network_id] ?? (float) $balance->balance;
+
+            return [
+                'network' => $balance->network->name,
+                'system' => (float) $balance->balance,
+                'counted' => (float) $counted,
+            ];
+        });
+
+        $totalFloat = (float) $agent->balances()->sum('balance');
+        $countedFloatTotal = collect($validated['counted_floats'] ?? [])->sum();
+
+        $floatVariance = round($countedFloatTotal - $totalFloat, 2);
+
+        $status = $countedCash === $expectedCash && $floatVariance === 0.0 ? 'reconciled' : 'variance';
+
+        $record = Reconciliation::create([
+            'agent_id' => $agent->id,
+            'reconciliation_date' => $validated['reconciliation_date'],
+            'opening_cash' => $this->previousClosingCash($agent, $validated['reconciliation_date']),
+            'expected_cash' => $expectedCash,
+            'counted_cash' => $countedCash,
+            'cash_variance' => round($countedCash - $expectedCash, 2),
+            'total_float' => $totalFloat,
+            'float_variance' => $floatVariance,
+            'network_balances' => $networkBalances->toArray(),
+            'status' => $status,
+            'notes' => $validated['notes'] ?? null,
+            'reconciled_by' => auth()->id(),
+        ]);
+
+        if ($status === 'reconciled') {
+            $agent->update(['cash_balance' => $countedCash]);
+        }
+
+        $this->recordAudit('Reconciliation saved', 'Reconciliation', $record->id, [
+            'agent' => $agent->code,
+            'variance' => $record->cash_variance,
+            'status' => $status,
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => $status === 'reconciled'
+                ? 'Reconciliation matched perfectly.'
+                : 'Reconciliation saved with variance.']);
+        }
+
+        return back()->with('status', 'Reconciliation saved.');
+    }
+
+    private function previousClosingCash(Agent $agent, string $date): float
+    {
+        $previous = $agent->reconciliations()
+            ->where('reconciliation_date', '<', $date)
+            ->orderByDesc('reconciliation_date')
+            ->first();
+
+        return $previous ? (float) $previous->counted_cash : (float) $agent->cash_balance;
+    }
+}

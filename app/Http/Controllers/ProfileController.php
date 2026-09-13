@@ -1,0 +1,65 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+
+class ProfileController extends Controller
+{
+    public function edit(): View
+    {
+        return view('profile.index', [
+            'user' => auth()->user(),
+        ]);
+    }
+
+    public function update(Request $request): JsonResponse|RedirectResponse
+    {
+        $user = auth()->user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'email' => ['required', 'email', 'max:120', Rule::unique('users', 'email')->ignore($user->id)],
+            'phone' => ['nullable', 'string', 'max:30'],
+        ]);
+
+        $user->update($validated);
+
+        $this->recordAudit('Profile updated', 'User', $user->id);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Profile updated successfully.']);
+        }
+
+        return back()->with('status', 'Profile updated successfully.');
+    }
+
+    public function updatePassword(Request $request): JsonResponse|RedirectResponse
+    {
+        $user = auth()->user();
+
+        $validated = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
+        ]);
+
+        if (! Hash::check($validated['current_password'], $user->password)) {
+            return response()->json(['success' => false, 'message' => 'Your current password is incorrect.'], 422);
+        }
+
+        $user->update(['password' => Hash::make($validated['password'])]);
+
+        $this->recordAudit('Password changed', 'User', $user->id);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Password changed successfully.']);
+        }
+
+        return back()->with('status', 'Password changed successfully.');
+    }
+}
