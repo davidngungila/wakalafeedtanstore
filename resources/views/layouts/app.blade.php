@@ -217,6 +217,34 @@
         .tb-user-menu a:hover,.tb-user-menu button:hover{background:var(--sand-100);}
         .tb-user-menu button.danger{color:var(--danger);}
         .tb-user-menu button.danger svg{color:var(--danger);}
+        .tb-notif-wrap{position:relative;}
+        .tb-notif-wrap::after{content:"";position:absolute;top:100%;left:0;right:0;height:10px;}
+        .tb-notif-menu{
+            position:absolute;top:calc(100% + 10px);right:0;width:345px;
+            background:var(--white);border:1px solid var(--line);border-radius:12px;
+            box-shadow:var(--shadow-lg);padding:10px;display:none;z-index:320;
+        }
+        .tb-notif-wrap:hover .tb-notif-menu,
+        .tb-notif-wrap:focus-within .tb-notif-menu{display:block;}
+        .tb-notif-head{display:flex;align-items:center;justify-content:space-between;padding:6px 6px 10px;}
+        .tb-notif-head b{font-size:15px;color:var(--coffee-900);}
+        .tb-notif-count{background:var(--terracotta-100);color:var(--terracotta-600);font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;}
+        .tb-notif-tabs{display:flex;gap:6px;background:var(--sand-100);border-radius:10px;padding:4px;margin-bottom:8px;}
+        .tb-notif-tabs button{flex:1;border:none;background:transparent;padding:7px 0;border-radius:8px;font-size:12.5px;font-weight:700;color:var(--ink-soft);cursor:pointer;font-family:inherit;}
+        .tb-notif-tabs button.active{background:var(--white);color:var(--coffee-900);box-shadow:0 1px 2px rgba(0,0,0,.08);}
+        .tb-notif-panel{max-height:340px;overflow-y:auto;overscroll-behavior:contain;}
+        .tb-notif-item{display:flex;gap:10px;padding:9px;border-radius:10px;text-decoration:none;}
+        .tb-notif-item:hover{background:var(--sand-100);}
+        .tb-notif-ico{width:32px;height:32px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;background:var(--sand-100);color:var(--coffee-700);}
+        .tb-notif-ico svg{width:15px;height:15px;}
+        .tb-notif-body{min-width:0;display:flex;flex-direction:column;gap:1px;}
+        .tb-notif-body b{font-size:13px;color:var(--coffee-900);}
+        .tb-notif-meta{font-size:12px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .tb-notif-time{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-soft);}
+        .tb-notif-empty{color:var(--ink-soft);font-size:13px;text-align:center;padding:22px 10px;}
+        .tb-notif-foot{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--line);margin-top:8px;padding:10px 6px 4px;}
+        .tb-notif-foot a{font-size:12.5px;font-weight:700;color:var(--terracotta-600);text-decoration:none;}
+        .tb-notif-foot a:hover{text-decoration:underline;}
         .menu-sep{height:1px;background:var(--line);margin:5px 4px;}
         .view-wrap{padding:28px;flex:1;}
         .view{animation:fadeUp .35s ease;}
@@ -497,6 +525,9 @@
         $isProfileArea = str_starts_with($routeName, 'profile');
         $isAccountArea = str_starts_with($routeName, 'account');
         $currentUser = auth()->user();
+        $recentTxns = \App\Models\Transaction::query()->latest()->limit(6)->get();
+        $canAccessAudit = in_array($currentUser->role ?? null, ['supervisor', 'admin'], true);
+        $recentAudit = $canAccessAudit ? \App\Models\AuditLog::query()->with('user')->latest()->limit(6)->get() : collect();
         $initials = strtoupper(implode('', array_map(fn ($w) => $w[0] ?? '', preg_split('/\s+/', $currentUser->name))));
     @endphp
     <div id="app">
@@ -602,10 +633,61 @@
                 </div>
                 <div class="tb-right">
                     <div class="tb-live"><span>APIs Connected</span></div>
-                    <a href="{{ route('transactions.index') }}" class="tb-iconbtn" aria-label="Alert icons" title="New transactions">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-                        <span class="tb-dot"></span>
-                    </a>
+                    <div class="tb-notif-wrap">
+                        <a href="{{ route('transactions.index') }}" class="tb-iconbtn" aria-label="Notifications" title="Notifications">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                            <span class="tb-dot"></span>
+                        </a>
+                        <div class="tb-notif-menu">
+                            <div class="tb-notif-head"><b>Notifications</b><span class="tb-notif-count">{{ $recentTxns->count() }}</span></div>
+                            @if ($canAccessAudit)
+                                <div class="tb-notif-tabs">
+                                    <button type="button" class="active" onclick="switchNotifTab(this, 'txns')">Transactions</button>
+                                    <button type="button" onclick="switchNotifTab(this, 'activity')">Activity</button>
+                                </div>
+                            @endif
+                            <div class="tb-notif-panel" data-panel="txns">
+                                @forelse ($recentTxns as $item)
+                                    <a class="tb-notif-item" href="{{ route('transactions.index', ['q' => $item->reference]) }}">
+                                        <span class="tb-notif-ico">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                                        </span>
+                                        <span class="tb-notif-body">
+                                            <b>{{ txn_type_label($item->type) }}</b>
+                                            <span class="tb-notif-meta">{{ money($item->amount) }} · {{ $item->customer_name ?? '—' }} · {{ $item->reference }}</span>
+                                            <span class="tb-notif-time">{{ $item->created_at->diffForHumans() }}<span class="tag {{ status_badge($item->status) }}">{{ ucfirst($item->status) }}</span></span>
+                                        </span>
+                                    </a>
+                                @empty
+                                    <div class="tb-notif-empty">No transactions yet.</div>
+                                @endforelse
+                            </div>
+                            @if ($canAccessAudit)
+                                <div class="tb-notif-panel" data-panel="activity" style="display:none;">
+                                    @forelse ($recentAudit as $item)
+                                        <a class="tb-notif-item" href="{{ route('audit.index') }}">
+                                            <span class="tb-notif-ico">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                            </span>
+                                            <span class="tb-notif-body">
+                                                <b>{{ $item->action }}</b>
+                                                <span class="tb-notif-meta">{{ $item->user?->name ?? 'System' }}</span>
+                                                <span class="tb-notif-time">{{ $item->created_at->diffForHumans() }}</span>
+                                            </span>
+                                        </a>
+                                    @empty
+                                        <div class="tb-notif-empty">No recent activity.</div>
+                                    @endforelse
+                                </div>
+                            @endif
+                            <div class="tb-notif-foot">
+                                <a href="{{ route('transactions.index') }}">View all transactions</a>
+                                @if ($canAccessAudit)
+                                    <a href="{{ route('audit.index') }}">View all activity</a>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
                     <div class="tb-user-wrap">
                         <button type="button" class="tb-user" onclick="toggleUserMenu(this)" title="Account">
                             @if ($currentUser->profile_photo_path)
@@ -723,6 +805,12 @@
             const wasOpen = wrap.classList.contains('open');
             document.querySelectorAll('.tb-user-wrap.open').forEach(w => w.classList.remove('open'));
             if (!wasOpen) wrap.classList.add('open');
+        }
+        function switchNotifTab(btn, tab) {
+            btn.closest('.tb-notif-tabs').querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+            btn.closest('.tb-notif-menu').querySelectorAll('.tb-notif-panel').forEach(p => {
+                p.style.display = p.dataset.panel === tab ? 'block' : 'none';
+            });
         }
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.tb-user-wrap')) {
