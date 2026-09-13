@@ -390,13 +390,14 @@
             background:var(--sand-50);box-shadow:var(--shadow-lg);
             display:flex;flex-direction:column;
             transform:translateX(105%);transition:transform .32s cubic-bezier(.2,.8,.2,1);
+            overflow:hidden;
         }
         .modal-backdrop.show .modal{transform:translateX(0);}
         .modal-head{flex:none;display:flex;align-items:center;justify-content:space-between;padding:22px 26px;border-bottom:1px solid var(--line);}
         .modal-head h3{font-size:19px;}
         .modal-close{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s;}
         .modal-close:hover{background:var(--sand-100);}
-        .modal-body{padding:24px 26px;flex:1;overflow-y:auto;}
+        .modal-body{padding:24px 26px;flex:1 1 auto;min-height:0;overflow-y:auto;}
         .modal-foot{flex:none;display:flex;justify-content:flex-end;gap:10px;padding:18px 26px;border-top:1px solid var(--line);}
 
 

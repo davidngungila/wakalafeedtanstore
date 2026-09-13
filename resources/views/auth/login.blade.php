@@ -99,13 +99,7 @@
             <button type="submit" class="btn" id="loginBtn">Sign in</button>
         </form>
 
-        <div class="hint">
-            <strong>Sample accounts</strong><br>
-            Admin: <code>admin@moneyagent.local</code> · Password: <code>password</code><br>
-            Supervisor: <code>supervisor@moneyagent.local</code> · Cashier: <code>cashier@moneyagent.local</code>
-        </div>
-        <div class="foot">M-Pesa · Airtel Money · Mixx by Yas · HaloPesa</div>
-    </div>
+       
     <script>
         document.getElementById('loginForm').addEventListener('submit', function(e){
             const btn = document.getElementById('loginBtn');
