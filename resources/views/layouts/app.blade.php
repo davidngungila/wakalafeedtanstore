@@ -183,9 +183,9 @@
             100%{box-shadow:0 0 0 0 rgba(94,110,63,0);}
         }
         .tb-user{
-            display:flex;align-items:center;gap:9px;text-decoration:none;
+            display:flex;align-items:center;gap:9px;
             background:var(--white);border:1.5px solid var(--line);border-radius:11px;padding:5px 10px 5px 5px;
-            transition:background .15s;
+            transition:background .15s;cursor:pointer;font-family:inherit;
         }
         .tb-user:hover{background:var(--sand-100);}
         .tb-user-avatar{
@@ -198,6 +198,25 @@
         .tb-user-text{overflow:hidden;white-space:nowrap;}
         .tb-user-text b{display:block;color:var(--coffee-900);font-size:12.5px;line-height:1.25;}
         .tb-user-text span{display:block;color:var(--ink-soft);font-size:11px;}
+        .tb-user-wrap{position:relative;}
+        .tb-user-chev{transition:transform .2s;}
+        .tb-user-wrap.open .tb-user-chev{transform:rotate(180deg);}
+        .tb-user-menu{
+            position:absolute;top:calc(100% + 8px);right:0;min-width:215px;
+            background:var(--white);border:1px solid var(--line);border-radius:12px;
+            box-shadow:var(--shadow-lg);padding:6px;display:none;z-index:300;
+        }
+        .tb-user-wrap.open .tb-user-menu{display:block;}
+        .tb-user-menu a,.tb-user-menu button{
+            display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+            padding:10px 12px;border-radius:9px;border:none;background:none;cursor:pointer;
+            font-size:13.5px;font-weight:600;color:var(--coffee-700);text-decoration:none;font-family:inherit;
+        }
+        .tb-user-menu a svg,.tb-user-menu button svg{width:16px;height:16px;color:var(--ink-soft);}
+        .tb-user-menu a:hover,.tb-user-menu button:hover{background:var(--sand-100);}
+        .tb-user-menu button.danger{color:var(--danger);}
+        .tb-user-menu button.danger svg{color:var(--danger);}
+        .menu-sep{height:1px;background:var(--line);margin:5px 4px;}
         .view-wrap{padding:28px;flex:1;}
         .view{animation:fadeUp .35s ease;}
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
@@ -577,19 +596,36 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
                         <span class="tb-dot"></span>
                     </a>
-                    <a href="{{ route('profile.index') }}" class="tb-user" title="My profile">
-                        <div class="tb-user-avatar {{ $currentUser->role === 'admin' ? 'gold' : ($currentUser->role === 'supervisor' ? 'acacia' : '') }}">{{ $initials }}</div>
-                        <div class="tb-user-text">
-                            <b>{{ $currentUser->name }}</b>
-                            <span>{{ ucfirst($currentUser->role) }}</span>
-                        </div>
-                    </a>
-                    <form method="POST" action="{{ route('logout') }}" style="display:inline;">
-                        @csrf
-                        <button type="submit" class="tb-iconbtn" aria-label="Log out" title="Log out">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    <div class="tb-user-wrap">
+                        <button type="button" class="tb-user" onclick="toggleUserMenu(this)" title="Account">
+                            <div class="tb-user-avatar {{ $currentUser->role === 'admin' ? 'gold' : ($currentUser->role === 'supervisor' ? 'acacia' : '') }}">{{ $initials }}</div>
+                            <div class="tb-user-text">
+                                <b>{{ $currentUser->name }}</b>
+                                <span>{{ ucfirst($currentUser->role) }}</span>
+                            </div>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tb-user-chev" style="width:14px;height:14px;color:var(--ink-soft);flex:none;"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </button>
-                    </form>
+                        <div class="tb-user-menu">
+                            <a href="{{ route('profile.index') }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                My Profile
+                            </a>
+                            @if (is_admin())
+                                <a href="{{ route('settings.index') }}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect></svg>
+                                    Account Settings
+                                </a>
+                            @endif
+                            <div class="menu-sep"></div>
+                            <form method="POST" action="{{ route('logout') }}">
+                                @csrf
+                                <button type="submit" class="danger">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                                    Logout
+                                </button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </header>
 
@@ -661,6 +697,18 @@
         document.addEventListener('click', (e) => {
             if(e.target.classList && e.target.classList.contains('modal-backdrop') && e.target.classList.contains('show')) {
                 e.target.classList.remove('show');
+            }
+        });
+
+        function toggleUserMenu(btn) {
+            const wrap = btn.closest('.tb-user-wrap');
+            const wasOpen = wrap.classList.contains('open');
+            document.querySelectorAll('.tb-user-wrap.open').forEach(w => w.classList.remove('open'));
+            if (!wasOpen) wrap.classList.add('open');
+        }
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.tb-user-wrap')) {
+                document.querySelectorAll('.tb-user-wrap.open').forEach(w => w.classList.remove('open'));
             }
         });
 
