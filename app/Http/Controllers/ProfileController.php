@@ -24,8 +24,8 @@ class ProfileController extends Controller
         $user = auth()->user();
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
-            'email' => ['required', 'email', 'max:120', Rule::unique('users', 'email')->ignore($user->id)],
+            'name' => ['sometimes', 'required', 'string', 'max:120'],
+            'email' => ['sometimes', 'required', 'email', 'max:120', Rule::unique('users', 'email')->ignore($user->id)],
             'phone' => ['nullable', 'string', 'max:30'],
             'avatar' => ['nullable', 'image', 'mimes:jpeg,png,webp,gif', 'max:2048'],
         ]);
