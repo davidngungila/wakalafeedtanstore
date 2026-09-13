@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Request;
+use Illuminate\Support\Facades\Request as RequestFacade;
 
 abstract class Controller
 {
@@ -25,7 +28,32 @@ abstract class Controller
             'entity_type' => $entityType,
             'entity_id' => $entityId,
             'details' => $details,
-            'ip_address' => Request::ip(),
+            'ip_address' => RequestFacade::ip(),
         ]);
+    }
+
+    /**
+     * Finish a successful sign-in. The caller must already have authenticated the user.
+     */
+    protected function completeLogin(Request $request, bool $recovery = false): JsonResponse|RedirectResponse
+    {
+        $user = Auth::user();
+
+        $user->forceFill(['last_login_at' => now()])->save();
+
+        $this->recordAudit(
+            $recovery ? 'User logged in with a recovery code' : 'User logged in',
+            'User',
+            $user->id,
+            ['email' => $user->email],
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Welcome back, '.$user->name.'!']);
+        }
+
+        $request->session()->regenerate();
+
+        return redirect()->intended(route('dashboard'));
     }
 }

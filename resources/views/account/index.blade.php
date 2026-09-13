@@ -1,0 +1,293 @@
+@extends('layouts.app')
+
+@section('title', 'Account & Security')
+
+@section('content')
+    <div class="view-head">
+        <div>
+            <h2>Account &amp; Security</h2>
+            <p class="sub">Manage your sign-in security: password, two-factor authentication and active sessions.</p>
+        </div>
+    </div>
+
+    @if (session('status'))
+        <div class="status-banner" style="background:var(--acacia-100);color:var(--acacia-600);border-radius:10px;padding:12px 16px;font-size:13.5px;font-weight:600;margin-bottom:20px;">{{ session('status') }}</div>
+    @endif
+
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Account</h3>
+                <a class="link" href="{{ route('profile.index') }}">Edit profile</a>
+            </div>
+            <div class="panel-body">
+                <div class="detail-grid">
+                    <div class="detail-item"><div class="dk">Name</div><div class="dv">{{ $user->name }}</div></div>
+                    <div class="detail-item"><div class="dk">Email</div><div class="dv">{{ $user->email }}</div></div>
+                    <div class="detail-item"><div class="dk">Role</div><div class="dv">{{ ucfirst($user->role) }}</div></div>
+                    <div class="detail-item"><div class="dk">Cash point</div><div class="dv">{{ $user->agent?->name ?? '—' }}</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Change password</h3>
+            </div>
+            <div class="panel-body">
+                <form method="POST" action="{{ route('account.password') }}" data-password-form>
+                    @csrf
+                    <input type="hidden" name="_method" value="PUT">
+                    <div class="field"><label>Current password</label><input type="password" name="current_password" required autocomplete="current-password"></div>
+                    <div class="field"><label>New password</label><input type="password" name="password" required minlength="6" autocomplete="new-password"></div>
+                    <div class="field"><label>Confirm new password</label><input type="password" name="password_confirmation" required autocomplete="new-password"></div>
+                    <button type="submit" class="btn btn-primary">Update password</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <h3>Two-factor authentication</h3>
+            @if ($user->two_factor_enabled)
+                <span class="tag tag-green">Enabled</span>
+            @else
+                <span class="tag tag-gold">Off</span>
+            @endif
+        </div>
+        <div class="panel-body">
+            @if ($user->two_factor_enabled)
+                <p style="margin:0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.7;">
+                    Two-factor authentication is on. Every sign-in now requires a code from your authenticator app.
+                    Keep your recovery codes somewhere safe in case you lose access to your device.
+                </p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary" onclick="openPasswordModal('Regenerate recovery codes', '{{ route('account.recovery-codes') }}', 'Generate codes')">Regenerate recovery codes</button>
+                    <button type="button" class="btn btn-danger" onclick="openPasswordModal('Disable two-factor authentication', '{{ route('account.two-factor.disable') }}', 'Disable two-factor')">Disable two-factor</button>
+                </div>
+            @else
+                <p style="margin:0 0 6px;color:var(--ink-soft);font-size:14px;line-height:1.7;">
+                    Add an extra layer of security. Once enabled, every sign-in will also require a six-digit code from an authenticator app.
+                </p>
+                <ol style="color:var(--ink-soft);font-size:14px;line-height:1.9;margin:14px 0 20px;padding-left:20px;">
+                    <li>Install an authenticator app (Google Authenticator, Microsoft Authenticator, Aegis, 1Password…).</li>
+                    <li>Add a new account using the key below, or scan the URI with your app.</li>
+                    <li>Enter the 6-digit code from your app to verify and enable.</li>
+                </ol>
+
+                <div style="background:var(--sand-100);border:1px dashed var(--line);border-radius:14px;padding:16px 18px;margin-bottom:18px;">
+                    <div style="text-align:center;margin-bottom:16px;">
+                        <div id="otpauthQr" data-uri="{{ \App\Support\TwoFactor::otpauthUri($pendingSecret, $user->email) }}" style="display:inline-block;background:#fff;border-radius:12px;padding:12px;"></div>
+                        <div style="font-size:12px;color:var(--ink-soft);margin-top:8px;">Scan this code with your authenticator app.</div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+                        <div>
+                            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--coffee-500);margin-bottom:4px;">Setup key (Manual entry)</div>
+                            <code style="font-size:16px;font-weight:800;letter-spacing:.14em;color:var(--coffee-900);">{{ implode(' ', str_split($pendingSecret, 4)) }}</code>
+                        </div>
+                        <button type="button" class="btn" style="padding:8px 14px;font-size:12.5px;" onclick="copyText('{{ $pendingSecret }}', this)">Copy key</button>
+                    </div>
+                    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--coffee-500);margin-bottom:4px;">otpauth URI (apps that offer "Scan with camera")</div>
+                    <code style="font-size:12px;word-break:break-all;color:var(--coffee-700);display:block;">{{ \App\Support\TwoFactor::otpauthUri($pendingSecret, $user->email) }}</code>
+                </div>
+
+                <form method="POST" action="{{ route('account.two-factor.confirm') }}" data-2fa-confirm-form>
+                    @csrf
+                    <div class="field" style="max-width:260px;">
+                        <label>Verification code</label>
+                        <input type="text" name="code" inputmode="numeric" maxlength="6" placeholder="6-digit code" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Verify &amp; enable</button>
+                </form>
+            @endif
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <h3>Active sessions</h3>
+            <span class="link">{{ $sessions->count() }} other {{ $sessions->count() === 1 ? 'device' : 'devices' }}</span>
+        </div>
+        <div class="panel-body" style="padding:0;">
+            @if ($sessions->isEmpty())
+                <p class="empty-state">No other active sessions.</p>
+            @else
+                @foreach ($sessions as $session)
+                    <div style="display:flex;align-items:center;gap:14px;padding:16px 20px;border-top:1px solid var(--line);">
+                        <div style="width:38px;height:38px;border-radius:10px;background:var(--sand-100);display:flex;align-items:center;justify-content:center;color:var(--coffee-500);flex:none;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="10" y2="10"></line></svg>
+                        </div>
+                        <div style="flex:1;min-width:0;">
+                            <b style="display:block;font-size:14px;color:var(--coffee-900);">{{ $session['device'] }}</b>
+                            <span style="font-size:12.5px;color:var(--ink-soft);">IP {{ $session['ip'] }} · Active {{ $session['last_seen']->diffForHumans() }}</span>
+                        </div>
+                        <form method="POST" action="{{ route('account.sessions.destroy', ['session' => $session['id']]) }}" data-revoke-form>
+                            @csrf
+                            <input type="hidden" name="_method" value="DELETE">
+                            <button type="submit" class="btn" style="padding:8px 14px;font-size:12.5px;background:var(--coffee-900);color:#fff;">Revoke</button>
+                        </form>
+                    </div>
+                @endforeach
+            @endif
+        </div>
+    </div>
+@endsection
+
+@section('scripts')
+    <script src="/vendor/qrcode/qrcode.js"></script>
+    <div class="modal-backdrop" id="passwordConfirmModal">
+        <div class="modal">
+            <div class="modal-head">
+                <h3 id="passwordModalTitle">Confirm</h3>
+                <button class="modal-close" onclick="closeModal('passwordConfirmModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--ink-soft);font-size:14px;line-height:1.7;margin:0 0 16px;">Enter your current password to continue. This action is recorded in the audit trail.</p>
+                <form method="POST" id="passwordConfirmForm">
+                    @csrf
+                    <input type="hidden" id="passwordModalAction" name="action">
+                    <div class="field"><label>Current password</label><input type="password" name="current_password" required autocomplete="current-password"></div>
+                </form>
+            </div>
+            <div class="modal-foot">
+                <button class="btn" onclick="closeModal('passwordConfirmModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="document.getElementById('passwordConfirmForm').requestSubmit()" id="passwordModalSubmit">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="recoveryCodesModal">
+        <div class="modal">
+            <div class="modal-head">
+                <h3>Recovery codes</h3>
+                <button class="modal-close" onclick="closeModal('recoveryCodesModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--ink-soft);font-size:14px;line-height:1.7;margin:0 0 6px;">
+                    Store these codes somewhere safe. Each code can be used once to sign in if you lose access to your authenticator app.
+                    They will not be shown again.
+                </p>
+                <div id="recoveryCodesList" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:14px 0;"></div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-primary" onclick="closeModal('recoveryCodesModal'); location.reload();">I've saved my codes</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const qrHost = document.getElementById('otpauthQr');
+        if (qrHost && typeof qrcode !== 'undefined') {
+            try {
+                const qr = qrcode(0, 'M');
+                qr.addData(qrHost.dataset.uri);
+                qr.make();
+                qrHost.innerHTML = qr.createSvgTag(4, 2);
+            } catch (err) {
+                console.error('QR generation failed:', err);
+            }
+        }
+
+        function copyText(text, btn) {
+            navigator.clipboard.writeText(text).then(() => {
+                const original = btn.textContent;
+                btn.textContent = 'Copied ✓';
+                setTimeout(() => { btn.textContent = original; }, 1600);
+            });
+        }
+
+        let pendingModalEndpoint = null;
+        let pendingModalTitle = '';
+        let pendingModalSubmitLabel = '';
+
+        function openPasswordModal(title, endpoint, submitLabel) {
+            pendingModalTitle = title;
+            pendingModalEndpoint = endpoint;
+            pendingModalSubmitLabel = submitLabel;
+            document.getElementById('passwordModalTitle').textContent = title;
+            document.getElementById('passwordModalSubmit').textContent = submitLabel;
+            document.getElementById('passwordConfirmForm').reset();
+            openModal('passwordConfirmModal');
+        }
+
+        function showRecoveryCodes(codes) {
+            const list = document.getElementById('recoveryCodesList');
+            list.innerHTML = '';
+            codes.forEach(code => {
+                const box = document.createElement('div');
+                box.style.cssText = 'background:var(--sand-100);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:ui-monospace,monospace;font-size:13px;font-weight:700;letter-spacing:.05em;color:var(--coffee-900);text-align:center;';
+                box.textContent = code;
+                list.appendChild(box);
+            });
+            openModal('recoveryCodesModal');
+        }
+
+        const passwordModalForm = document.getElementById('passwordConfirmForm');
+
+        passwordModalForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!pendingModalEndpoint) return;
+
+            const done = (data) => {
+                if (data.recovery_codes) {
+                    closeModal('passwordConfirmModal');
+                    setTimeout(() => showRecoveryCodes(data.recovery_codes), 150);
+                } else {
+                    closeModal('passwordConfirmModal');
+                    setTimeout(() => location.reload(), 600);
+                }
+            };
+
+            const btn = passwordModalForm.querySelector('button[type="submit"]');
+            if (btn) btn.disabled = true;
+
+            try {
+                const response = await fetch(pendingModalEndpoint, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF_TOKEN, 'Accept': 'application/json' },
+                    body: new FormData(passwordModalForm),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok && data.success) {
+                    toast(data.message || 'Saved successfully.', 'success');
+                    done(data);
+                } else {
+                    toast(data.message || 'Something went wrong!', 'error');
+                }
+            } catch (err) {
+                console.error(err);
+                toast('Something went wrong! Please check the console.', 'error');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        });
+
+        document.querySelectorAll('[data-password-form]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitForm(form, { method: 'PUT' });
+            });
+        });
+
+        document.querySelectorAll('[data-2fa-confirm-form]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitForm(form, { method: 'POST', done: (data) => {
+                    if (data.recovery_codes) {
+                        setTimeout(() => showRecoveryCodes(data.recovery_codes), 150);
+                    }
+                } });
+            });
+        });
+
+        document.querySelectorAll('[data-revoke-form]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitForm(form, { method: 'DELETE', done: () => {
+                    setTimeout(() => location.reload(), 600);
+                } });
+            });
+        });
+    </script>
+@endsection

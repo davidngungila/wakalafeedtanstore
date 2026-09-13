@@ -6,6 +6,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -26,7 +27,22 @@ class ProfileController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:120', Rule::unique('users', 'email')->ignore($user->id)],
             'phone' => ['nullable', 'string', 'max:30'],
+            'avatar' => ['nullable', 'image', 'mimes:jpeg,png,webp,gif', 'max:2048'],
         ]);
+
+        if ($request->hasFile('avatar')) {
+            $avatarPath = $request->file('avatar')->store('avatars', 'public');
+
+            if ($avatarPath && $user->profile_photo_path && $user->profile_photo_path !== $avatarPath) {
+                Storage::disk('public')->delete($user->profile_photo_path);
+            }
+
+            $validated['profile_photo_path'] = $avatarPath;
+        } elseif ($request->boolean('remove_avatar') && $user->profile_photo_path) {
+            Storage::disk('public')->delete($user->profile_photo_path);
+
+            $validated['profile_photo_path'] = null;
+        }
 
         $user->update($validated);
 

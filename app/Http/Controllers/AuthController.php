@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
 
 class AuthController extends Controller
@@ -29,21 +30,36 @@ class AuthController extends Controller
             return $this->loginFailed($request, 'This account is inactive or does not exist.');
         }
 
-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+        if (! Hash::check($credentials['password'], $user->password)) {
             return $this->loginFailed($request, 'These credentials do not match our records.');
         }
 
-        $user->forceFill(['last_login_at' => now()])->save();
+        if (! $user->two_factor_enabled) {
+            Auth::login($user, $request->boolean('remember'));
 
-        $this->recordAudit('User logged in', 'User', $user->id, ['email' => $user->email]);
-
-        if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => 'Welcome back, '.$user->name.'!']);
+            return $this->completeLogin($request);
         }
 
+        if (! $user->two_factor_secret) {
+            return $this->loginFailed($request, 'Two-factor authentication is misconfigured. Contact support.');
+        }
+
+        $request->session()->put('two_factor_user_id', $user->id);
+        $request->session()->put('two_factor_user_email', $user->email);
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard'));
+        $this->recordAudit('Two-factor challenge started', 'User', $user->id);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'two_factor' => true,
+                'message' => 'Enter your two-factor authentication code.',
+                'redirect' => route('two-factor.show'),
+            ]);
+        }
+
+        return redirect()->route('two-factor.show');
     }
 
     public function logout(Request $request): RedirectResponse

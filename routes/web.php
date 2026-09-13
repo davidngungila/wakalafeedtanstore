@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CashPointController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\ReconciliationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,12 +23,24 @@ Route::get('/', fn () => auth()->check()
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
     Route::post('/login', [AuthController::class, 'login']);
+
+    Route::get('/two-factor', [TwoFactorController::class, 'show'])->name('two-factor.show');
+    Route::post('/two-factor', [TwoFactorController::class, 'verify'])->name('two-factor.verify');
+    Route::post('/two-factor/cancel', [TwoFactorController::class, 'cancel'])->name('two-factor.cancel');
 });
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+
+    // Personal account & security (available to all roles)
+    Route::get('/account', [AccountController::class, 'index'])->name('account.index');
+    Route::put('/account/password', [AccountController::class, 'updatePassword'])->name('account.password');
+    Route::post('/account/two-factor/confirm', [AccountController::class, 'confirmTwoFactor'])->name('account.two-factor.confirm');
+    Route::post('/account/two-factor/disable', [AccountController::class, 'disableTwoFactor'])->name('account.two-factor.disable');
+    Route::post('/account/recovery-codes', [AccountController::class, 'refreshRecoveryCodes'])->name('account.recovery-codes');
+    Route::delete('/account/sessions/{session}', [AccountController::class, 'revokeSession'])->name('account.sessions.destroy');
 
     // Cashier + (everything above is available to all roles)
     Route::get('/cash-point', [CashPointController::class, 'index'])->name('cash-point.index');

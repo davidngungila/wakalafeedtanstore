@@ -195,6 +195,7 @@
         }
         .tb-user-avatar.acacia{background:linear-gradient(155deg,var(--acacia-500),var(--acacia-600));}
         .tb-user-avatar.gold{background:linear-gradient(155deg,#C2912F,var(--gold-500));}
+        .tb-user-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;}
         .tb-user-text{overflow:hidden;white-space:nowrap;}
         .tb-user-text b{display:block;color:var(--coffee-900);font-size:12.5px;line-height:1.25;}
         .tb-user-text span{display:block;color:var(--ink-soft);font-size:11px;}
@@ -384,6 +385,7 @@
         .avatar{width:38px;height:38px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;background:linear-gradient(155deg,var(--terracotta-600),var(--gold-500));}
         .avatar.acacia{background:linear-gradient(155deg,var(--acacia-500),var(--acacia-600));}
         .avatar.gold{background:linear-gradient(155deg,#C2912F,var(--gold-500));}
+        .avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;}
 
 
         /* Settings */
@@ -432,7 +434,10 @@
         .modal-head h3{font-size:19px;}
         .modal-close{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s;}
         .modal-close:hover{background:var(--sand-100);}
-        .modal-body{padding:24px 26px;flex:1 1 auto;min-height:0;overflow-y:auto;}
+        .modal-body{padding:24px 26px;flex:1 1 auto;min-height:0;overflow-y:auto;max-height:calc(100vh - 170px);overscroll-behavior:contain;}
+        .modal-body::-webkit-scrollbar{width:8px;}
+        .modal-body::-webkit-scrollbar-thumb{background:var(--coffee-300);border-radius:4px;}
+        .modal-body::-webkit-scrollbar-track{background:transparent;}
         .modal-foot{flex:none;display:flex;justify-content:flex-end;gap:10px;padding:18px 26px;border-top:1px solid var(--line);}
 
 
@@ -490,6 +495,7 @@
         $isAuditArea = str_starts_with($routeName, 'audit');
         $isSettingArea = str_starts_with($routeName, 'settings');
         $isProfileArea = str_starts_with($routeName, 'profile');
+        $isAccountArea = str_starts_with($routeName, 'account');
         $currentUser = auth()->user();
         $initials = strtoupper(implode('', array_map(fn ($w) => $w[0] ?? '', preg_split('/\s+/', $currentUser->name))));
     @endphp
@@ -558,19 +564,23 @@
                         <span>Audit Logs</span>
                     </a>
                 @endif
-                <div class="sb-drop {{ $isSettingArea || $isProfileArea ? 'open' : '' }}">
-                    <button type="button" class="sb-drop-toggle {{ $isSettingArea || $isProfileArea ? '' : '' }}" onclick="toggleSbDrop(this)" style="width:100%;padding:11px 12px;border-radius:10px;background:none;cursor:pointer;">
+                <div class="sb-drop {{ $isSettingArea || $isProfileArea || $isAccountArea ? 'open' : '' }}">
+                    <button type="button" class="sb-drop-toggle {{ $isSettingArea || $isProfileArea || $isAccountArea ? '' : '' }}" onclick="toggleSbDrop(this)" style="width:100%;padding:11px 12px;border-radius:10px;background:none;cursor:pointer;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px;flex:none;display:inline;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 0 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z"></path></svg>
-                        <span>{{ is_admin() ? 'System Settings' : 'Account' }}</span>
+                        <span>Account</span>
                         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </button>
                     <div class="sb-drop-menu">
                         @if (is_admin())
                             <a href="{{ route('settings.index') }}" class="sb-drop-sub {{ $isSettingArea ? 'active' : '' }}">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect></svg>
-                                Settings
+                                System Settings
                             </a>
                         @endif
+                        <a href="{{ route('account.index') }}" class="sb-drop-sub {{ $isAccountArea ? 'active' : '' }}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"></path><path d="M1 14h6M9 8h6M17 16h6"></path></svg>
+                            Account &amp; Security
+                        </a>
                         <a href="{{ route('profile.index') }}" class="sb-drop-sub {{ $isProfileArea ? 'active' : '' }}">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                             My Profile
@@ -598,7 +608,11 @@
                     </a>
                     <div class="tb-user-wrap">
                         <button type="button" class="tb-user" onclick="toggleUserMenu(this)" title="Account">
-                            <div class="tb-user-avatar {{ $currentUser->role === 'admin' ? 'gold' : ($currentUser->role === 'supervisor' ? 'acacia' : '') }}">{{ $initials }}</div>
+                            @if ($currentUser->profile_photo_path)
+                                <div class="tb-user-avatar"><img src="{{ $currentUser->avatarUrl() }}" alt=""></div>
+                            @else
+                                <div class="tb-user-avatar {{ $currentUser->role === 'admin' ? 'gold' : ($currentUser->role === 'supervisor' ? 'acacia' : '') }}">{{ $initials }}</div>
+                            @endif
                             <div class="tb-user-text">
                                 <b>{{ $currentUser->name }}</b>
                                 <span>{{ ucfirst($currentUser->role) }}</span>
@@ -610,10 +624,14 @@
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                                 My Profile
                             </a>
+                            <a href="{{ route('account.index') }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"></path><path d="M1 14h6M9 8h6M17 16h6"></path></svg>
+                                Account &amp; Security
+                            </a>
                             @if (is_admin())
                                 <a href="{{ route('settings.index') }}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect></svg>
-                                    Account Settings
+                                    System Settings
                                 </a>
                             @endif
                             <div class="menu-sep"></div>

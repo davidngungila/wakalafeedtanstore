@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'phone', 'password', 'role', 'agent_id', 'is_active'])]
+#[Fillable(['name', 'email', 'phone', 'password', 'role', 'agent_id', 'is_active', 'two_factor_secret', 'two_factor_enabled', 'two_factor_recovery_codes', 'profile_photo_path'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -30,6 +30,8 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'last_login_at' => 'datetime',
+            'two_factor_enabled' => 'boolean',
+            'two_factor_recovery_codes' => 'array',
         ];
     }
 
@@ -39,5 +41,12 @@ class User extends Authenticatable
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Agent::class);
+    }
+
+    public function avatarUrl(): string
+    {
+        return $this->profile_photo_path
+            ? asset('storage/'.ltrim($this->profile_photo_path, '/'))
+            : '';
     }
 }
