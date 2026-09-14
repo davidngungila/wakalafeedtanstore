@@ -292,6 +292,7 @@ class DeviceController extends Controller
         session()->flash('credentials_flash', [
             'device_id' => $device->id,
             'device_code' => $deviceCode,
+            'token' => $device->getDecryptedToken(),
         ]);
 
         if ($request->expectsJson()) {

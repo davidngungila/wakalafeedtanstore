@@ -225,6 +225,25 @@
                 </form>
             </div>
         </div>
+        
+        <!-- Regenerate code confirmation modal -->
+        <div class="modal-backdrop" id="regenerateCodeModal">
+            <div class="modal">
+                <div class="modal-head">
+                    <h3>Regenerate Device Code</h3>
+                    <button class="modal-close" onclick="closeModal('regenerateCodeModal')">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size:14px;color:var(--coffee-700);margin:0 0 12px 0;">Are you sure you want to generate a new device code?</p>
+                    <p style="font-size:13px;color:var(--danger);margin:0 0 8px 0;">⚠️ The old code will stop working immediately.</p>
+                    <p style="font-size:12px;color:var(--ink-soft);margin:0;">The device will need to be updated with the new code to continue functioning.</p>
+                </div>
+                <div class="modal-foot">
+                    <button type="button" class="btn btn-ghost" onclick="closeModal('regenerateCodeModal')">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmRegenerateCode()">Regenerate Code</button>
+                </div>
+            </div>
+        </div>
     @endif
 @endsection
 
@@ -293,14 +312,21 @@
             return [];
         });
         
-        async function regenerateDeviceCode(deviceId) {
-            if (!confirm('Generate a new device code? The old code stops working immediately.')) {
-                return;
-            }
+        let currentDeviceId = null;
+        
+        function showRegenerateCodeModal(deviceId) {
+            currentDeviceId = deviceId;
+            openModal('regenerateCodeModal');
+        }
+        
+        async function confirmRegenerateCode() {
+            if (!currentDeviceId) return;
+            
+            closeModal('regenerateCodeModal');
             
             try {
-                const row = document.querySelector(`tr[data-id="${deviceId}"]`);
-                const route = row ? row.dataset.regenerateCodeRoute : `/devices/${deviceId}/code`;
+                const row = document.querySelector(`tr[data-id="${currentDeviceId}"]`);
+                const route = row ? row.dataset.regenerateCodeRoute : `/devices/${currentDeviceId}/code`;
                 
                 const response = await fetch(route, {
                     method: 'POST',
@@ -324,6 +350,12 @@
                 console.error('Error regenerating code:', error);
                 toast('Failed to regenerate code.', 'error');
             }
+            
+            currentDeviceId = null;
+        }
+        
+        async function regenerateDeviceCode(deviceId) {
+            showRegenerateCodeModal(deviceId);
         }
     </script>
 @endsection
