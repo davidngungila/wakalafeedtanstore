@@ -40,16 +40,47 @@ class SmsApiController extends Controller
 
         $processed = count(array_filter($results, fn (array $r) => ($r['ok'] ?? false) === true));
         $duplicates = count(array_filter($results, fn (array $r) => ($r['duplicate'] ?? false) === true));
-        $failed = count($results) - $processed - $duplicates;
+        $ignored = count(array_filter($results, fn (array $r) => ($r['ignored_sender'] ?? false) === true));
+        $failed = count($results) - $processed - $duplicates - $ignored;
 
         return response()->json([
             'summary' => [
                 'received' => count($results),
                 'processed' => $processed,
                 'duplicates' => $duplicates,
+                'ignored_senders' => $ignored,
                 'failed' => $failed,
             ],
             'results' => $results,
+        ]);
+    }
+
+    /**
+     * Sender watchlist the Flutter app uses to decide which SMS to capture
+     * and forward automatically.
+     */
+    public function senders(Request $request): JsonResponse
+    {
+        /** @var Device $device */
+        $device = $request->attributes->get('device');
+
+        $watchlist = collect(config('sms.senders', []))
+            ->map(fn (string $code, string $keyword) => ['keyword' => $keyword, 'network' => $code])
+            ->values()
+            ->all();
+
+        return response()->json([
+            'device' => [
+                'id' => $device->id,
+                'name' => $device->name,
+                'status' => $device->status,
+                'network' => $device->network?->code,
+            ],
+            'senders' => $watchlist,
+            'ingest' => [
+                'max_batch' => 500,
+            ],
+            'server_time' => now()->toIso8601String(),
         ]);
     }
 

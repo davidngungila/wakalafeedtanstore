@@ -69,7 +69,7 @@ class SmsProcessor
             ];
         }
 
-        $network = $this->parser->identifyNetwork($sender, $device->network);
+        $network = $this->parser->identifyNetwork($sender, null);
 
         $sms = SmsMessage::create([
             'device_id' => $device->id,
@@ -95,15 +95,28 @@ class SmsProcessor
             'balance' => $parsed['balance'] > 0 ? $parsed['balance'] : null,
         ]);
 
-        if ($network === null || $parsed['reference'] === '' || $parsed['amount'] <= 0) {
+        if ($network === null) {
             $sms->update([
                 'processing_status' => 'failed',
-                'processing_error' => $network === null
-                    ? 'Unsupported sender network.'
-                    : 'SMS did not match any financial template.',
+                'processing_error' => 'Unsupported sender network.',
             ]);
 
-            return ['ok' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
+            return [
+                'ok' => false,
+                'ignored_sender' => true,
+                'sms_id' => $sms->id,
+                'sender' => $sender,
+                'error' => $sms->processing_error,
+            ];
+        }
+
+        if ($parsed['reference'] === '' || $parsed['amount'] <= 0) {
+            $sms->update([
+                'processing_status' => 'failed',
+                'processing_error' => 'SMS did not match any financial template.',
+            ]);
+
+            return ['ok' => false, 'ignored_sender' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
         }
 
         $transaction = $this->transactions->process(
