@@ -762,7 +762,7 @@
                 <button class="modal-close" onclick="closeModal('rowDetailsModal')">✕</button>
             </div>
             <div class="modal-body" id="rowDetailsBody"></div>
-            <div class="modal-foot">
+            <div class="modal-foot" id="rowDetailsFoot">
                 <button class="btn btn-primary" onclick="closeModal('rowDetailsModal')">Close</button>
             </div>
         </div>
@@ -825,10 +825,13 @@
             }
         });
 
-        function openRowDetails(entries, title = 'Details') {
+        function openRowDetails(entries, title = 'Details', actions = []) {
             const body = document.getElementById('rowDetailsBody');
+            const foot = document.getElementById('rowDetailsFoot');
             document.getElementById('rowDetailsTitle').textContent = title;
             body.innerHTML = '';
+            foot.innerHTML = '';
+            
             const receipt = document.createElement('div');
             receipt.className = 'receipt';
             if (!entries || !entries.length) {
@@ -854,16 +857,36 @@
                 });
             }
             body.appendChild(receipt);
+            
+            // Add action buttons if provided
+            if (actions && actions.length > 0) {
+                actions.forEach(action => {
+                    const btn = document.createElement('button');
+                    btn.className = `btn ${action.class || 'btn-ghost'}`;
+                    btn.textContent = action.label;
+                    btn.onclick = action.action;
+                    foot.appendChild(btn);
+                });
+            }
+            
+            // Always add close button
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'btn btn-primary';
+            closeBtn.textContent = 'Close';
+            closeBtn.onclick = () => closeModal('rowDetailsModal');
+            foot.appendChild(closeBtn);
+            
             openModal('rowDetailsModal');
         }
 
-        function bindRowClick(selector, extractor, title = 'Details') {
+        function bindRowClick(selector, extractor, title = 'Details', actions = []) {
             document.querySelectorAll(selector).forEach(tr => {
                 tr.style.cursor = 'pointer';
                 tr.addEventListener('click', (e) => {
                     if (e.target.closest('a, button, input, select, textarea, label')) return;
                     const entries = extractor(tr);
-                    if (entries) openRowDetails(entries, typeof title === 'function' ? title(tr) : title);
+                    const actionList = typeof actions === 'function' ? actions(tr) : actions;
+                    if (entries) openRowDetails(entries, typeof title === 'function' ? title(tr) : title, actionList);
                 });
             });
         }

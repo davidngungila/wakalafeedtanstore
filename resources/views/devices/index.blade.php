@@ -100,7 +100,8 @@
                             data-lastsync="{{ $device->last_sync_at?->format('d M Y H:i') ?? 'Never' }}"
                             data-registered="{{ $device->created_at->format('d M Y H:i') }}"
                             data-today="{{ $stats ? ($stats['processed'].' processed · '.$stats['received'].' received') : 'No SMS today' }}"
-                            data-sms="{{ $device->last_sms_at?->format('d M Y H:i') ?? 'Never' }}">
+                            data-sms="{{ $device->last_sms_at?->format('d M Y H:i') ?? 'Never' }}"
+                            data-regenerate-code-route="{{ route('devices.code', $device) }}">
                             <td>
                                 <div class="cell-main">
                                     <div class="avatar" style="background:var(--terracotta-100);color:var(--terracotta-600);">{{ strtoupper(substr($device->name, 0, 2)) }}</div>
@@ -276,6 +277,53 @@
                 ['Last IP', tr.dataset.ip],
                 ['Registered', tr.dataset.registered],
             ];
-        }, 'Device details');
+        }, 'Device details', tr => {
+            const deviceId = tr.dataset.id;
+            const isAdmin = {{ is_admin() ? 'true' : 'false' }};
+            
+            if (isAdmin) {
+                return [
+                    {
+                        label: 'Regenerate code',
+                        action: () => regenerateDeviceCode(deviceId),
+                        class: 'btn-ghost'
+                    }
+                ];
+            }
+            return [];
+        });
+        
+        async function regenerateDeviceCode(deviceId) {
+            if (!confirm('Generate a new device code? The old code stops working immediately.')) {
+                return;
+            }
+            
+            try {
+                const row = document.querySelector(`tr[data-id="${deviceId}"]`);
+                const route = row ? row.dataset.regenerateCodeRoute : `/devices/${deviceId}/code`;
+                
+                const response = await fetch(route, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    toast('New device code generated.', 'success');
+                    closeModal('rowDetailsModal');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    toast(data.message || 'Failed to regenerate code.', 'error');
+                }
+            } catch (error) {
+                console.error('Error regenerating code:', error);
+                toast('Failed to regenerate code.', 'error');
+            }
+        }
     </script>
 @endsection
