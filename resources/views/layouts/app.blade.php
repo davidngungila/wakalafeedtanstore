@@ -449,7 +449,7 @@
             position:fixed;inset:0;background:rgba(36,20,8,.5);backdrop-filter:blur(2px);
             display:none;z-index:400;
         }
-        .modal-backdrop.show{display:block;}
+        .modal-backdrop.show{display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;}
         .modal{
             position:fixed;top:0;right:0;bottom:0;width:100%;max-width:540px;
             background:var(--sand-50);box-shadow:var(--shadow-lg);
@@ -470,9 +470,12 @@
 
         /* Compatibility aliases: older views used .drawer-* / .drawer-backdrop names */
         .drawer-backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(36,20,8,.5);backdrop-filter:blur(2px);display:none;z-index:400;}
-        .drawer-backdrop.show,.modal-backdrop.show{display:block;}
+        .drawer-backdrop.show,.modal-backdrop.show{display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;}
         .drawer-backdrop.show .drawer,.modal-backdrop.show .modal{transform:translateX(0);}
         .drawer,.modal{position:fixed;top:0;right:0;bottom:0;width:100%;max-width:540px;background:var(--sand-50);box-shadow:var(--shadow-lg);display:flex;flex-direction:column;transform:translateX(105%);transition:transform .32s cubic-bezier(.2,.8,.2,1);overflow:hidden;}
+        /* Centered popup for confirmation dialogs */
+        .popup{margin:auto;background:var(--sand-50);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:440px;animation:popupIn .28s cubic-bezier(.2,.8,.2,1);}
+        @keyframes popupIn{from{opacity:0;transform:scale(.96) translateY(10px);}to{opacity:1;transform:scale(1) translateY(0);}}
         .drawer-head,.modal-head{flex:none;display:flex;align-items:center;justify-content:space-between;padding:22px 26px;border-bottom:1px solid var(--line);}
         .drawer-head h3,.modal-head h3{font-size:19px;}
         .drawer-close,.modal-close{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s;}

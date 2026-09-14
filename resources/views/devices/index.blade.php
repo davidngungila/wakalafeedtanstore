@@ -226,9 +226,9 @@
             </div>
         </div>
         
-        <!-- Regenerate code confirmation modal -->
+        <!-- Regenerate code confirmation popup -->
         <div class="modal-backdrop" id="regenerateCodeModal">
-            <div class="modal">
+            <div class="popup">
                 <div class="modal-head">
                     <h3>Regenerate Device Code</h3>
                     <button class="modal-close" onclick="closeModal('regenerateCodeModal')">✕</button>
