@@ -37,6 +37,7 @@ class DeviceApiController extends Controller
         return response()->json([
             'device' => [
                 'id' => $device->id,
+                'device_code' => $device->device_code,
                 'name' => $device->name,
                 'status' => $device->status,
                 'agent' => $device->agent?->name,
@@ -59,6 +60,7 @@ class DeviceApiController extends Controller
         return response()->json([
             'device' => [
                 'id' => $device->id,
+                'device_code' => $device->device_code,
                 'name' => $device->name,
                 'status' => $device->status,
                 'agent' => $device->agent?->name,

@@ -27,14 +27,22 @@
         </div>
     </div>
 
-    @if ($tokenFlash)
+    @if ($credentialsFlash)
         <div class="status-banner" style="background:var(--acacia-100);color:var(--acacia-700);border-radius:10px;padding:16px;margin-bottom:20px;">
-            <div style="font-weight:700;font-size:13.5px;margin-bottom:6px;">API token — copy it now (shown only once)</div>
+            <div style="font-weight:700;font-size:13.5px;margin-bottom:6px;">Device credentials — copy them now (shown only once)</div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                <code id="tokenFlashCode" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;letter-spacing:.3px;">{{ $tokenFlash['token'] }}</code>
-                <button class="btn btn-ghost" onclick="copyToken()">Copy</button>
+                <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Code</span>
+                <code id="credFlashCode" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;letter-spacing:2px;">{{ $credentialsFlash['device_code'] }}</code>
+                <button class="btn btn-ghost" onclick="copyFlash('credFlashCode', 'Device code copied.')">Copy</button>
             </div>
-            <div style="font-size:12px;color:var(--acacia-700);margin-top:8px;opacity:.9;">Enter this token in the MobiControl app on the phone. The device starts ingesting SMS once it is active.</div>
+            @if (isset($credentialsFlash['token']))
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+                    <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Token</span>
+                    <code id="credFlashToken" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;letter-spacing:.3px;word-break:break-all;">{{ $credentialsFlash['token'] }}</code>
+                    <button class="btn btn-ghost" onclick="copyFlash('credFlashToken', 'Token copied.')">Copy</button>
+                </div>
+            @endif
+            <div style="font-size:12px;color:var(--acacia-700);margin-top:8px;opacity:.9;">Enter this code and token in the MobiControl app on the phone. The device starts ingesting SMS once it is active.</div>
         </div>
     @endif
 
@@ -82,6 +90,7 @@
                 $detailRows = [
                     ['Agent', $device->agent?->name ?? '—'],
                     ['Branch', $device->branch ?? '—'],
+                    ['Device code', $device->device_code],
                     ['Networks', $device->networks->isNotEmpty()
                         ? $device->networks->map(fn ($n) => $n->name)->implode(', ')
                         : ($device->network?->name ?? '—')],
@@ -99,7 +108,16 @@
             @foreach ($detailRows as [$label, $value])
                 <div>
                     <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-soft);font-weight:700;margin-bottom:5px;">{{ $label }}</div>
-                    <div style="font-size:14.5px;font-weight:700;color:var(--coffee-700);">{{ $value }}</div>
+                    <div style="font-size:14.5px;font-weight:700;color:var(--coffee-700);">
+                        @if ($label === 'Device code')
+                            <span style="display:inline-flex;align-items:center;gap:8px;">
+                                <span style="font-family:monospace;letter-spacing:2px;">{{ $value }}</span>
+                                <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:11.5px;" onclick="copyText('{{ $value }}', 'Device code copied.')">Copy</button>
+                            </span>
+                        @else
+                            {{ $value }}
+                        @endif
+                    </div>
                 </div>
             @endforeach
         </div>
@@ -121,9 +139,13 @@
                             <button class="btn btn-primary">Re-activate</button>
                         </form>
                     @endif
-                    <form method="POST" action="{{ route('devices.token', $device) }}" onsubmit="return confirm('Generate a new API token? The old token stops working immediately.')">
+                    <form method="POST" action="{{ route('devices.token', $device) }}" onsubmit="return confirm('Generate a new authorization token? The old token stops working immediately.')">
                         @csrf
                         <button class="btn btn-ghost">Regenerate token</button>
+                    </form>
+                    <form method="POST" action="{{ route('devices.code', $device) }}" onsubmit="return confirm('Generate a new device code? The old code stops working immediately.')">
+                        @csrf
+                        <button class="btn btn-ghost">Regenerate code</button>
                     </form>
                     @if ($device->status !== 'suspended')
                         <form method="POST" action="{{ route('devices.suspend', $device) }}" onsubmit="return confirm('Suspend this device?')">
@@ -138,7 +160,7 @@
                         </form>
                     @endif
                     @if ($device->status !== 'revoked')
-                        <form method="POST" action="{{ route('devices.revoke', $device) }}" onsubmit="return confirm('Revoke this device permanently? Its API token is invalidated.')">
+                        <form method="POST" action="{{ route('devices.revoke', $device) }}" onsubmit="return confirm('Revoke this device permanently? Its authorization token is invalidated.')">
                             @csrf
                             <button class="btn btn-danger">Revoke</button>
                         </form>
@@ -283,9 +305,12 @@
 
 @section('scripts')
     <script>
-        function copyToken() {
-            const el = document.getElementById('tokenFlashCode');
-            navigator.clipboard.writeText(el.textContent.trim()).then(() => toast('Token copied.', 'success'));
+        function copyFlash(id, label) {
+            const el = document.getElementById(id);
+            navigator.clipboard.writeText(el.textContent.trim()).then(() => toast(label, 'success'));
+        }
+        function copyText(value, label) {
+            navigator.clipboard.writeText(value).then(() => toast(label, 'success'));
         }
         function openMessage(body) {
             const el = document.getElementById('smsBodyText');

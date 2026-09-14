@@ -51,7 +51,7 @@ class DeviceController extends Controller
             'networks' => $networks,
             'todayStats' => $todayStats,
             'filters' => $request->only(['status', 'network']),
-            'tokenFlash' => session()->pull('api_token_flash'),
+            'credentialsFlash' => session()->pull('credentials_flash'),
         ]);
     }
 
@@ -69,7 +69,7 @@ class DeviceController extends Controller
             'device' => $device,
             'sms' => $sms,
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
-            'tokenFlash' => session()->pull('api_token_flash'),
+            'credentialsFlash' => session()->pull('credentials_flash'),
         ]);
     }
 
@@ -94,13 +94,14 @@ class DeviceController extends Controller
             return response()->json(['success' => false, 'message' => 'Select at least one network.'], 422);
         }
 
-        ['plain' => $plain, 'hash' => $hash] = Device::makeApiToken();
+        $credentials = Device::generateCredentials();
 
         $device = Device::create([
             'name' => $validated['name'],
             'agent_id' => cash_point()->id,
             'network_id' => $networkIds[0],
-            'api_token_hash' => $hash,
+            'device_code' => $credentials['device_code'],
+            'authorization_token_hash' => $credentials['token_hash'],
             'status' => 'pending',
             'phone_number' => $validated['phone_number'] ?? null,
             'sim_number' => $validated['sim_number'] ?? null,
@@ -117,16 +118,18 @@ class DeviceController extends Controller
             'network_ids' => $networkIds,
         ]);
 
-        session()->flash('api_token_flash', [
+        session()->flash('credentials_flash', [
             'device_id' => $device->id,
-            'token' => $plain,
+            'device_code' => $credentials['device_code'],
+            'token' => $credentials['token_plain'],
         ]);
 
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
-                'message' => 'Device registered. API token generated.',
-                'token' => $plain,
+                'message' => 'Device registered. Credentials generated.',
+                'device_code' => $credentials['device_code'],
+                'authorization_token' => $credentials['token_plain'],
             ]);
         }
 
@@ -255,22 +258,43 @@ class DeviceController extends Controller
 
     public function regenerateToken(Request $request, Device $device): JsonResponse|RedirectResponse
     {
-        ['plain' => $plain, 'hash' => $hash] = Device::makeApiToken();
+        ['plain' => $plain, 'hash' => $hash] = Device::makeAuthorizationToken();
 
-        $device->forceFill(['api_token_hash' => $hash])->save();
+        $device->forceFill(['authorization_token_hash' => $hash])->save();
 
-        $this->recordAudit('Device API token regenerated', 'Device', $device->id);
+        $this->recordAudit('Device authorization token regenerated', 'Device', $device->id);
 
-        session()->flash('api_token_flash', [
+        session()->flash('credentials_flash', [
             'device_id' => $device->id,
+            'device_code' => $device->device_code,
             'token' => $plain,
         ]);
 
         if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => 'New device token generated.', 'token' => $plain]);
+            return response()->json(['success' => true, 'message' => 'New device authorization token generated.', 'authorization_token' => $plain]);
         }
 
-        return back()->with('status', 'New device token generated.');
+        return back()->with('status', 'New device authorization token generated.');
+    }
+
+    public function regenerateCode(Request $request, Device $device): JsonResponse|RedirectResponse
+    {
+        $deviceCode = Device::generateDeviceCode();
+
+        $device->forceFill(['device_code' => $deviceCode])->save();
+
+        $this->recordAudit('Device code regenerated', 'Device', $device->id);
+
+        session()->flash('credentials_flash', [
+            'device_id' => $device->id,
+            'device_code' => $deviceCode,
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'New device code generated.', 'device_code' => $deviceCode]);
+        }
+
+        return back()->with('status', 'New device code generated.');
     }
 
     public function destroy(Request $request, Device $device): JsonResponse|RedirectResponse

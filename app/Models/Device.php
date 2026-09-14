@@ -8,10 +8,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Str;
 
 #[Fillable([
     'device_uid',
+    'device_code',
     'name',
     'model',
     'agent_id',
@@ -20,7 +20,7 @@ use Illuminate\Support\Str;
     'sim_number',
     'android_version',
     'app_version',
-    'api_token_hash',
+    'authorization_token_hash',
     'branch',
     'status',
     'last_ip',
@@ -35,6 +35,8 @@ use Illuminate\Support\Str;
 class Device extends Model
 {
     public const MANAGED_STATUSES = ['pending', 'active', 'suspended', 'blocked', 'revoked'];
+
+    private const DEVICE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
     protected function casts(): array
     {
@@ -85,26 +87,62 @@ class Device extends Model
     }
 
     /**
-     * Generate a fresh API token, returning the plain-text secret and its hash.
+     * Generate a unique 6-character device code using an unambiguous alphabet
+     * (no O/0, I/1, l).
+     */
+    public static function generateDeviceCode(): string
+    {
+        $alphabet = self::DEVICE_CODE_ALPHABET;
+        $length = strlen($alphabet);
+
+        do {
+            $code = '';
+            for ($i = 0; $i < 6; $i++) {
+                $code .= $alphabet[random_int(0, $length - 1)];
+            }
+        } while (static::where('device_code', $code)->exists());
+
+        return $code;
+    }
+
+    /**
+     * Generate a fresh authorization token, returning the plain-text secret and its hash.
      *
      * @return array{plain: string, hash: string}
      */
-    public static function makeApiToken(): array
+    public static function makeAuthorizationToken(): array
     {
-        $plain = 'dv_'.Str::random(48);
+        $plain = bin2hex(random_bytes(32));
 
         return ['plain' => $plain, 'hash' => hash('sha256', $plain)];
     }
 
-    public function setApiToken(string $plain): void
+    /**
+     * Generate both device code and authorization token for a new device.
+     *
+     * @return array{device_code: string, token_plain: string, token_hash: string}
+     */
+    public static function generateCredentials(): array
     {
-        $this->api_token_hash = hash('sha256', $plain);
+        $deviceCode = static::generateDeviceCode();
+        ['plain' => $tokenPlain, 'hash' => $tokenHash] = static::makeAuthorizationToken();
+
+        return [
+            'device_code' => $deviceCode,
+            'token_plain' => $tokenPlain,
+            'token_hash' => $tokenHash,
+        ];
     }
 
-    public function hasApiToken(string $plain): bool
+    public function setAuthorizationToken(string $plain): void
     {
-        return $this->api_token_hash !== null
-            && hash_equals($this->api_token_hash, hash('sha256', $plain));
+        $this->authorization_token_hash = hash('sha256', $plain);
+    }
+
+    public function hasAuthorizationToken(string $plain): bool
+    {
+        return $this->authorization_token_hash !== null
+            && hash_equals($this->authorization_token_hash, hash('sha256', $plain));
     }
 
     public function approve(): void
@@ -135,7 +173,7 @@ class Device extends Model
     {
         $this->status = 'revoked';
         $this->revoked_at = now();
-        $this->api_token_hash = null;
+        $this->authorization_token_hash = null;
         $this->save();
     }
 

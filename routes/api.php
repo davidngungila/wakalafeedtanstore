@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->middleware('device.token')->group(function () {
     Route::post('/devices/bootstrap', [DeviceApiController::class, 'bootstrap']);
-    Route::get('/devices/me', [DeviceApiController::class, 'me']);
+    Route::get('/devices/me', [DeviceApiController::class, 'me'])->middleware('throttle:device-me');
     Route::get('/sms/senders', [SmsApiController::class, 'senders']);
 
     Route::post('/sms/ingest', [SmsApiController::class, 'ingest']);

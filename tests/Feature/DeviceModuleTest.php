@@ -36,7 +36,8 @@ class DeviceModuleTest extends TestCase
             'name' => 'Redmi Note 12',
             'agent_id' => cash_point()->id,
             'network_id' => Network::firstOrFail()->id,
-            'api_token_hash' => hash('sha256', 'dv_test'),
+            'device_code' => Device::generateDeviceCode(),
+            'authorization_token_hash' => hash('sha256', 'dv_test'),
             'status' => $status,
         ]);
     }
@@ -121,7 +122,7 @@ class DeviceModuleTest extends TestCase
         $this->assertDatabaseHas('devices', [
             'id' => $device->id,
             'status' => 'revoked',
-            'api_token_hash' => null,
+            'authorization_token_hash' => null,
         ]);
     }
 

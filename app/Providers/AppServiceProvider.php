@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -21,5 +23,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Blade::directive('money', fn (string $expression) => "<?php echo money($expression); ?>");
+
+        RateLimiter::for('device-me', fn () => Limit::perMinute(30)->by(request()->ip() ?? 'unknown'));
     }
 }

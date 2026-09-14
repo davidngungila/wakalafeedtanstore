@@ -83,10 +83,13 @@ Every phone is a **Device** managed by an administrator on the web dashboard.
 
 **Onboarding flow**
 
-1. On the web app, an admin registers the phone and receives the API token
-   (shown **once** — `dv_…`). The token is hashed on the server
-   (`api_token_hash`); the plain token exists only on the phone.
-2. On the phone, the operator enters the same token.
+1. On the web app, an admin registers the phone and receives **two credentials**
+   (shown **once**, never retrievable again):
+   - **Device code** — short, human-friendly, 6 chars (e.g. `F7KQ2M`)
+   - **Authorization token** — long, opaque, 64 hex chars (e.g. `a83f…9c1e`)
+   The token is hashed on the server (`authorization_token_hash`); the plain
+   values exist only on the phone and in the one-time flash banner.
+2. On the phone, the operator enters the same code and token.
 3. The app calls `POST /devices/bootstrap` to pair and report handset info.
 4. The admin approves the device on the dashboard → `active`.
 5. The app starts ingesting.
@@ -98,25 +101,34 @@ The app must handle the `pending` state gracefully: poll `GET /devices/me`
 
 ## 3. API authentication
 
-Every endpoint in `/api/v1` requires a bearer token:
+Every endpoint in `/api/v1` requires **both** credentials on every request:
 
 ```
-Authorization: Bearer dv_<48-random-chars>
+Authorization: Bearer a83f…9c1e
+X-Device-Code: F7KQ2M
 Accept: application/json
 Content-Type: application/json
 ```
 
-The server compares `sha256(token)` against the device `api_token_hash`.
+- The device is looked up by `device_code` (exact match, case-insensitive).
+- The server verifies the Bearer token against the stored
+  `authorization_token_hash` using a **constant-time comparison**.
+- An empty/partial pair returns `401`; the app must wipe its stored
+  credentials and return the operator to the pairing screen.
 
 Common auth errors:
 
-| Code | Body                                                              | Meaning                                             |
-| ---- | ----------------------------------------------------------------- | --------------------------------------------------- |
-| 401  | `{"message":"Missing device API token."}`                         | No `Authorization` header present                    |
-| 401  | `{"message":"Unknown device. This device is not authorized."}`    | Token does not match any device                      |
-| 403  | `{"message":"Device is not allowed to access the system."}`       | Device is `blocked` or `revoked`                     |
+| Code | Body                                                        | Meaning                                             |
+| ---- | ----------------------------------------------------------- | --------------------------------------------------- |
+| 401  | `{"message":"Missing credentials."}`                        | `Authorization` or `X-Device-Code` header missing   |
+| 401  | `{"message":"Unknown device. This device is not authorized."}` | Device code does not match any device               |
+| 401  | `{"message":"Invalid authorization token."}`                | Token does not match the device code                |
+| 403  | `{"message":"Device is not allowed to access the system."}` | Device is `blocked` or `revoked`                    |
 
-Token storage on the phone MUST be secure (see §8).
+> The admin can **Regenerate token** (old token invalid immediately) and
+> **Regenerate code** on the dashboard. After either, the app's old pair stops
+> working — treat a `401` as "re-pair required". Storage on the phone MUST be
+> secure (see §8).
 
 ---
 
@@ -152,6 +164,7 @@ Response `200`:
 {
   "device": {
     "id": 12,
+    "device_code": "F7KQ2M",
     "name": "Samsung A15",
     "status": "pending",
     "agent": "Kilimani Cash Point",
@@ -179,6 +192,7 @@ Response `200`:
 {
   "device": {
     "id": 12,
+    "device_code": "F7KQ2M",
     "name": "Samsung A15",
     "status": "active",
     "agent": "Kilimani Cash Point",
@@ -640,8 +654,8 @@ Android minimum config:
 
 ### 7.3 New device (pending) path
 
-1. Operator enters the token → `bootstrap` returns `status: pending` and a
-   message "Awaiting approval".
+1. Operator enters the **device code** + **authorization token** → `bootstrap`
+   returns `status: pending` and a message "Awaiting approval".
 2. UI shows a gold `Pending` tag; `AgentService` polls `me` + heartbeat but
    does **not** upload SMS.
 3. Admin approves → next poll returns `active` → app switches to green `Active`
@@ -651,19 +665,21 @@ Android minimum config:
 
 ## 8. Security checklist
 
-- Store the device token in **`flutter_secure_storage`** (EncryptedSharedPreferences /
-  Keystore). Never in plain `SharedPreferences`, logs, or analytics.
+- Store **both** the device code and authorization token in
+  **`flutter_secure_storage`** (EncryptedSharedPreferences / Keystore). Never in
+  plain `SharedPreferences`, logs, or analytics.
 - Talk HTTPS only (`https://wakala.feedtanstore.com`); add network-security-config
   to reject cleartext.
 - Never log message bodies or customer data in the app's logcat.
 - On `revoke`, the server nulls the hash and the token stops working
-  immediately — the app must handle `403` by clearing the local token and
-  returning the operator to the token screen.
+  immediately — the app must handle `403` by clearing the local credentials and
+  returning the operator to the pairing screen.
+- The server never logs or returns a plaintext token after creation/rotation.
 - Keep the SenderKeys fluent: if an SMS matches **no** watchlist keyword, drop
   it locally (don't upload unknown senders).
 - Validate lengths client-side (`sender ≤ 30`, etc.) to fail fast, but rely on
   the server for correctness.
-- Do not embed tokens in the APK; always operator-entered.
+- Do not embed credentials in the APK; always operator-entered.
 
 ---
 
@@ -671,10 +687,11 @@ Android minimum config:
 
 | Scenario                                    | HTTP / signal            | App action                                                         |
 | ------------------------------------------- | ------------------------ | ------------------------------------------------------------------ |
-| No token stored                             | —                        | Show token entry screen                                            |
-| `401 Missing device API token.`             | 401                      | Server config problem; show contact-admin message                  |
-| `401 Unknown device. This device is not authorized.` | 401              | Token invalid/regenerated → clear token → token entry screen       |
-| `403 Device is not allowed…`                | 403                      | Device blocked/revoked → clear token → token screen (+ hint)       |
+| No credentials stored                       | —                        | Show pairing screen (code + token entry)                           |
+| `401 Missing credentials.`                  | 401                      | Server config problem; show contact-admin message                  |
+| `401 Unknown device. This device is not authorized.` | 401              | Device code invalid → clear credentials → pairing screen           |
+| `401 Invalid authorization token.`          | 401                      | Token regenerated/mismatch → clear credentials → pairing screen    |
+| `403 Device is not allowed…`                | 403                      | Device blocked/revoked → clear credentials → pairing screen (+ hint) |
 | `403 Device is not active.`                 | 403 (+ `device_status`)  | Stay paired, block uploads, show `Pending`/`Suspended` state       |
 | `4xx` validation on ingest                  | 400/422 per item         | Keep item, mark `failed`, do not infinitely retry (max attempts)   |
 | Network timeout / connection                | Exception                | Keep queue, exponential backoff, heartbeat deferred                |
@@ -689,7 +706,7 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 
 ## 10. Testing / QA checklist
 
-- [ ] Fresh install → token entry → bootstrap shows `pending` → no upload until approved.
+- [ ] Fresh install → pairing (code + token) → bootstrap shows `pending` → no upload until approved.
 - [ ] Approval on dashboard → app flips to `Active` (≤ next heartbeat) → first SMS uploads and appears on `/sms` and `/transactions`.
 - [ ] Send 600+ SMS in a burst → chunks of ≤ 500 are sent, all recorded, no loss.
 - [ ] Kill the app (swipe) → SMS still captured & uploaded via WorkManager watchdog.

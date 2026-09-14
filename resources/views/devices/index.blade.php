@@ -15,14 +15,20 @@
         @endif
     </div>
 
-    @if ($tokenFlash)
+    @if ($credentialsFlash)
         <div class="status-banner" style="background:var(--acacia-100);color:var(--acacia-700);border-radius:10px;padding:16px;margin-bottom:20px;">
-            <div style="font-weight:700;font-size:13.5px;margin-bottom:6px;">API token — copy it now (shown only once)</div>
+            <div style="font-weight:700;font-size:13.5px;margin-bottom:6px;">Device credentials — copy them now (shown only once)</div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                <code id="tokenFlashCode" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;letter-spacing:.3px;">{{ $tokenFlash['token'] }}</code>
-                <button class="btn btn-ghost" onclick="copyToken()">Copy</button>
+                <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Code</span>
+                <code id="credFlashCode" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;letter-spacing:2px;">{{ $credentialsFlash['device_code'] }}</code>
+                <button class="btn btn-ghost" onclick="copyFlash('credFlashCode', 'Device code copied.')">Copy</button>
             </div>
-            <div style="font-size:12px;color:var(--acacia-700);margin-top:8px;opacity:.9;">Enter this token in the MobiControl app on the phone before approving this device. The device starts ingesting SMS once approved.</div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+                <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Token</span>
+                <code id="credFlashToken" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;letter-spacing:.3px;word-break:break-all;">{{ $credentialsFlash['token'] }}</code>
+                <button class="btn btn-ghost" onclick="copyFlash('credFlashToken', 'Token copied.')">Copy</button>
+            </div>
+            <div style="font-size:12px;color:var(--acacia-700);margin-top:8px;opacity:.9;">Enter this code and token in the MobiControl app on the phone. The device starts ingesting SMS once approved.</div>
         </div>
     @endif
 
@@ -56,6 +62,7 @@
                 <thead>
                     <tr>
                         <th>Device</th>
+                        <th>Code</th>
                         <th>Agent</th>
                         <th>Networks</th>
                         <th>Phone / SIM</th>
@@ -82,6 +89,7 @@
                             $netsJson = $deviceNetworks->map(fn ($n) => ['name' => $n->name, 'color' => $n->color])->values();
                         @endphp
                         <tr data-id="{{ $device->id }}" data-name="{{ $device->name }}" data-agent="{{ $device->agent?->name ?? '—' }}"
+                            data-code="{{ $device->device_code }}"
                             data-phone="{{ $device->phone_number ?? '—' }}"
                             data-sim="{{ $device->sim_number ?? '—' }}" data-model="{{ $device->model ?? '—' }}"
                             data-android="{{ $device->android_version ?? '—' }}" data-app="{{ $device->app_version ?? '—' }}"
@@ -100,6 +108,14 @@
                                         <div class="cell-title">{{ $device->name }}</div>
                                         <div class="cell-sub">{{ $device->model ?? $device->device_uid ?? '—' }}</div>
                                     </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="display:inline-flex;align-items:center;gap:7px;">
+                                    <span style="font-family:monospace;font-size:13.5px;font-weight:700;letter-spacing:1.5px;color:var(--coffee-700);">{{ $device->device_code }}</span>
+                                    <button type="button" class="btn btn-ghost" style="padding:3px 7px;font-size:11px;" onclick="copyText('{{ $device->device_code }}', 'Device code copied.')" title="Copy device code">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                                    </button>
                                 </div>
                             </td>
                             <td>
@@ -134,7 +150,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="empty-state"><h4>No devices yet</h4><p>Register your first Android phone to start automatic SMS capture.</p></td></tr>
+                        <tr><td colspan="11" class="empty-state"><h4>No devices yet</h4><p>Register your first Android phone to start automatic SMS capture.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -217,9 +233,12 @@
             document.getElementById('fStatus').value = st;
             document.getElementById('fStatus').closest('form').submit();
         }
-        function copyToken() {
-            const el = document.getElementById('tokenFlashCode');
-            navigator.clipboard.writeText(el.textContent.trim()).then(() => toast('Token copied.', 'success'));
+        function copyFlash(id, label) {
+            const el = document.getElementById(id);
+            navigator.clipboard.writeText(el.textContent.trim()).then(() => toast(label, 'success'));
+        }
+        function copyText(value, label) {
+            navigator.clipboard.writeText(value).then(() => toast(label, 'success'));
         }
         document.querySelectorAll('[data-device-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
@@ -239,6 +258,7 @@
             } catch (e) { nets = '—'; }
             return [
                 ['Device', tr.dataset.name],
+                ['Device code', tr.dataset.code],
                 ['Model', tr.dataset.model],
                 ['Device UID', tr.dataset.uid],
                 ['Agent', tr.dataset.agent],
