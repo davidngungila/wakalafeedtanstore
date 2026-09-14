@@ -101,7 +101,6 @@ class DeviceController extends Controller
             'agent_id' => cash_point()->id,
             'network_id' => $networkIds[0],
             'device_code' => $credentials['device_code'],
-            'authorization_token_hash' => $credentials['token_hash'],
             'status' => 'pending',
             'phone_number' => $validated['phone_number'] ?? null,
             'sim_number' => $validated['sim_number'] ?? null,
@@ -110,6 +109,9 @@ class DeviceController extends Controller
             'android_version' => $validated['android_version'] ?? null,
             'app_version' => $validated['app_version'] ?? null,
         ]);
+
+        $device->setAuthorizationToken($credentials['token_plain']);
+        $device->save();
 
         $device->networks()->sync($networkIds);
 
@@ -260,7 +262,8 @@ class DeviceController extends Controller
     {
         ['plain' => $plain, 'hash' => $hash] = Device::makeAuthorizationToken();
 
-        $device->forceFill(['authorization_token_hash' => $hash])->save();
+        $device->setAuthorizationToken($plain);
+        $device->save();
 
         $this->recordAudit('Device authorization token regenerated', 'Device', $device->id);
 
@@ -311,5 +314,18 @@ class DeviceController extends Controller
         }
 
         return redirect()->route('devices.index')->with('status', 'Device removed.');
+    }
+
+    public function showToken(Request $request, Device $device): JsonResponse
+    {
+        $token = $device->getDecryptedToken();
+
+        if ($token === null) {
+            return response()->json(['success' => false, 'message' => 'No token available for this device.'], 404);
+        }
+
+        $this->recordAudit('Device authorization token viewed', 'Device', $device->id);
+
+        return response()->json(['success' => true, 'token' => $token]);
     }
 }

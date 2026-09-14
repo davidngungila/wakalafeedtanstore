@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Crypt;
 
 #[Fillable([
     'device_uid',
@@ -21,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'android_version',
     'app_version',
     'authorization_token_hash',
+    'encrypted_token',
     'branch',
     'status',
     'last_ip',
@@ -137,6 +140,23 @@ class Device extends Model
     public function setAuthorizationToken(string $plain): void
     {
         $this->authorization_token_hash = hash('sha256', $plain);
+        $this->encrypted_token = Crypt::encryptString($plain);
+    }
+
+    /**
+     * Get the decrypted authorization token.
+     */
+    public function getDecryptedToken(): ?string
+    {
+        if ($this->encrypted_token === null) {
+            return null;
+        }
+
+        try {
+            return Crypt::decryptString($this->encrypted_token);
+        } catch (DecryptException $e) {
+            return null;
+        }
     }
 
     public function hasAuthorizationToken(string $plain): bool
@@ -174,6 +194,7 @@ class Device extends Model
         $this->status = 'revoked';
         $this->revoked_at = now();
         $this->authorization_token_hash = null;
+        $this->encrypted_token = null;
         $this->save();
     }
 

@@ -105,7 +105,8 @@
                     ['Last IP', $device->last_ip ?? '—'],
                 ];
             @endphp
-            @foreach ($detailRows as [$label, $value])
+            @foreach ($detailRows as $row)
+                @php [$label, $value] = $row; @endphp
                 <div>
                     <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-soft);font-weight:700;margin-bottom:5px;">{{ $label }}</div>
                     <div style="font-size:14.5px;font-weight:700;color:var(--coffee-700);">
@@ -120,6 +121,19 @@
                     </div>
                 </div>
             @endforeach
+
+            @if (is_admin())
+                <div>
+                    <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-soft);font-weight:700;margin-bottom:5px;">Authorization token</div>
+                    <div style="font-size:14.5px;font-weight:700;color:var(--coffee-700);">
+                        <span style="display:inline-flex;align-items:center;gap:8px;">
+                            <span id="tokenDisplay" style="font-family:monospace;letter-spacing:1px;">••••••••••••••••••••••••••••••••</span>
+                            <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:11.5px;" onclick="showToken()">Show</button>
+                            <button type="button" class="btn btn-ghost" style="padding:4px 8px;font-size:11.5px;" onclick="copyToken()" id="copyTokenBtn" style="display:none;">Copy</button>
+                        </span>
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 
@@ -305,6 +319,8 @@
 
 @section('scripts')
     <script>
+        let currentToken = null;
+
         function copyFlash(id, label) {
             const el = document.getElementById(id);
             navigator.clipboard.writeText(el.textContent.trim()).then(() => toast(label, 'success'));
@@ -327,5 +343,30 @@
                 submitForm(form, { method: 'PUT', done: () => setTimeout(() => location.reload(), 600) });
             });
         });
+
+        async function showToken() {
+            try {
+                const response = await fetch('{{ route('devices.token.show', $device) }}');
+                const data = await response.json();
+
+                if (data.success) {
+                    currentToken = data.token;
+                    document.getElementById('tokenDisplay').textContent = currentToken;
+                    document.getElementById('copyTokenBtn').style.display = 'inline-block';
+                    toast('Token revealed.', 'success');
+                } else {
+                    toast(data.message || 'Failed to load token.', 'error');
+                }
+            } catch (error) {
+                console.error('Error fetching token:', error);
+                toast('Failed to load token.', 'error');
+            }
+        }
+
+        function copyToken() {
+            if (currentToken) {
+                navigator.clipboard.writeText(currentToken).then(() => toast('Token copied.', 'success'));
+            }
+        }
     </script>
 @endsection
