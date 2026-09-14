@@ -49,7 +49,17 @@ class DeviceModuleTest extends TestCase
 
     public function test_devices_index_is_visible_to_supervisors_and_admins(): void
     {
-        $this->actingAs($this->admin())->get(route('devices.index'))->assertOk();
+        $device = $this->makeDevice();
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.index'))
+            ->assertOk()
+            ->assertSee('View all SMS');
+
+        $this->actingAs($this->supervisor())
+            ->get(route('devices.index'))
+            ->assertOk()
+            ->assertSee('View all SMS');
     }
 
     public function test_devices_index_is_denied_to_cashiers(): void
@@ -228,10 +238,22 @@ class DeviceModuleTest extends TestCase
     {
         $device = $this->makeDevice('active');
 
+        SmsMessage::create([
+            'device_id' => $device->id,
+            'agent_id' => $device->agent_id,
+            'network_id' => $device->network_id,
+            'sender' => 'MPESA',
+            'message_body' => 'Test message body',
+            'received_at' => now(),
+            'sms_hash' => hash('sha256', 'detail-view'),
+            'server_received_at' => now(),
+        ]);
+
         $this->actingAs($this->admin())
             ->get(route('devices.show', $device))
             ->assertOk()
-            ->assertSee($device->name);
+            ->assertSee($device->name)
+            ->assertSee('View full SMS');
     }
 
     public function test_device_detail_page_paginates_all_sms(): void

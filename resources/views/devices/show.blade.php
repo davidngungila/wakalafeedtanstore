@@ -207,7 +207,11 @@
                             </td>
                             <td><span class="tag {{ status_badge($message->processing_status === 'processed' ? 'completed' : $message->processing_status) }}">{{ ucfirst($message->processing_status) }}</span></td>
                             <td>
-                                <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="openMessage('{{ addslashes($message->message_body) }}')">View</button>
+                                <div class="row-actions">
+                                    <button type="button" title="View full SMS" onclick="openMessage('{{ addslashes($message->message_body) }}')">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     @empty
