@@ -226,20 +226,20 @@
             </div>
         </div>
         
-        <!-- Regenerate code confirmation modal -->
-        <div class="modal-backdrop" id="regenerateCodeModal">
-            <div class="modal">
-                <div class="modal-head">
+        <!-- Regenerate code confirmation drawer -->
+        <div class="drawer-backdrop" id="regenerateCodeDrawer">
+            <div class="drawer drawer-right">
+                <div class="drawer-head">
                     <h3>Regenerate Device Code</h3>
-                    <button class="modal-close" onclick="closeModal('regenerateCodeModal')">✕</button>
+                    <button class="drawer-close" onclick="closeDrawer('regenerateCodeDrawer')">✕</button>
                 </div>
-                <div class="modal-body">
+                <div class="drawer-body">
                     <p style="font-size:14px;color:var(--coffee-700);margin:0 0 12px 0;">Are you sure you want to generate a new device code?</p>
                     <p style="font-size:13px;color:var(--danger);margin:0 0 8px 0;">⚠️ The old code will stop working immediately.</p>
                     <p style="font-size:12px;color:var(--ink-soft);margin:0;">The device will need to be updated with the new code to continue functioning.</p>
                 </div>
-                <div class="modal-foot">
-                    <button type="button" class="btn btn-ghost" onclick="closeModal('regenerateCodeModal')">Cancel</button>
+                <div class="drawer-foot">
+                    <button type="button" class="btn btn-ghost" onclick="closeDrawer('regenerateCodeDrawer')">Cancel</button>
                     <button type="button" class="btn btn-primary" onclick="confirmRegenerateCode()">Regenerate Code</button>
                 </div>
             </div>
@@ -314,15 +314,15 @@
         
         let currentDeviceId = null;
         
-        function showRegenerateCodeModal(deviceId) {
+        function showRegenerateCodeDrawer(deviceId) {
             currentDeviceId = deviceId;
-            openModal('regenerateCodeModal');
+            openDrawer('regenerateCodeDrawer');
         }
         
         async function confirmRegenerateCode() {
             if (!currentDeviceId) return;
             
-            closeModal('regenerateCodeModal');
+            closeDrawer('regenerateCodeDrawer');
             
             try {
                 const row = document.querySelector(`tr[data-id="${currentDeviceId}"]`);
@@ -355,7 +355,7 @@
         }
         
         async function regenerateDeviceCode(deviceId) {
-            showRegenerateCodeModal(deviceId);
+            showRegenerateCodeDrawer(deviceId);
         }
     </script>
 @endsection
