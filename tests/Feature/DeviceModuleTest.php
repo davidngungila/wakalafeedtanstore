@@ -158,6 +158,33 @@ class DeviceModuleTest extends TestCase
             ->assertSee('Delete');
     }
 
+    public function test_sms_monitor_page_loads_without_parse_error(): void
+    {
+        $device = $this->makeDevice('active');
+
+        SmsMessage::create([
+            'device_id' => $device->id,
+            'agent_id' => $device->agent_id,
+            'network_id' => $device->network_id,
+            'sender' => 'MPESA',
+            'message_body' => 'Transaction of TZS 50000.',
+            'received_at' => now(),
+            'sms_hash' => hash('sha256', 'monitor-test'),
+            'server_received_at' => now(),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get(route('sms.index'))
+            ->assertOk()
+            ->assertSee('SMS Monitor')
+            ->assertSee('Transaction of TZS 50000');
+
+        $this->actingAs($this->admin())
+            ->get(route('sms.index', ['device' => $device->id]))
+            ->assertOk()
+            ->assertSee('Transaction of TZS 50000');
+    }
+
     public function test_blocked_or_revoked_devices_cannot_be_reactivated(): void
     {
         $device = $this->makeDevice('revoked');

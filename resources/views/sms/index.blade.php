@@ -156,21 +156,24 @@
     <script>
         const smsRowCache = new Map();
         @foreach ($messages as $message)
-            smsRowCache.set({{ $message->id }}, @json([
-                'id' => $message->id,
-                'time' => $message->server_received_at->format('H:i:s'),
-                'device' => $message->device?->name,
-                'sender' => $message->sender,
-                'network' => $message->network?->name,
-                'network_color' => $message->network?->color,
-                'type' => $message->transaction_type ? txn_type_label($message->transaction_type) : '—',
-                'amount' => $message->amount ? money($message->amount) : '—',
-                'customer' => $message->customer_name ?? '—',
-                'customer_phone' => $message->customer_phone ?? '',
-                'reference' => $message->transaction_reference ?? '—',
-                'status' => $message->is_duplicate ? 'duplicate' : $message->processing_status,
-                'body' => $message->message_body,
-            ]));
+            @php
+                $row = [
+                    'id' => $message->id,
+                    'time' => $message->server_received_at->format('H:i:s'),
+                    'device' => $message->device?->name,
+                    'sender' => $message->sender,
+                    'network' => $message->network?->name,
+                    'network_color' => $message->network?->color,
+                    'type' => $message->transaction_type ? txn_type_label($message->transaction_type) : '—',
+                    'amount' => $message->amount ? money($message->amount) : '—',
+                    'customer' => $message->customer_name ?? '—',
+                    'customer_phone' => $message->customer_phone ?? '',
+                    'reference' => $message->transaction_reference ?? '—',
+                    'status' => $message->is_duplicate ? 'duplicate' : $message->processing_status,
+                    'body' => $message->message_body,
+                ];
+            @endphp
+            smsRowCache.set({{ $message->id }}, @json($row));
         @endforeach
 
         function setFilter(param, value) {
