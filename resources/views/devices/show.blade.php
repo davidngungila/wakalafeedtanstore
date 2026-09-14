@@ -165,7 +165,7 @@
             <p class="sub">Every message captured from this phone, most recent first.</p>
         </div>
         <div class="view-actions">
-            <a href="{{ route('sms.index', ['device' => $device->id]) }}" class="btn btn-ghost">Open SMS monitor</a>
+            <a href="{{ route('sms.index', ['device' => $device->id]) }}" class="btn btn-ghost">Open Messages</a>
         </div>
     </div>
 

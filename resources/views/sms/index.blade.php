@@ -1,12 +1,12 @@
 @extends('layouts.app')
 
-@section('title', 'SMS Monitor')
+@section('title', 'Messages')
 
 @section('content')
     <div class="view-head">
         <div>
-            <h2>SMS Monitor</h2>
-            <p class="sub">Every message captured from connected devices — live, automatic, no manual entry.</p>
+            <h2>Messages</h2>
+            <p class="sub">Every SMS captured from all connected phones — live, automatic, no manual entry.</p>
         </div>
         <div class="view-actions">
             <span class="tag tag-green" id="liveBadge">● Live</span>

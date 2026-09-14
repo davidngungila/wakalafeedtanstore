@@ -176,7 +176,7 @@ class DeviceModuleTest extends TestCase
         $this->actingAs($this->admin())
             ->get(route('sms.index'))
             ->assertOk()
-            ->assertSee('SMS Monitor')
+            ->assertSee('Messages')
             ->assertSee('Transaction of TZS 50000');
 
         $this->actingAs($this->admin())

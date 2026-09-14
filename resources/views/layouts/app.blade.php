@@ -539,7 +539,8 @@
         $isCashPointArea = str_starts_with($routeName, 'cash-point');
         $isTransactionArea = str_starts_with($routeName, 'transactions');
         $isNetworkArea = str_starts_with($routeName, 'networks');
-        $isDeviceArea = str_starts_with($routeName, 'devices') || str_starts_with($routeName, 'sms');
+        $isDeviceArea = str_starts_with($routeName, 'devices');
+        $isMessageArea = str_starts_with($routeName, 'sms');
         $isFloatArea = str_starts_with($routeName, 'float');
         $isReconArea = str_starts_with($routeName, 'reconciliation');
         $isReportArea = str_starts_with($routeName, 'reports');
@@ -595,6 +596,10 @@
                     <a href="{{ route('devices.index') }}" class="sb-item {{ $isDeviceArea ? 'active' : '' }}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
                         <span>Devices</span>
+                    </a>
+                    <a href="{{ route('sms.index') }}" class="sb-item {{ $isMessageArea ? 'active' : '' }}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="10" x2="17" y2="10"></line></svg>
+                        <span>Messages</span>
                     </a>
                 @endif
 
