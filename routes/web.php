@@ -77,6 +77,10 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
         Route::get('/devices/{device}', [DeviceController::class, 'show'])->name('devices.show');
+        Route::post('/devices/{device}/approve', [DeviceController::class, 'approve'])->name('devices.approve');
+        Route::post('/devices/{device}/suspend', [DeviceController::class, 'suspend'])->name('devices.suspend');
+        Route::post('/devices/{device}/block', [DeviceController::class, 'block'])->name('devices.block');
+        Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke'])->name('devices.revoke');
 
         Route::get('/sms', [SmsController::class, 'index'])->name('sms.index');
         Route::get('/sms/stream', [SmsController::class, 'stream'])->name('sms.stream');
@@ -96,10 +100,6 @@ Route::middleware('auth')->group(function () {
 
         Route::post('/devices', [DeviceController::class, 'store'])->name('devices.store');
         Route::put('/devices/{device}', [DeviceController::class, 'update'])->name('devices.update');
-        Route::post('/devices/{device}/approve', [DeviceController::class, 'approve'])->name('devices.approve');
-        Route::post('/devices/{device}/suspend', [DeviceController::class, 'suspend'])->name('devices.suspend');
-        Route::post('/devices/{device}/block', [DeviceController::class, 'block'])->name('devices.block');
-        Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke'])->name('devices.revoke');
         Route::post('/devices/{device}/code', [DeviceController::class, 'regenerateCode'])->name('devices.code');
         Route::delete('/devices/{device}', [DeviceController::class, 'destroy'])->name('devices.destroy');
 

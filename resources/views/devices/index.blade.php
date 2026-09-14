@@ -86,7 +86,8 @@
                             data-registered="{{ $device->created_at->format('d M Y H:i') }}"
                             data-today="{{ $stats ? ($stats['processed'].' processed · '.$stats['received'].' received') : 'No SMS today' }}"
                             data-sms="{{ $device->last_sms_at?->format('d M Y H:i') ?? 'Never' }}"
-                            data-regenerate-code-route="{{ route('devices.code', $device) }}">
+                            data-regenerate-code-route="{{ route('devices.code', $device) }}"
+                            data-approve-route="{{ route('devices.approve', $device) }}">
                             <td>
                                 <div class="cell-main">
                                     <div class="avatar" style="background:var(--terracotta-100);color:var(--terracotta-600);">{{ strtoupper(substr($device->name, 0, 2)) }}</div>
@@ -284,17 +285,27 @@
         }, 'Device details', tr => {
             const deviceId = tr.dataset.id;
             const isAdmin = {{ is_admin() ? 'true' : 'false' }};
-            
-            if (isAdmin) {
-                return [
-                    {
-                        label: 'Regenerate code',
-                        action: () => regenerateDeviceCode(deviceId),
-                        class: 'btn-ghost'
-                    }
-                ];
+            const isSupervisor = {{ is_supervisor() ? 'true' : 'false' }};
+            const status = tr.dataset.status.toLowerCase();
+            const actions = [];
+
+            if ((isAdmin || isSupervisor) && status === 'pending') {
+                actions.push({
+                    label: 'Approve & activate',
+                    action: () => approveDevice(deviceId, tr.dataset.approveRoute),
+                    class: 'btn-primary'
+                });
             }
-            return [];
+
+            if (isAdmin) {
+                actions.push({
+                    label: 'Regenerate code',
+                    action: () => regenerateDeviceCode(deviceId),
+                    class: 'btn-ghost'
+                });
+            }
+
+            return actions;
         });
         
         let currentDeviceId = null;
@@ -341,6 +352,34 @@
         
         async function regenerateDeviceCode(deviceId) {
             showRegenerateCodeModal(deviceId);
+        }
+
+        async function approveDevice(deviceId, route) {
+            if (!confirm('Approve and activate this device?')) return;
+
+            try {
+                const response = await fetch(route, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    toast('Device approved and activated.', 'success');
+                    closeModal('rowDetailsModal');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    toast(data.message || 'Failed to approve device.', 'error');
+                }
+            } catch (error) {
+                console.error('Error approving device:', error);
+                toast('Failed to approve device.', 'error');
+            }
         }
     </script>
 @endsection

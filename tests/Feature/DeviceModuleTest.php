@@ -31,6 +31,11 @@ class DeviceModuleTest extends TestCase
         return User::where('email', 'cashier@moneyagent.local')->firstOrFail();
     }
 
+    private function supervisor(): User
+    {
+        return User::where('email', 'supervisor@moneyagent.local')->firstOrFail();
+    }
+
     private function makeDevice(string $status = 'pending'): Device
     {
         return Device::create([
@@ -95,6 +100,52 @@ class DeviceModuleTest extends TestCase
             'status' => 'active',
         ]);
         $this->assertNotNull($device->fresh()->activated_at);
+    }
+
+    public function test_supervisor_can_approve_a_pending_device(): void
+    {
+        $device = $this->makeDevice();
+
+        $this->actingAs($this->supervisor())
+            ->post(route('devices.approve', $device))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('devices', [
+            'id' => $device->id,
+            'status' => 'active',
+        ]);
+    }
+
+    public function test_cashier_cannot_approve_a_device(): void
+    {
+        $device = $this->makeDevice();
+
+        $this->actingAs($this->cashier())
+            ->post(route('devices.approve', $device))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('devices', [
+            'id' => $device->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_supervisor_sees_approve_button_on_pending_device_page(): void
+    {
+        $device = $this->makeDevice();
+
+        $this->actingAs($this->supervisor())
+            ->get(route('devices.show', $device))
+            ->assertOk()
+            ->assertSee('Approve & activate')
+            ->assertDontSee('Regenerate code')
+            ->assertDontSee('Delete');
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.show', $device))
+            ->assertOk()
+            ->assertSee('Regenerate code')
+            ->assertSee('Delete');
     }
 
     public function test_blocked_or_revoked_devices_cannot_be_reactivated(): void

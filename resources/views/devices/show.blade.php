@@ -107,7 +107,7 @@
         </div>
     </div>
 
-    @if (is_admin())
+    @if (is_admin() || is_supervisor())
         <div class="table-card" style="margin-top:24px;">
             <div class="table-toolbar" style="border:none;padding:14px 20px;">
                 <strong style="font-size:14px;">Device actions</strong>
@@ -123,10 +123,12 @@
                             <button class="btn btn-primary">Re-activate</button>
                         </form>
                     @endif
-                    <form method="POST" action="{{ route('devices.code', $device) }}" onsubmit="return confirm('Generate a new device code? The old code stops working immediately.')">
-                        @csrf
-                        <button class="btn btn-ghost">Regenerate code</button>
-                    </form>
+                    @if (is_admin())
+                        <form method="POST" action="{{ route('devices.code', $device) }}" onsubmit="return confirm('Generate a new device code? The old code stops working immediately.')">
+                            @csrf
+                            <button class="btn btn-ghost">Regenerate code</button>
+                        </form>
+                    @endif
                     @if ($device->status !== 'suspended')
                         <form method="POST" action="{{ route('devices.suspend', $device) }}" onsubmit="return confirm('Suspend this device?')">
                             @csrf
@@ -145,11 +147,13 @@
                             <button class="btn btn-danger">Revoke</button>
                         </form>
                     @endif
-                    <form method="POST" action="{{ route('devices.destroy', $device) }}" onsubmit="return confirm('Delete this device and all its SMS records?')">
-                        @csrf
-                        @method('DELETE')
-                        <button class="btn btn-danger">Delete</button>
-                    </form>
+                    @if (is_admin())
+                        <form method="POST" action="{{ route('devices.destroy', $device) }}" onsubmit="return confirm('Delete this device and all its SMS records?')">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn btn-danger">Delete</button>
+                        </form>
+                    @endif
                 </div>
             </div>
         </div>
