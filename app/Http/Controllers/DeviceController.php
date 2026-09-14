@@ -67,7 +67,7 @@ class DeviceController extends Controller
             'app_version' => ['nullable', 'string', 'max:30'],
         ]);
 
-        [$plain, $hash] = Device::makeApiToken();
+        ['plain' => $plain, 'hash' => $hash] = Device::makeApiToken();
 
         $device = Device::create($validated + [
             'agent_id' => cash_point()->id,
@@ -175,7 +175,7 @@ class DeviceController extends Controller
 
     public function regenerateToken(Request $request, Device $device): JsonResponse|RedirectResponse
     {
-        [$plain, $hash] = Device::makeApiToken();
+        ['plain' => $plain, 'hash' => $hash] = Device::makeApiToken();
 
         $device->forceFill(['api_token_hash' => $hash])->save();
 
