@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Device;
 use App\Models\Network;
+use App\Models\SmsMessage;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -180,5 +181,37 @@ class DeviceModuleTest extends TestCase
             ->get(route('devices.show', $device))
             ->assertOk()
             ->assertSee($device->name);
+    }
+
+    public function test_device_detail_page_paginates_all_sms(): void
+    {
+        $device = $this->makeDevice('active');
+
+        foreach (range(0, 54) as $i) {
+            SmsMessage::create([
+                'device_id' => $device->id,
+                'agent_id' => $device->agent_id,
+                'network_id' => $device->network_id,
+                'sender' => 'MPESA',
+                'message_body' => 'Body '.$i,
+                'received_at' => now()->subMinutes(55 - $i),
+                'sms_hash' => hash('sha256', 'pager-'.$i),
+                'server_received_at' => now()->subMinutes(55 - $i),
+            ]);
+        }
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.show', $device))
+            ->assertOk()
+            ->assertSee('Body 54')
+            ->assertSee('Showing 1–50 of 55')
+            ->assertDontSee('Body 0');
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.show', ['device' => $device, 'page' => 2]))
+            ->assertOk()
+            ->assertSee('Body 0')
+            ->assertSee('Showing 51–55 of 55')
+            ->assertDontSee('Body 54');
     }
 }

@@ -157,8 +157,8 @@
 
     <div class="view-head" style="margin-top:28px;">
         <div>
-            <h2>Recent SMS</h2>
-            <p class="sub">Latest messages captured from this device.</p>
+            <h2>All SMS</h2>
+            <p class="sub">Every message captured from this phone, most recent first.</p>
         </div>
         <div class="view-actions">
             <a href="{{ route('sms.index', ['device' => $device->id]) }}" class="btn btn-ghost">Open SMS monitor</a>
@@ -212,6 +212,7 @@
                 </tbody>
             </table>
         </div>
+        {{ $sms->links('pagination.pager') }}
     </div>
 
     @if (is_admin())

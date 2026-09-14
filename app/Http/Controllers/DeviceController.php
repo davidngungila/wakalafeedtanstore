@@ -55,15 +55,15 @@ class DeviceController extends Controller
         ]);
     }
 
-    public function show(Device $device): View
+    public function show(Request $request, Device $device): View
     {
         $device->load(['agent', 'network', 'networks']);
 
         $sms = SmsMessage::with(['transaction'])
             ->where('device_id', $device->id)
             ->latest('server_received_at')
-            ->limit(30)
-            ->get();
+            ->paginate(50)
+            ->withQueryString();
 
         return view('devices.show', [
             'device' => $device,
