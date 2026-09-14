@@ -313,7 +313,7 @@
             document.getElementById('receiptBody').innerHTML = `
                 <div class="rc-receipt">
                     <div class="rc-brand">
-                        <strong>Wakala Platform</strong>
+                        <strong>Wakala Feedtan Store</strong>
                         <span>Mobile Money Services</span>
                     </div>
                     <div class="rc-rule"></div>
@@ -336,7 +336,7 @@
                     <div class="rc-rule"></div>
                     <div class="rc-row"><span>Operator</span><b>${t.operator || authUser}</b></div>
                     <div class="rc-rule"></div>
-                    <div class="rc-foot">Thank you for using Wakala Platform</div>
+                    <div class="rc-foot">Thank you for using Wakala Feedtan Store</div>
                 </div>`;
             openModal('receiptModal');
         }

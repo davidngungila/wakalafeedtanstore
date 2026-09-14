@@ -73,7 +73,7 @@ final class TwoFactor
         return false;
     }
 
-    public static function otpauthUri(string $secret, string $account, string $issuer = 'Wakala Platform'): string
+    public static function otpauthUri(string $secret, string $account, string $issuer = 'Wakala Feedtan Store'): string
     {
         return 'otpauth://totp/'.rawurlencode($issuer).':'.rawurlencode($account)
             .'?secret='.rawurlencode($secret)
