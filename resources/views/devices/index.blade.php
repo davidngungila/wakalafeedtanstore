@@ -15,22 +15,7 @@
         @endif
     </div>
 
-    @if ($credentialsFlash)
-        <div class="status-banner" style="background:var(--acacia-100);color:var(--acacia-700);border-radius:10px;padding:16px;margin-bottom:20px;">
-            <div style="font-weight:700;font-size:13.5px;margin-bottom:6px;">Device credentials — copy them now (shown only once)</div>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Code</span>
-                <code id="credFlashCode" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;letter-spacing:2px;">{{ $credentialsFlash['device_code'] }}</code>
-                <button class="btn btn-ghost" onclick="copyFlash('credFlashCode', 'Device code copied.')">Copy</button>
-            </div>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">
-                <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Token</span>
-                <code id="credFlashToken" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;letter-spacing:.3px;word-break:break-all;">{{ $credentialsFlash['token'] }}</code>
-                <button class="btn btn-ghost" onclick="copyFlash('credFlashToken', 'Token copied.')">Copy</button>
-            </div>
-            <div style="font-size:12px;color:var(--acacia-700);margin-top:8px;opacity:.9;">Enter this code and token in the MobiControl app on the phone. The device starts ingesting SMS once approved.</div>
-        </div>
-    @endif
+    @include('devices.partials.credentials-popup')
 
     <form method="GET" action="{{ route('devices.index') }}">
         <div class="table-card">
