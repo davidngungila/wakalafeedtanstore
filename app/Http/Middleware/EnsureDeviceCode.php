@@ -8,20 +8,18 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class EnsureDeviceToken
+class EnsureDeviceCode
 {
     /**
-     * Authenticate a connected phone using its device code and authorization token.
-     * Both headers are required on every request:
-     *   - Authorization: Bearer <long token>
+     * Authenticate a connected phone using its device code.
+     * The device code header is required on every request:
      *   - X-Device-Code: <short code>
      */
     public function handle(Request $request, Closure $next): Response|JsonResponse
     {
-        $token = $request->bearerToken();
         $deviceCode = $request->header('X-Device-Code');
 
-        if (! $token || ! $deviceCode) {
+        if (! $deviceCode) {
             return response()->json(['message' => 'Missing credentials.'], 401);
         }
 
@@ -31,10 +29,6 @@ class EnsureDeviceToken
 
         if (! $device) {
             return response()->json(['message' => 'Unknown device. This device is not authorized.'], 401);
-        }
-
-        if (! $device->hasAuthorizationToken($token)) {
-            return response()->json(['message' => 'Invalid authorization token.'], 401);
         }
 
         if (in_array($device->status, ['blocked', 'revoked'], true)) {

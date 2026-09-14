@@ -2,7 +2,7 @@
 // MobiControl — Wakala Feedtan Store companion
 // Single-file Flutter application (mobile/lib/main.dart)
 //
-// Talks to https://wakala.feedtanstore.com/api/v1 using a device API token.
+// Talks to https://wakala.feedtanstore.com/api/v1 using the device code.
 // Listens for mobile-money SMS in the background (native SmsReceiver +
 // foreground service, bridged via MethodChannel/EventChannel), matches the
 // sender against the downloaded watchlist, queues the matches offline, and
@@ -353,27 +353,27 @@ String randomUid() => List.generate(16, (_) => _rng.nextInt(10)).join();
 // ---------------------------------------------------------------------------
 // 3. SECURE STORAGE + API CLIENT
 // ---------------------------------------------------------------------------
-class TokenStore {
-  static const _tokens = <String, String>{};
+class CodeStore {
+  static const _codes = <String, String>{};
   static const _secure = FlutterSecureStorage();
-  static const _prefsKey = 'wakala.api_token';
+  static const _prefsKey = 'wakala.device_code';
 
   static Future<String?> read() async {
-    final cached = _tokens[_prefsKey];
+    final cached = _codes[_prefsKey];
     if (cached != null) return cached;
     final value = await _secure.read(key: _prefsKey);
-    if (value != null) _tokens[_prefsKey] = value;
+    if (value != null) _codes[_prefsKey] = value;
     return value;
   }
 
-  static Future<void> write(String token) async {
-    await _secure.write(key: _prefsKey, value: token);
-    _tokens[_prefsKey] = token;
+  static Future<void> write(String code) async {
+    await _secure.write(key: _prefsKey, value: code);
+    _codes[_prefsKey] = code;
   }
 
   static Future<void> clear() async {
     await _secure.delete(key: _prefsKey);
-    _tokens.remove(_prefsKey);
+    _codes.remove(_prefsKey);
   }
 }
 
@@ -384,7 +384,7 @@ class ApiException implements Exception {
 
   ApiException(this.message, {this.statusCode, this.deviceStatus});
 
-  bool get tokenInvalid => statusCode != null && (statusCode == 400 || statusCode == 401);
+  bool get codeInvalid => statusCode != null && (statusCode == 400 || statusCode == 401);
   bool get deviceBlocked => statusCode == 403;
 
   @override
@@ -397,17 +397,17 @@ class ApiClient {
 
   ApiClient({http.Client? client, this.baseUrl = kApiBase}) : _client = client ?? http.Client();
 
-  /// Throws [ApiException]. Auto-refreshes nothing — token session is the OS.
+  /// Throws [ApiException]. Auto-refreshes nothing — the device code is the credential.
   Future<Map<String, dynamic>> request(
     String method,
     String path, {
     Map<String, dynamic>? body,
   }) async {
-    final token = await TokenStore.read();
+    final code = await CodeStore.read();
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
+      if (code != null) 'X-Device-Code': code,
     };
 
     late final http.Response response;
@@ -604,20 +604,20 @@ class AgentService {
   DeviceInfo? get device => _device;
   SenderWatchlist? get watchlist => _watchlist;
 
-  String? get tokenValid => _device?.status != null ? 'ok' : null;
+  String? get codeValid => _device?.status != null ? 'ok' : null;
 
   /// Idempotent. Safe to call from the UI and from background workers.
   Future<void> cycle() async {
-    final token = await TokenStore.read();
-    if (token == null) return;
+    final code = await CodeStore.read();
+    if (code == null) return;
 
     try {
       _device = await _deviceApi.me();
       _statusController.add(_device);
       _log('profile', {'status': _device!.status.name, 'networks': _device!.networks});
     } on ApiException catch (e) {
-      if (e.tokenInvalid || e.deviceBlocked) {
-        await TokenStore.clear();
+      if (e.codeInvalid || e.deviceBlocked) {
+        await CodeStore.clear();
         _device = null;
         _statusController.add(null);
         return;
@@ -699,7 +699,7 @@ Future<void> callbackDispatcher() async {
 
 bool _agentActivated = false;
 
-/// Called once a device token exists. Idempotent: registers the WorkManager
+/// Called once a device code is stored. Idempotent: registers the WorkManager
 /// watchdog, starts the foreground task, subscribes the SMS bridge and runs
 /// one full cycle immediately.
 Future<void> activateAgent() async {
@@ -772,22 +772,22 @@ class _WakalaAppState extends State<WakalaApp> {
       title: 'MobiControl',
       theme: WakalaTheme.build(),
       debugShowCheckedModeBanner: false,
-      home: const TokenGate(),
+      home: const PairingGate(),
     );
   }
 }
 
-/// Shows the token entry screen until a device token is stored.
-class TokenGate extends StatefulWidget {
-  const TokenGate({super.key});
+/// Shows the device-code entry screen until a device code is stored.
+class PairingGate extends StatefulWidget {
+  const PairingGate({super.key});
 
   @override
-  State<TokenGate> createState() => _TokenGateState();
+  State<PairingGate> createState() => _PairingGateState();
 }
 
-class _TokenGateState extends State<TokenGate> {
+class _PairingGateState extends State<PairingGate> {
   bool _checking = true;
-  String? _token;
+  String? _code;
 
   @override
   void initState() {
@@ -796,44 +796,44 @@ class _TokenGateState extends State<TokenGate> {
   }
 
   Future<void> _load() async {
-    final token = await TokenStore.read();
+    final code = await CodeStore.read();
     if (!mounted) return;
-    if (token == null) {
+    if (code == null) {
       setState(() => _checking = false);
       return;
     }
     unawaited(activateAgent());
     setState(() {
       _checking = false;
-      _token = token;
+      _code = code;
     });
   }
 
   void _onLinked() {
     unawaited(activateAgent());
     setState(() {
-      _token = 'set'; // token store now populated
+      _code = 'set'; // code store now populated
     });
   }
 
   @override
   Widget build(BuildContext context) {
     if (_checking) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    return _token == null
-        ? Scaffold(body: Center(child: SingleChildScrollView(child: _TokenEntry(onLinked: _onLinked))))
+    return _code == null
+        ? Scaffold(body: Center(child: SingleChildScrollView(child: _CodeEntry(onLinked: _onLinked))))
         : const HomeShell();
   }
 }
 
-class _TokenEntry extends StatefulWidget {
+class _CodeEntry extends StatefulWidget {
   final VoidCallback onLinked;
-  const _TokenEntry({required this.onLinked});
+  const _CodeEntry({required this.onLinked});
 
   @override
-  State<_TokenEntry> createState() => _TokenEntryState();
+  State<_CodeEntry> createState() => _CodeEntryState();
 }
 
-class _TokenEntryState extends State<_TokenEntry> {
+class _CodeEntryState extends State<_CodeEntry> {
   final _controller = TextEditingController();
   bool _busy = false;
   String? _error;
@@ -845,9 +845,9 @@ class _TokenEntryState extends State<_TokenEntry> {
   }
 
   Future<void> _submit() async {
-    final token = _controller.text.trim();
-    if (token.isEmpty) {
-      setState(() => _error = 'Enter the device token from the admin dashboard.');
+    final code = _controller.text.trim();
+    if (code.isEmpty) {
+      setState(() => _error = 'Enter the device code from the admin dashboard.');
       return;
     }
     setState(() {
@@ -855,7 +855,7 @@ class _TokenEntryState extends State<_TokenEntry> {
       _error = null;
     });
 
-    await TokenStore.write(token);
+    await CodeStore.write(code);
     try {
       await AgentService.instance.cycle();
       if (!mounted) return;
@@ -863,7 +863,7 @@ class _TokenEntryState extends State<_TokenEntry> {
         widget.onLinked();
       }
     } on ApiException catch (e) {
-      await TokenStore.clear();
+      await CodeStore.clear();
       if (mounted) setState(() => _error = e.message);
     }
     if (mounted) setState(() => _busy = false);
@@ -883,7 +883,7 @@ class _TokenEntryState extends State<_TokenEntry> {
               Text('Wakala — MobiControl', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 4),
               Text(
-                'Enter the device API token shown by your administrator '
+                'Enter the device code shown by your administrator '
                 'when the phone was registered.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: WakalaColors.inkSoft),
               ),
@@ -893,7 +893,7 @@ class _TokenEntryState extends State<_TokenEntry> {
                 obscureText: true,
                 autocorrect: false,
                 enableSuggestions: false,
-                decoration: const InputDecoration(labelText: 'Device token'),
+                decoration: const InputDecoration(labelText: 'Device code'),
               ),
               if (_error != null) ...[
                 const SizedBox(height: WakalaSpacing.sm),
@@ -1204,7 +1204,7 @@ class DashboardScreen extends StatelessWidget {
           return const _CenteredMessage(
             icon: Icons.link_off,
             title: 'Not linked',
-            subtitle: 'The device token is missing. Re-enter it in Settings.',
+            subtitle: 'The device code is missing. Re-enter it in Settings.',
           );
         }
 
@@ -1491,14 +1491,14 @@ class SettingsScreen extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.link_off, color: WakalaColors.danger),
                 title: const Text('Unlink this phone'),
-                subtitle: const Text('Clear the stored device token'),
+                subtitle: const Text('Clear the stored device code'),
                 onTap: () async {
                   await IngestQueue.instance
                       .remove(IngestQueue.instance.items.map((e) => e.digest).toSet());
-                  await TokenStore.clear();
+                  await CodeStore.clear();
                   if (context.mounted) {
                     Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const TokenGate()),
+                      MaterialPageRoute(builder: (_) => const PairingGate()),
                       (route) => false,
                     );
                   }

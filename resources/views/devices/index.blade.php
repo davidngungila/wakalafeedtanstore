@@ -201,7 +201,7 @@
                                 <input type="text" name="app_version" placeholder="e.g. 1.0.1">
                             </div>
                         </div>
-                        <p style="font-size:12px;color:var(--ink-soft);margin:0;">The device starts as <b>Pending</b>. The API token is shown once — approve the device on the list to activate it.</p>
+                        <p style="font-size:12px;color:var(--ink-soft);margin:0;">The device starts as <b>Pending</b>. The device code is shown once — approve the device on the list to activate it.</p>
                     </div>
                     <div class="modal-foot">
                         <button type="button" class="btn btn-ghost" onclick="closeModal('deviceModal')">Cancel</button>

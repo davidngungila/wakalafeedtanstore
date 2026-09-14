@@ -37,7 +37,6 @@ class DeviceModuleTest extends TestCase
             'agent_id' => cash_point()->id,
             'network_id' => Network::firstOrFail()->id,
             'device_code' => Device::generateDeviceCode(),
-            'authorization_token_hash' => hash('sha256', 'dv_test'),
             'status' => $status,
         ]);
     }
@@ -111,7 +110,7 @@ class DeviceModuleTest extends TestCase
         ]);
     }
 
-    public function test_admin_can_revoke_a_device_and_invalidate_its_token(): void
+    public function test_admin_can_revoke_a_device(): void
     {
         $device = $this->makeDevice('active');
 
@@ -122,7 +121,6 @@ class DeviceModuleTest extends TestCase
         $this->assertDatabaseHas('devices', [
             'id' => $device->id,
             'status' => 'revoked',
-            'authorization_token_hash' => null,
         ]);
     }
 

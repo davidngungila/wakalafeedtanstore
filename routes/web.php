@@ -100,10 +100,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/devices/{device}/suspend', [DeviceController::class, 'suspend'])->name('devices.suspend');
         Route::post('/devices/{device}/block', [DeviceController::class, 'block'])->name('devices.block');
         Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke'])->name('devices.revoke');
-        Route::post('/devices/{device}/token', [DeviceController::class, 'regenerateToken'])->name('devices.token');
         Route::post('/devices/{device}/code', [DeviceController::class, 'regenerateCode'])->name('devices.code');
-        Route::post('/devices/{device}/token/show', [DeviceController::class, 'showToken'])->name('devices.token.show');
-        Route::get('/devices/{device}/token/show', [DeviceController::class, 'showToken'])->name('devices.token.show');
         Route::delete('/devices/{device}', [DeviceController::class, 'destroy'])->name('devices.destroy');
 
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');

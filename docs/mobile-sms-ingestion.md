@@ -7,7 +7,7 @@ Store system (`https://wakala.feedtanstore.com`) over the device API.
 This document covers:
 
 1.  Architecture overview
-2.  Device & token lifecycle
+2.  Device lifecycle
 3.  API authentication
 4.  Endpoint reference (request / response / errors)
 5.  Background SMS capture on Android (permissions, receivers, services, the
@@ -68,28 +68,26 @@ device**, which makes "upload again later" safe.
 
 ---
 
-## 2. Device & token lifecycle
+## 2. Device lifecycle
 
-Every phone is a **Device** managed by an administrator on the web dashboard.
+Every phone is a **Device** managed by an administrator on the web dashboard. The
+only credential is the **device code**.
 
 | Stage            | Meaning                                                                    | Behaviour on the API                                      |
 | ---------------- | -------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `pending`        | Registered, token generated, not yet approved                              | Auth works; `ingest` → `403 Device is not active`         |
+| `pending`        | Registered, code generated, not yet approved                               | Auth works; `ingest` → `403 Device is not active`         |
 | `active`         | Approved. This is the only state that may ingest SMS                        | All endpoints work                                        |
 | `suspended`      | Temporarily disabled                                                        | Auth works; `ingest` → `403 Device is not active`         |
 | `blocked`        | Permanently blocked                                                         | Auth → `403 Device is not allowed to access the system`   |
-| `revoked`        | Permanently revoked, token invalidated                                      | Auth → `403 Device is not allowed to access the system`   |
+| `revoked`        | Permanently revoked                                                         | Auth → `403 Device is not allowed to access the system`   |
 | `offline`        | Not a stored state — derived when `active` but no heartbeat for 10 min      | Heartbeat overdue → dashboard shows "offline"             |
 
 **Onboarding flow**
 
-1. On the web app, an admin registers the phone and receives **two credentials**
-   (shown **once**, never retrievable again):
-   - **Device code** — short, human-friendly, 6 chars (e.g. `F7KQ2M`)
-   - **Authorization token** — long, opaque, 64 hex chars (e.g. `a83f…9c1e`)
-   The token is hashed on the server (`authorization_token_hash`); the plain
-   values exist only on the phone and in the one-time flash banner.
-2. On the phone, the operator enters the same code and token.
+1. On the web app, an admin registers the phone and receives one credential
+   (shown **once**, never retrievable again): the **device code** — short,
+   human-friendly, 6 chars (e.g. `F7KQ2M`).
+2. On the phone, the operator enters the code.
 3. The app calls `POST /devices/bootstrap` to pair and report handset info.
 4. The admin approves the device on the dashboard → `active`.
 5. The app starts ingesting.
@@ -101,34 +99,29 @@ The app must handle the `pending` state gracefully: poll `GET /devices/me`
 
 ## 3. API authentication
 
-Every endpoint in `/api/v1` requires **both** credentials on every request:
+Every endpoint in `/api/v1` requires the device code on every request:
 
 ```
-Authorization: Bearer a83f…9c1e
 X-Device-Code: F7KQ2M
 Accept: application/json
 Content-Type: application/json
 ```
 
 - The device is looked up by `device_code` (exact match, case-insensitive).
-- The server verifies the Bearer token against the stored
-  `authorization_token_hash` using a **constant-time comparison**.
-- An empty/partial pair returns `401`; the app must wipe its stored
-  credentials and return the operator to the pairing screen.
+- A missing or unknown code returns `401`; the app must wipe its stored code
+  and return the operator to the pairing screen.
 
 Common auth errors:
 
 | Code | Body                                                        | Meaning                                             |
 | ---- | ----------------------------------------------------------- | --------------------------------------------------- |
-| 401  | `{"message":"Missing credentials."}`                        | `Authorization` or `X-Device-Code` header missing   |
+| 401  | `{"message":"Missing credentials."}`                        | `X-Device-Code` header missing   |
 | 401  | `{"message":"Unknown device. This device is not authorized."}` | Device code does not match any device               |
-| 401  | `{"message":"Invalid authorization token."}`                | Token does not match the device code                |
 | 403  | `{"message":"Device is not allowed to access the system."}` | Device is `blocked` or `revoked`                    |
 
-> The admin can **Regenerate token** (old token invalid immediately) and
-> **Regenerate code** on the dashboard. After either, the app's old pair stops
-> working — treat a `401` as "re-pair required". Storage on the phone MUST be
-> secure (see §8).
+> The admin can **Regenerate code** on the dashboard. After that, the app's old
+> code stops working — treat a `401` as "re-pair required". Storage on the phone
+> MUST be secure (see §8).
 
 ---
 
@@ -582,7 +575,7 @@ dependencies:
   package_info_plus: ^8.0.0           # appVersion
   connectivity_plus: ^6.0.0           # network checks
   crypto: ^3.0.0                      # sha256 of body (client-side hint)
-  flutter_secure_storage: ^9.0.0      # device token (EncryptedSharedPreferences)
+  flutter_secure_storage: ^9.0.0      # device code (EncryptedSharedPreferences)
 ```
 
 Fonts (Raleway — the exact family the web app uses):
@@ -612,7 +605,7 @@ Android minimum config:
 - **SmsBridge** exposes `start()` / `stop()` (MethodChannel → native receiver
   registration) and a Dart stream that yields captured SMS.
 - **AgentService** is a `CallbackDispatcher` for WorkManager. It runs even when
-  the UI is dead: reload the token, flush `IngestQueue`, refresh the watchlist,
+  the UI is dead: reload the device code, flush `IngestQueue`, refresh the watchlist,
   and heartbeat.
 - **IngestQueue** appends every captured SMS, then flushes: build chunks of
   `max_batch` (500), call `SmsApi.ingest`, and remove only `ok:true` /
@@ -635,7 +628,7 @@ Android minimum config:
 1. SMS arrives → native `SmsReceiver` fires.
 2. Sender matches watchlist (`MPESA` ⊂ `mpesa`, device serves VODACOM) → enqueue.
 3. `AgentService` notices the queue is non-empty → builds a batch → `POST
-   /sms/ingest` with the bearer token.
+   /sms/ingest` with the device code header.
 4. Server returns `results[i].ok:true` with `transaction_reference` → item
    removed from the queue.
 5. The web dashboard transaction list and the phone's **Ingest log** both show
@@ -654,7 +647,7 @@ Android minimum config:
 
 ### 7.3 New device (pending) path
 
-1. Operator enters the **device code** + **authorization token** → `bootstrap`
+1. Operator enters the **device code** → `bootstrap`
    returns `status: pending` and a message "Awaiting approval".
 2. UI shows a gold `Pending` tag; `AgentService` polls `me` + heartbeat but
    does **not** upload SMS.
@@ -665,21 +658,20 @@ Android minimum config:
 
 ## 8. Security checklist
 
-- Store **both** the device code and authorization token in
-  **`flutter_secure_storage`** (EncryptedSharedPreferences / Keystore). Never in
-  plain `SharedPreferences`, logs, or analytics.
+- Store the **device code** in **`flutter_secure_storage`**
+  (EncryptedSharedPreferences / Keystore). Never in plain `SharedPreferences`,
+  logs, or analytics.
 - Talk HTTPS only (`https://wakala.feedtanstore.com`); add network-security-config
   to reject cleartext.
 - Never log message bodies or customer data in the app's logcat.
-- On `revoke`, the server nulls the hash and the token stops working
-  immediately — the app must handle `403` by clearing the local credentials and
-  returning the operator to the pairing screen.
-- The server never logs or returns a plaintext token after creation/rotation.
+- On `revoke`, the device code stops working immediately — the app must handle
+  `403` by clearing the local code and returning the operator to the pairing
+  screen.
 - Keep the SenderKeys fluent: if an SMS matches **no** watchlist keyword, drop
   it locally (don't upload unknown senders).
 - Validate lengths client-side (`sender ≤ 30`, etc.) to fail fast, but rely on
   the server for correctness.
-- Do not embed credentials in the APK; always operator-entered.
+- Do not embed the code in the APK; always operator-entered.
 
 ---
 
@@ -687,11 +679,10 @@ Android minimum config:
 
 | Scenario                                    | HTTP / signal            | App action                                                         |
 | ------------------------------------------- | ------------------------ | ------------------------------------------------------------------ |
-| No credentials stored                       | —                        | Show pairing screen (code + token entry)                           |
+| No code stored                              | —                        | Show pairing screen (code entry)                                   |
 | `401 Missing credentials.`                  | 401                      | Server config problem; show contact-admin message                  |
-| `401 Unknown device. This device is not authorized.` | 401              | Device code invalid → clear credentials → pairing screen           |
-| `401 Invalid authorization token.`          | 401                      | Token regenerated/mismatch → clear credentials → pairing screen    |
-| `403 Device is not allowed…`                | 403                      | Device blocked/revoked → clear credentials → pairing screen (+ hint) |
+| `401 Unknown device. This device is not authorized.` | 401              | Device code invalid → clear code → pairing screen                 |
+| `403 Device is not allowed…`                | 403                      | Device blocked/revoked → clear code → pairing screen (+ hint)      |
 | `403 Device is not active.`                 | 403 (+ `device_status`)  | Stay paired, block uploads, show `Pending`/`Suspended` state       |
 | `4xx` validation on ingest                  | 400/422 per item         | Keep item, mark `failed`, do not infinitely retry (max attempts)   |
 | Network timeout / connection                | Exception                | Keep queue, exponential backoff, heartbeat deferred                |
@@ -706,7 +697,7 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 
 ## 10. Testing / QA checklist
 
-- [ ] Fresh install → pairing (code + token) → bootstrap shows `pending` → no upload until approved.
+- [ ] Fresh install → pairing (code entry) → bootstrap shows `pending` → no upload until approved.
 - [ ] Approval on dashboard → app flips to `Active` (≤ next heartbeat) → first SMS uploads and appears on `/sms` and `/transactions`.
 - [ ] Send 600+ SMS in a burst → chunks of ≤ 500 are sent, all recorded, no loss.
 - [ ] Kill the app (swipe) → SMS still captured & uploaded via WorkManager watchdog.
@@ -714,7 +705,7 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 - [ ] Turn off Wi-Fi/data → queue grows; re-enable → drains with **no duplicates** created.
 - [ ] Resend the same SMS body → `duplicate` result, transaction count unchanged.
 - [ ] Unknown sender (e.g. bank OTP) → captured and locally dropped (never uploaded unless in watchlist).
-- [ ] Revoke device → next API call returns 403 → token cleared, token screen shown.
+- [ ] Revoke device → next API call returns 403 → code cleared, pairing screen shown.
 - [ ] Battery saver / Doze after 30 min idle → device still heartbeat within 10 min of going offline? (Use the visual **offline** check.) Then run the OEM auto-start fix.
 - [ ] A device serving 2 networks (VODACOM + AIRTEL) captures MPESA **and** AIRTEL senders and creates transactions on both networks.
 

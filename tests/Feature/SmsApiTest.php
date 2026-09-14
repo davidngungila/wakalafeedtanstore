@@ -21,19 +21,13 @@ class SmsApiTest extends TestCase
         $this->seed();
     }
 
-    private function token(): string
-    {
-        return '6a83bfc2e1d5f4a09b7c8d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2';
-    }
-
-    private function makeDevice(string $status = 'active', ?Network $network = null, ?string $token = null): Device
+    private function makeDevice(string $status = 'active', ?Network $network = null): Device
     {
         return Device::create([
             'name' => 'Flutter Phone',
             'agent_id' => cash_point()->id,
             'network_id' => $network?->id ?? Network::firstOrFail()->id,
             'device_code' => Device::generateDeviceCode(),
-            'authorization_token_hash' => hash('sha256', $token ?? $this->token()),
             'status' => $status,
         ]);
     }
@@ -41,21 +35,15 @@ class SmsApiTest extends TestCase
     private function deviceHeaders(Device $device): array
     {
         return [
-            'Authorization' => 'Bearer '.$this->token(),
             'X-Device-Code' => $device->device_code,
         ];
     }
 
-    public function test_missing_token_is_rejected(): void
+    public function test_missing_device_code_is_rejected(): void
     {
         $this->getJson('/api/v1/sms/senders')->assertUnauthorized();
-    }
 
-    public function test_missing_device_code_header_is_rejected(): void
-    {
-        $device = $this->makeDevice();
-
-        $this->withHeaders(['Authorization' => 'Bearer '.$this->token()])
+        $this->withHeaders(['X-Device-Code' => ''])
             ->getJson('/api/v1/sms/senders')
             ->assertUnauthorized()
             ->assertJsonPath('message', 'Missing credentials.');
@@ -63,34 +51,18 @@ class SmsApiTest extends TestCase
 
     public function test_unknown_device_code_is_rejected(): void
     {
-        $this->withHeaders([
-            'Authorization' => 'Bearer '.$this->token(),
-            'X-Device-Code' => 'ZZZZZZ',
-        ])->getJson('/api/v1/sms/senders')
+        $this->withHeaders(['X-Device-Code' => 'ZZZZZZ'])
+            ->getJson('/api/v1/sms/senders')
             ->assertUnauthorized()
             ->assertJsonPath('message', 'Unknown device. This device is not authorized.');
-    }
-
-    public function test_invalid_authorization_token_is_rejected(): void
-    {
-        $device = $this->makeDevice();
-
-        $this->withHeaders([
-            'Authorization' => 'Bearer '.str_repeat('f', 64),
-            'X-Device-Code' => $device->device_code,
-        ])->getJson('/api/v1/sms/senders')
-            ->assertUnauthorized()
-            ->assertJsonPath('message', 'Invalid authorization token.');
     }
 
     public function test_device_code_lookup_is_case_insensitive(): void
     {
         $device = $this->makeDevice();
 
-        $this->withHeaders([
-            'Authorization' => 'Bearer '.$this->token(),
-            'X-Device-Code' => strtolower($device->device_code),
-        ])->getJson('/api/v1/sms/senders')
+        $this->withHeaders(['X-Device-Code' => strtolower($device->device_code)])
+            ->getJson('/api/v1/sms/senders')
             ->assertOk();
     }
 
@@ -103,22 +75,18 @@ class SmsApiTest extends TestCase
             ->assertForbidden()
             ->assertJsonPath('message', 'Device is not allowed to access the system.');
 
-        $revokedToken = $this->token().'00';
-        $revoked = $this->makeDevice('revoked', null, $revokedToken);
+        $revoked = $this->makeDevice('revoked');
 
-        $this->withHeaders([
-            'Authorization' => 'Bearer '.$revokedToken,
-            'X-Device-Code' => $revoked->device_code,
-        ])->getJson('/api/v1/sms/senders')
+        $this->withHeaders(['X-Device-Code' => $revoked->device_code])
+            ->getJson('/api/v1/sms/senders')
             ->assertForbidden();
     }
 
-    public function test_me_endpoint_requires_and_uses_both_credentials(): void
+    public function test_me_endpoint_requires_the_device_code_and_returns_profile(): void
     {
         $device = $this->makeDevice();
 
-        $this->withHeaders(['Authorization' => 'Bearer '.$this->token()])
-            ->getJson('/api/v1/devices/me')
+        $this->getJson('/api/v1/devices/me')
             ->assertUnauthorized();
 
         $response = $this->withHeaders($this->deviceHeaders($device))

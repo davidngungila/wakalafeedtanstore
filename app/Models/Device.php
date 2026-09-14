@@ -2,14 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Crypt;
 
 #[Fillable([
     'device_uid',
@@ -22,8 +20,6 @@ use Illuminate\Support\Facades\Crypt;
     'sim_number',
     'android_version',
     'app_version',
-    'authorization_token_hash',
-    'authorization_token_encrypted',
     'branch',
     'status',
     'last_ip',
@@ -108,63 +104,6 @@ class Device extends Model
         return $code;
     }
 
-    /**
-     * Generate a fresh authorization token, returning the plain-text secret and its hash.
-     *
-     * @return array{plain: string, hash: string}
-     */
-    public static function makeAuthorizationToken(): array
-    {
-        $plain = bin2hex(random_bytes(32));
-
-        return ['plain' => $plain, 'hash' => hash('sha256', $plain)];
-    }
-
-    /**
-     * Generate both device code and authorization token for a new device.
-     *
-     * @return array{device_code: string, token_plain: string, token_hash: string}
-     */
-    public static function generateCredentials(): array
-    {
-        $deviceCode = static::generateDeviceCode();
-        ['plain' => $tokenPlain, 'hash' => $tokenHash] = static::makeAuthorizationToken();
-
-        return [
-            'device_code' => $deviceCode,
-            'token_plain' => $tokenPlain,
-            'token_hash' => $tokenHash,
-        ];
-    }
-
-    public function setAuthorizationToken(string $plain): void
-    {
-        $this->authorization_token_hash = hash('sha256', $plain);
-        $this->authorization_token_encrypted = Crypt::encryptString($plain);
-    }
-
-    /**
-     * Get the decrypted authorization token.
-     */
-    public function getDecryptedToken(): ?string
-    {
-        if ($this->authorization_token_encrypted === null) {
-            return null;
-        }
-
-        try {
-            return Crypt::decryptString($this->authorization_token_encrypted);
-        } catch (DecryptException $e) {
-            return null;
-        }
-    }
-
-    public function hasAuthorizationToken(string $plain): bool
-    {
-        return $this->authorization_token_hash !== null
-            && hash_equals($this->authorization_token_hash, hash('sha256', $plain));
-    }
-
     public function approve(): void
     {
         $this->status = 'active';
@@ -193,8 +132,6 @@ class Device extends Model
     {
         $this->status = 'revoked';
         $this->revoked_at = now();
-        $this->authorization_token_hash = null;
-        $this->authorization_token_encrypted = null;
         $this->save();
     }
 

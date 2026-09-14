@@ -70,7 +70,6 @@ class DeviceController extends Controller
             'sms' => $sms,
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
             'credentialsFlash' => session()->pull('credentials_flash'),
-            'authorizationToken' => $device->getDecryptedToken(),
         ]);
     }
 
@@ -95,13 +94,13 @@ class DeviceController extends Controller
             return response()->json(['success' => false, 'message' => 'Select at least one network.'], 422);
         }
 
-        $credentials = Device::generateCredentials();
+        $deviceCode = Device::generateDeviceCode();
 
         $device = Device::create([
             'name' => $validated['name'],
             'agent_id' => cash_point()->id,
             'network_id' => $networkIds[0],
-            'device_code' => $credentials['device_code'],
+            'device_code' => $deviceCode,
             'status' => 'pending',
             'phone_number' => $validated['phone_number'] ?? null,
             'sim_number' => $validated['sim_number'] ?? null,
@@ -110,9 +109,6 @@ class DeviceController extends Controller
             'android_version' => $validated['android_version'] ?? null,
             'app_version' => $validated['app_version'] ?? null,
         ]);
-
-        $device->setAuthorizationToken($credentials['token_plain']);
-        $device->save();
 
         $device->networks()->sync($networkIds);
 
@@ -123,16 +119,14 @@ class DeviceController extends Controller
 
         session()->flash('credentials_flash', [
             'device_id' => $device->id,
-            'device_code' => $credentials['device_code'],
-            'token' => $credentials['token_plain'],
+            'device_code' => $deviceCode,
         ]);
 
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
                 'message' => 'Device registered. Credentials generated.',
-                'device_code' => $credentials['device_code'],
-                'authorization_token' => $credentials['token_plain'],
+                'device_code' => $deviceCode,
             ]);
         }
 
@@ -253,32 +247,10 @@ class DeviceController extends Controller
         $this->recordAudit('Device revoked', 'Device', $device->id);
 
         if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => 'Device revoked and token invalidated.']);
+            return response()->json(['success' => true, 'message' => 'Device revoked.']);
         }
 
-        return back()->with('status', 'Device revoked and token invalidated.');
-    }
-
-    public function regenerateToken(Request $request, Device $device): JsonResponse|RedirectResponse
-    {
-        ['plain' => $plain, 'hash' => $hash] = Device::makeAuthorizationToken();
-
-        $device->setAuthorizationToken($plain);
-        $device->save();
-
-        $this->recordAudit('Device authorization token regenerated', 'Device', $device->id);
-
-        session()->flash('credentials_flash', [
-            'device_id' => $device->id,
-            'device_code' => $device->device_code,
-            'token' => $plain,
-        ]);
-
-        if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => 'New device authorization token generated.', 'authorization_token' => $plain]);
-        }
-
-        return back()->with('status', 'New device authorization token generated.');
+        return back()->with('status', 'Device revoked.');
     }
 
     public function regenerateCode(Request $request, Device $device): JsonResponse|RedirectResponse
@@ -292,7 +264,6 @@ class DeviceController extends Controller
         session()->flash('credentials_flash', [
             'device_id' => $device->id,
             'device_code' => $deviceCode,
-            'token' => $device->getDecryptedToken(),
         ]);
 
         if ($request->expectsJson()) {
@@ -316,18 +287,5 @@ class DeviceController extends Controller
         }
 
         return redirect()->route('devices.index')->with('status', 'Device removed.');
-    }
-
-    public function showToken(Request $request, Device $device): JsonResponse
-    {
-        $token = $device->getDecryptedToken();
-
-        if ($token === null) {
-            return response()->json(['success' => false, 'message' => 'No token available for this device.'], 404);
-        }
-
-        $this->recordAudit('Device authorization token viewed', 'Device', $device->id);
-
-        return response()->json(['success' => true, 'token' => $token]);
     }
 }
