@@ -56,6 +56,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/transactions', [TransactionController::class, 'store'])->name('transactions.store');
 
     Route::get('/networks', [NetworkController::class, 'index'])->name('networks.index');
+    Route::get('/networks/{network}', [NetworkController::class, 'show'])->name('networks.show');
 
     Route::get('/float', [FloatController::class, 'index'])->name('float.index');
     Route::post('/float', [FloatController::class, 'store'])->name('float.store');

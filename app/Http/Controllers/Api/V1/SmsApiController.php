@@ -57,14 +57,19 @@ class SmsApiController extends Controller
 
     /**
      * Sender watchlist the Flutter app uses to decide which SMS to capture
-     * and forward automatically.
+     * and forward automatically. Only senders that belong to the networks
+     * this device is assigned to are returned, so a single device can read
+     * SMS for several networks at once.
      */
     public function senders(Request $request): JsonResponse
     {
         /** @var Device $device */
         $device = $request->attributes->get('device');
 
+        $networkCodes = $device->networkCodes();
+
         $watchlist = collect(config('sms.senders', []))
+            ->filter(fn (string $code) => in_array($code, $networkCodes, true))
             ->map(fn (string $code, string $keyword) => ['keyword' => $keyword, 'network' => $code])
             ->values()
             ->all();
@@ -75,6 +80,7 @@ class SmsApiController extends Controller
                 'name' => $device->name,
                 'status' => $device->status,
                 'network' => $device->network?->code,
+                'networks' => $networkCodes,
             ],
             'senders' => $watchlist,
             'ingest' => [

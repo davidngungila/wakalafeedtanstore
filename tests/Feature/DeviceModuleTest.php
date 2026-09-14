@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Device;
 use App\Models\Network;
+use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -122,6 +123,54 @@ class DeviceModuleTest extends TestCase
             'status' => 'revoked',
             'api_token_hash' => null,
         ]);
+    }
+
+    public function test_admin_can_register_a_device_with_multiple_networks(): void
+    {
+        $networks = Network::orderBy('id')->take(2)->get();
+
+        $response = $this->actingAs($this->admin())
+            ->post(route('devices.store'), [
+                'name' => 'Tecno Pova',
+                'network_ids' => $networks->pluck('id')->all(),
+                'phone_number' => '0712345678',
+            ]);
+
+        $response->assertRedirect(route('devices.index'));
+
+        $device = Device::where('name', 'Tecno Pova')->firstOrFail();
+        $this->assertSame($networks->first()->id, $device->network_id);
+
+        foreach ($networks->pluck('id') as $networkId) {
+            $this->assertDatabaseHas('device_network', [
+                'device_id' => $device->id,
+                'network_id' => $networkId,
+            ]);
+        }
+    }
+
+    public function test_network_detail_page_lists_transactions_for_that_network(): void
+    {
+        $network = Network::firstOrFail();
+        Transaction::create([
+            'reference' => 'NETTXN-'.$network->id,
+            'agent_id' => cash_point()->id,
+            'network_id' => $network->id,
+            'type' => 'deposit',
+            'customer_name' => 'Asha Omari',
+            'customer_phone' => '0712345678',
+            'amount' => 50000,
+            'fee' => 0,
+            'commission' => 250,
+            'status' => 'completed',
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get(route('networks.show', $network))
+            ->assertOk()
+            ->assertSee($network->name)
+            ->assertSee('Asha Omari')
+            ->assertSee('NETTXN-'.$network->id);
     }
 
     public function test_device_detail_page_loads(): void

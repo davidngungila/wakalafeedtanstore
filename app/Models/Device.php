@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -61,6 +63,17 @@ class Device extends Model
     public function network(): BelongsTo
     {
         return $this->belongsTo(Network::class);
+    }
+
+    /**
+     * All networks this device is allowed to ingest SMS for and whose
+     * transactions it can access (many-to-many).
+     *
+     * @return BelongsToMany<Network, $this>
+     */
+    public function networks(): BelongsToMany
+    {
+        return $this->belongsToMany(Network::class)->withTimestamps();
     }
 
     /**
@@ -157,5 +170,34 @@ class Device extends Model
             'failed' => $this->smsMessages()->whereDate('server_received_at', today())->where('processing_status', 'failed')->count(),
             'duplicate' => $this->smsMessages()->whereDate('server_received_at', today())->where('is_duplicate', true)->count(),
         ];
+    }
+
+    /**
+     * Networks the device is assigned to via the pivot, falling back to the
+     * legacy primary network for devices registered before the pivot existed.
+     *
+     * @return Collection<int, Network>
+     */
+    public function assignedNetworks(): Collection
+    {
+        $networks = $this->networks()->get();
+
+        if ($networks->isEmpty() && $this->network_id !== null) {
+            $primary = $this->network()->first();
+
+            if ($primary !== null) {
+                $networks->push($primary);
+            }
+        }
+
+        return $networks;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function networkCodes(): array
+    {
+        return $this->assignedNetworks()->pluck('code')->filter()->values()->all();
     }
 }

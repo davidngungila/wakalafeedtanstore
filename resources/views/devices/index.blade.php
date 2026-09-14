@@ -57,9 +57,10 @@
                     <tr>
                         <th>Device</th>
                         <th>Agent</th>
-                        <th>Network</th>
+                        <th>Networks</th>
                         <th>Phone / SIM</th>
                         <th>App</th>
+                        <th>Today</th>
                         <th>Last heartbeat</th>
                         <th>Last SMS</th>
                         <th>Status</th>
@@ -76,13 +77,21 @@
                                 'offline', 'revoked' => 'tag-grey',
                                 default => 'tag-red',
                             };
+                            $deviceNetworks = $device->networks->isNotEmpty() ? $device->networks : collect([$device->network])->filter();
+                            $stats = $todayStats[$device->id] ?? null;
+                            $netsJson = $deviceNetworks->map(fn ($n) => ['name' => $n->name, 'color' => $n->color])->values();
                         @endphp
                         <tr data-id="{{ $device->id }}" data-name="{{ $device->name }}" data-agent="{{ $device->agent?->name ?? '—' }}"
-                            data-network="{{ $device->network?->name ?? '—' }}" data-phone="{{ $device->phone_number ?? '—' }}"
+                            data-phone="{{ $device->phone_number ?? '—' }}"
                             data-sim="{{ $device->sim_number ?? '—' }}" data-model="{{ $device->model ?? '—' }}"
                             data-android="{{ $device->android_version ?? '—' }}" data-app="{{ $device->app_version ?? '—' }}"
-                            data-branch="{{ $device->branch ?? '—' }}" data-status="{{ ucfirst($status) }}"
+                            data-branch="{{ $device->branch ?? '—' }}" data-uid="{{ $device->device_uid ?? '—' }}"
+                            data-ip="{{ $device->last_ip ?? '—' }}" data-status="{{ ucfirst($status) }}"
+                            data-nets="{{ $netsJson->toJson() }}"
                             data-heartbeat="{{ $device->last_heartbeat_at?->format('d M Y H:i') ?? 'Never' }}"
+                            data-lastsync="{{ $device->last_sync_at?->format('d M Y H:i') ?? 'Never' }}"
+                            data-registered="{{ $device->created_at->format('d M Y H:i') }}"
+                            data-today="{{ $stats ? ($stats['processed'].' processed · '.$stats['received'].' received') : 'No SMS today' }}"
                             data-sms="{{ $device->last_sms_at?->format('d M Y H:i') ?? 'Never' }}">
                             <td>
                                 <div class="cell-main">
@@ -98,20 +107,21 @@
                                 <div class="cell-sub">{{ $device->branch ?? '' }}</div>
                             </td>
                             <td>
-                                @if ($device->network)
-                                    <span style="display:inline-flex;align-items:center;gap:7px;">
-                                        <span style="width:9px;height:9px;border-radius:50%;background:{{ $device->network->color }};display:inline-block;"></span>
-                                        {{ $device->network->name }}
-                                    </span>
-                                @else
+                                @forelse ($deviceNetworks as $nw)
+                                    <span class="tag" style="background:{{ $nw->color }};color:#fff;margin:1px 2px 1px 0;">{{ $nw->name }}</span>
+                                @empty
                                     <span class="cell-sub">—</span>
-                                @endif
+                                @endforelse
                             </td>
                             <td>
                                 <div class="cell-title">{{ $device->phone_number ?? '—' }}</div>
                                 <div class="cell-sub">{{ $device->sim_number ?? '' }}</div>
                             </td>
-                            <td class="cell-sub">{{ $device->app_version ?? '—' }}</td>
+                            <td>
+                                <div class="cell-title">{{ $device->app_version ?? '—' }}</div>
+                                <div class="cell-sub">Android {{ $device->android_version ?? '—' }}</div>
+                            </td>
+                            <td class="cell-sub">{{ $stats ? ($stats['processed'].' / '.$stats['received']) : '—' }}</td>
                             <td class="cell-sub">{{ $device->last_heartbeat_at?->diffForHumans() ?? 'Never' }}</td>
                             <td class="cell-sub">{{ $device->last_sms_at?->diffForHumans() ?? 'Never' }}</td>
                             <td><span class="tag {{ $badge }}">{{ ucfirst($status) }}</span></td>
@@ -124,7 +134,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="9" class="empty-state"><h4>No devices yet</h4><p>Register your first Android phone to start automatic SMS capture.</p></td></tr>
+                        <tr><td colspan="10" class="empty-state"><h4>No devices yet</h4><p>Register your first Android phone to start automatic SMS capture.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -147,12 +157,16 @@
                                 <input type="text" name="name" placeholder="e.g. Samsung A15" required>
                             </div>
                             <div class="field">
-                                <label>Network</label>
-                                <select name="network_id" required>
+                                <label>Networks (access)</label>
+                                <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--white);">
                                     @foreach ($networks as $network)
-                                        <option value="{{ $network->id }}">{{ $network->name }}</option>
+                                        <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;color:var(--coffee-700);cursor:pointer;">
+                                            <input type="checkbox" name="network_ids[]" value="{{ $network->id }}" style="accent-color:var(--terracotta-600);">
+                                            <span class="net-dot" style="background:{{ $network->color }};"></span>
+                                            {{ $network->name }}
+                                        </label>
                                     @endforeach
-                                </select>
+                                </div>
                             </div>
                         </div>
                         <div class="form-row">
@@ -218,19 +232,29 @@
         bindRowClick('#devicesBody tr[data-id]', tr => {
             const st = tr.dataset.status.toLowerCase();
             const cls = st === 'active' ? 'tag-green' : (st === 'pending' ? 'tag-gold' : (st === 'offline' || st === 'revoked' ? 'tag-grey' : 'tag-red'));
+            let nets = '';
+            try {
+                const arr = JSON.parse(tr.dataset.nets || '[]');
+                nets = arr.map(n => `<span class="tag" style="background:${n.color || '#999'};color:#fff;">${n.name}</span>`).join(' ');
+            } catch (e) { nets = '—'; }
             return [
                 ['Device', tr.dataset.name],
                 ['Model', tr.dataset.model],
+                ['Device UID', tr.dataset.uid],
                 ['Agent', tr.dataset.agent],
                 ['Branch', tr.dataset.branch],
-                ['Network', tr.dataset.network],
+                ['Networks', nets ? { __html: nets } : '—'],
                 ['Phone', tr.dataset.phone],
                 ['SIM', tr.dataset.sim],
                 ['Android', tr.dataset.android],
                 ['App version', tr.dataset.app],
+                ['Today', tr.dataset.today],
                 ['Status', { __html: '<span class="tag ' + cls + '">' + tr.dataset.status + '</span>' }],
                 ['Last heartbeat', tr.dataset.heartbeat],
+                ['Last sync', tr.dataset.lastsync],
                 ['Last SMS', tr.dataset.sms],
+                ['Last IP', tr.dataset.ip],
+                ['Registered', tr.dataset.registered],
             ];
         }, 'Device details');
     </script>

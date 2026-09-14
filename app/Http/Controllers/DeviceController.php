@@ -15,22 +15,41 @@ class DeviceController extends Controller
 {
     public function index(Request $request): View
     {
-        $query = Device::with(['agent', 'network']);
+        $query = Device::with(['agent', 'network', 'networks']);
 
         if ($request->filled('status') && $request->input('status') !== 'all') {
             $query->where('status', $request->input('status'));
         }
 
         if ($request->filled('network') && $request->input('network') !== 'all') {
-            $query->where('network_id', $request->input('network'));
+            $query->where(function ($q) use ($request) {
+                $q->whereHas('networks', fn ($w) => $w->whereKey($request->input('network')))
+                    ->orWhere('network_id', $request->input('network'));
+            });
         }
 
         $devices = $query->latest()->get();
         $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
 
+        $todayStats = SmsMessage::query()
+            ->whereDate('server_received_at', today())
+            ->selectRaw('device_id, processing_status, COUNT(*) as total')
+            ->groupBy('device_id', 'processing_status')
+            ->get()
+            ->groupBy('device_id')
+            ->map(function ($rows) {
+                return [
+                    'received' => (int) $rows->sum('total'),
+                    'processed' => (int) $rows->where('processing_status', 'processed')->sum('total'),
+                    'failed' => (int) $rows->where('processing_status', 'failed')->sum('total'),
+                    'pending' => (int) $rows->whereIn('processing_status', ['received', 'identified', 'parsed'])->sum('total'),
+                ];
+            });
+
         return view('devices.index', [
             'devices' => $devices,
             'networks' => $networks,
+            'todayStats' => $todayStats,
             'filters' => $request->only(['status', 'network']),
             'tokenFlash' => session()->pull('api_token_flash'),
         ]);
@@ -38,7 +57,7 @@ class DeviceController extends Controller
 
     public function show(Device $device): View
     {
-        $device->load(['agent', 'network']);
+        $device->load(['agent', 'network', 'networks']);
 
         $sms = SmsMessage::with(['transaction'])
             ->where('device_id', $device->id)
@@ -58,7 +77,9 @@ class DeviceController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
-            'network_id' => ['required', 'exists:networks,id'],
+            'network_id' => ['nullable', 'exists:networks,id'],
+            'network_ids' => ['array'],
+            'network_ids.*' => ['exists:networks,id'],
             'phone_number' => ['nullable', 'string', 'max:30'],
             'sim_number' => ['nullable', 'string', 'max:60'],
             'branch' => ['nullable', 'string', 'max:120'],
@@ -67,17 +88,33 @@ class DeviceController extends Controller
             'app_version' => ['nullable', 'string', 'max:30'],
         ]);
 
+        $networkIds = $this->resolveNetworkIds($validated);
+
+        if ($networkIds === []) {
+            return response()->json(['success' => false, 'message' => 'Select at least one network.'], 422);
+        }
+
         ['plain' => $plain, 'hash' => $hash] = Device::makeApiToken();
 
-        $device = Device::create($validated + [
+        $device = Device::create([
+            'name' => $validated['name'],
             'agent_id' => cash_point()->id,
+            'network_id' => $networkIds[0],
             'api_token_hash' => $hash,
             'status' => 'pending',
+            'phone_number' => $validated['phone_number'] ?? null,
+            'sim_number' => $validated['sim_number'] ?? null,
+            'branch' => $validated['branch'] ?? null,
+            'model' => $validated['model'] ?? null,
+            'android_version' => $validated['android_version'] ?? null,
+            'app_version' => $validated['app_version'] ?? null,
         ]);
+
+        $device->networks()->sync($networkIds);
 
         $this->recordAudit('Device registered', 'Device', $device->id, [
             'name' => $device->name,
-            'network_id' => $device->network_id,
+            'network_ids' => $networkIds,
         ]);
 
         session()->flash('api_token_flash', [
@@ -100,21 +137,64 @@ class DeviceController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
-            'network_id' => ['required', 'exists:networks,id'],
+            'network_id' => ['nullable', 'exists:networks,id'],
+            'network_ids' => ['array'],
+            'network_ids.*' => ['exists:networks,id'],
             'phone_number' => ['nullable', 'string', 'max:30'],
             'sim_number' => ['nullable', 'string', 'max:60'],
             'branch' => ['nullable', 'string', 'max:120'],
+            'model' => ['nullable', 'string', 'max:120'],
+            'android_version' => ['nullable', 'string', 'max:30'],
+            'app_version' => ['nullable', 'string', 'max:30'],
         ]);
 
-        $device->update($validated);
+        $networkIds = $this->resolveNetworkIds($validated);
 
-        $this->recordAudit('Device updated', 'Device', $device->id, ['name' => $device->name]);
+        if ($networkIds === []) {
+            return response()->json(['success' => false, 'message' => 'Select at least one network.'], 422);
+        }
+
+        $device->update([
+            'name' => $validated['name'],
+            'network_id' => $networkIds[0],
+            'phone_number' => $validated['phone_number'] ?? $device->phone_number,
+            'sim_number' => $validated['sim_number'] ?? $device->sim_number,
+            'branch' => $validated['branch'] ?? $device->branch,
+            'model' => $validated['model'] ?? $device->model,
+            'android_version' => $validated['android_version'] ?? $device->android_version,
+            'app_version' => $validated['app_version'] ?? $device->app_version,
+        ]);
+
+        $device->networks()->sync($networkIds);
+
+        $this->recordAudit('Device updated', 'Device', $device->id, [
+            'name' => $device->name,
+            'network_ids' => $networkIds,
+        ]);
 
         if ($request->expectsJson()) {
             return response()->json(['success' => true, 'message' => 'Device updated successfully.']);
         }
 
         return back()->with('status', 'Device updated.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<int, int>
+     */
+    private function resolveNetworkIds(array $validated): array
+    {
+        $ids = array_values(array_filter(array_map(
+            'intval',
+            $validated['network_ids'] ?? []
+        )));
+
+        if ($ids === [] && ! empty($validated['network_id'])) {
+            $ids = [(int) $validated['network_id']];
+        }
+
+        return array_unique($ids);
     }
 
     public function approve(Request $request, Device $device): JsonResponse|RedirectResponse

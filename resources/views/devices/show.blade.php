@@ -82,7 +82,9 @@
                 $detailRows = [
                     ['Agent', $device->agent?->name ?? '—'],
                     ['Branch', $device->branch ?? '—'],
-                    ['Network', $device->network?->name ?? '—'],
+                    ['Networks', $device->networks->isNotEmpty()
+                        ? $device->networks->map(fn ($n) => $n->name)->implode(', ')
+                        : ($device->network?->name ?? '—')],
                     ['Phone number', $device->phone_number ?? '—'],
                     ['SIM number', $device->sim_number ?? '—'],
                     ['Android version', $device->android_version ?? '—'],
@@ -227,12 +229,17 @@
                                 <input type="text" name="name" value="{{ $device->name }}" required>
                             </div>
                             <div class="field">
-                                <label>Network</label>
-                                <select name="network_id" required>
+                                <label>Networks (access)</label>
+                                <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--white);">
+                                    @php $assignedIds = $device->networks->pluck('id')->toArray() ?: ($device->network_id ? [$device->network_id] : []); @endphp
                                     @foreach ($networks ?? [] as $network)
-                                        <option value="{{ $network->id }}" {{ $device->network_id === $network->id ? 'selected' : '' }}>{{ $network->name }}</option>
+                                        <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;color:var(--coffee-700);cursor:pointer;">
+                                            <input type="checkbox" name="network_ids[]" value="{{ $network->id }}" {{ in_array($network->id, $assignedIds, true) ? 'checked' : '' }} style="accent-color:var(--terracotta-600);">
+                                            <span class="net-dot" style="background:{{ $network->color }};"></span>
+                                            {{ $network->name }}
+                                        </label>
                                     @endforeach
-                                </select>
+                                </div>
                             </div>
                         </div>
                         <div class="form-row">

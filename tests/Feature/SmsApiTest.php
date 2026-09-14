@@ -62,6 +62,9 @@ class SmsApiTest extends TestCase
     public function test_senders_endpoint_exposes_the_capture_watchlist(): void
     {
         $device = $this->makeDevice();
+        $vodacom = Network::where('code', 'VODACOM')->firstOrFail();
+        $airtel = Network::where('code', 'AIRTEL')->firstOrFail();
+        $device->networks()->attach([$vodacom->id, $airtel->id]);
 
         $response = $this->withHeaders($this->deviceHeaders($device))
             ->getJson('/api/v1/sms/senders')
@@ -73,7 +76,27 @@ class SmsApiTest extends TestCase
         $this->assertTrue($senders->contains(fn ($s) => $s['keyword'] === 'MPESA' && $s['network'] === 'VODACOM'));
         $this->assertTrue($senders->contains(fn ($s) => $s['keyword'] === 'AIRTEL' && $s['network'] === 'AIRTEL'));
         $this->assertSame($device->network?->code, $response->json('device.network'));
+        $this->assertContains('VODACOM', $response->json('device.networks'));
+        $this->assertContains('AIRTEL', $response->json('device.networks'));
         $this->assertSame(500, $response->json('ingest.max_batch'));
+    }
+
+    public function test_senders_endpoint_filters_to_device_networks_only(): void
+    {
+        $device = $this->makeDevice();
+        $vodacom = Network::where('code', 'VODACOM')->firstOrFail();
+        $device->networks()->attach([$vodacom->id]);
+
+        $response = $this->withHeaders($this->deviceHeaders($device))
+            ->getJson('/api/v1/sms/senders')
+            ->assertOk();
+
+        $senders = collect($response->json('senders'));
+
+        $this->assertTrue($senders->contains(fn ($s) => $s['keyword'] === 'MPESA'));
+        $this->assertFalse($senders->contains(fn ($s) => $s['keyword'] === 'AIRTEL'));
+        $this->assertContains('VODACOM', $response->json('device.networks'));
+        $this->assertNotContains('AIRTEL', $response->json('device.networks'));
     }
 
     public function test_unknown_sender_is_stored_but_ignored(): void

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CommissionRate;
 use App\Models\Network;
 use App\Models\NetworkBalance;
+use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -43,6 +44,62 @@ class NetworkController extends Controller
         $types = ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet'];
 
         return view('networks.index', compact('networks', 'totalFloat', 'rates', 'types') + ['activeType' => $activeType]);
+    }
+
+    public function show(Request $request, Network $network): View
+    {
+        $query = Transaction::with(['agent', 'operator'])
+            ->where('network_id', $network->id);
+
+        if ($request->filled('status') && $request->input('status') !== 'all') {
+            $query->where('status', $request->input('status'));
+        }
+
+        if ($request->filled('type') && $request->input('type') !== 'all') {
+            $query->where('type', $request->input('type'));
+        }
+
+        if ($request->filled('from')) {
+            $query->whereDate('created_at', '>=', $request->input('from'));
+        }
+
+        if ($request->filled('to')) {
+            $query->whereDate('created_at', '<=', $request->input('to'));
+        }
+
+        if ($request->filled('q')) {
+            $needle = $request->input('q');
+            $query->where(function ($sub) use ($needle) {
+                $sub->where('reference', 'like', "%{$needle}%")
+                    ->orWhere('provider_reference', 'like', "%{$needle}%")
+                    ->orWhere('customer_name', 'like', "%{$needle}%")
+                    ->orWhere('customer_phone', 'like', "%{$needle}%");
+            });
+        }
+
+        $transactions = $query->latest()->limit(200)->get();
+
+        $completed = fn ($inner) => $inner->where('status', 'completed');
+
+        $stats = [
+            'float' => (float) $network->balances()->sum('balance'),
+            'volume' => (float) $completed($network->transactions())->sum('amount'),
+            'commission' => (float) $completed($network->transactions())->sum('commission'),
+            'count' => (int) $network->transactions()->count(),
+            'today_volume' => (float) $completed($network->transactions())->whereDate('created_at', today())->sum('amount'),
+            'today_count' => (int) $network->transactions()->whereDate('created_at', today())->count(),
+            'failed' => (int) $network->transactions()->whereIn('status', ['failed', 'reversed'])->count(),
+        ];
+
+        $types = ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank'];
+
+        return view('networks.show', [
+            'network' => $network,
+            'transactions' => $transactions,
+            'stats' => $stats,
+            'types' => $types,
+            'filters' => $request->only(['status', 'type', 'from', 'to', 'q']),
+        ]);
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse
