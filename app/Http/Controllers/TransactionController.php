@@ -2,19 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Agent;
-use App\Models\CommissionRate;
 use App\Models\Network;
-use App\Models\NetworkBalance;
 use App\Models\Transaction;
+use App\Services\TransactionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class TransactionController extends Controller
 {
+    public function __construct(private readonly TransactionService $transactions) {}
+
     public function index(Request $request): View
     {
         $query = Transaction::with(['network', 'agent', 'operator']);
@@ -67,54 +66,21 @@ class TransactionController extends Controller
         ]);
 
         $agent = cash_point();
-        $rate = $this->commissionFor($agent, $validated['network_id'], $validated['type'], $validated['amount']);
 
-        $commission = round((float) $validated['amount'] * $rate / 100, 2);
-        $fee = $this->feeFor($validated['type'], $validated['amount']);
-
-        $balance = NetworkBalance::firstOrCreate(
-            ['agent_id' => $agent->id, 'network_id' => $validated['network_id']],
-            ['opening_balance' => 0, 'balance' => 0]
-        );
-
-        $reference = 'TXN-'.now()->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
-
-        DB::transaction(function () use ($agent, $balance, $validated, $commission, $fee, $reference) {
-            $adjustFloat = function (float $delta) use ($balance) {
-                $balance->balance += $delta;
-                $balance->save();
-            };
-
-            match ($validated['type']) {
-                'deposit' => $adjustFloat((float) $validated['amount']),
-                default => $adjustFloat(-(float) $validated['amount']),
-            };
-
-            if (in_array($validated['type'], ['deposit', 'withdrawal'], true)) {
-                $direction = $validated['type'] === 'deposit' ? -1 : 1;
-                $agent->cash_balance = ((float) $agent->cash_balance) + $direction * (float) $validated['amount'];
-                $agent->save();
-            }
-
-            Transaction::create([
-                'reference' => $reference,
-                'agent_id' => $agent->id,
+        $transaction = $this->transactions->process(
+            [
                 'network_id' => $validated['network_id'],
                 'type' => $validated['type'],
                 'customer_name' => $validated['customer_name'] ?? null,
                 'customer_phone' => $validated['customer_phone'],
                 'amount' => $validated['amount'],
-                'fee' => $fee,
-                'commission' => $commission,
-                'status' => 'completed',
-                'provider_reference' => 'SR'.random_int(10000000, 99999999),
-                'performed_by' => auth()->id(),
-                'notes' => 'Processed on counter',
-            ]);
-        });
+            ],
+            $agent,
+            auth()->id(),
+        );
 
-        $this->recordAudit('Transaction processed', 'Transaction', null, [
-            'reference' => $reference,
+        $this->recordAudit('Transaction processed', 'Transaction', $transaction->id, [
+            'reference' => $transaction->reference,
             'type' => $validated['type'],
             'amount' => $validated['amount'],
         ]);
@@ -184,38 +150,5 @@ class TransactionController extends Controller
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
             'types' => ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank'],
         ];
-    }
-
-    private function commissionFor(Agent $agent, int $networkId, string $type, float $amount): float
-    {
-        $rate = CommissionRate::where('network_id', $networkId)
-            ->where('agent_level', $agent->agent_level)
-            ->where('transaction_type', $type)
-            ->where('is_active', true)
-            ->first();
-
-        if (! $rate) {
-            return 0;
-        }
-
-        if ($rate->min_amount > 0 && $amount < $rate->min_amount) {
-            return $rate->rate;
-        }
-
-        if ($rate->max_amount > 0 && $amount > $rate->max_amount) {
-            return $rate->rate;
-        }
-
-        return $rate->rate;
-    }
-
-    private function feeFor(string $type, float $amount): float
-    {
-        return match ($type) {
-            'withdrawal' => min(5000, max(200, round($amount * 0.002, 2))),
-            'bill_payment' => round($amount * 0.003, 2),
-            'bank_to_wallet', 'wallet_to_bank' => round($amount * 0.001, 2),
-            default => 0,
-        };
     }
 }

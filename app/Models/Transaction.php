@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'reference',
@@ -66,5 +67,13 @@ class Transaction extends Model
     public function reverser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reversed_by');
+    }
+
+    /**
+     * @return HasMany<SmsMessage, $this>
+     */
+    public function smsMessages(): HasMany
+    {
+        return $this->hasMany(SmsMessage::class);
     }
 }

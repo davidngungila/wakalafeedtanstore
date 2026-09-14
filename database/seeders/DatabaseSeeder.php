@@ -17,76 +17,89 @@ use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
+    /**
+     * The cash-point agent we actually operate (a single wakala).
+     */
     private int $agentOneId;
 
     /**
-     * The networks this system integrates with.
-     *
-     * @var array<int, array{name: string, code: string, color: string}>
+     * Seed the application with the absolute minimum it needs to run: the
+     * business settings, the networks we transact on, the single cash-point
+     * agent, and the staff accounts. Everything else (transactions, float,
+     * reconciliations, audit trail, commission configurations) is intentionally
+     * left empty and reset whenever this seeder runs, so this is a single
+     * source of truth for "how a brand-new deployment looks".
      */
-    private array $networkData = [
-        ['name' => 'Vodacom M-Pesa', 'code' => 'VODACOM', 'color' => '#2FA335'],
-        ['name' => 'Airtel Money', 'code' => 'AIRTEL', 'color' => '#ED1C24'],
-        ['name' => 'Mixx by Yas', 'code' => 'MIXX', 'color' => '#002F87'],
-        ['name' => 'HaloPesa', 'code' => 'HALOPESA', 'color' => '#F47920'],
-    ];
-
     public function run(): void
     {
-        $this->purgeOperationalData();
+        $this->resetOperationalData();
         $this->seedNetworks();
-        $this->seedCashPointAgent();
+        $this->agentOneId = $this->seedCashPoint()->id;
+        $this->pruneOtherAgents();
         $this->seedUsers();
-        $this->deleteExtraAgents();
         $this->seedSettings();
     }
 
     /**
-     * Remove every operational/demo record so the system starts clean.
+     * Wipe every row that is derived or recorded at runtime. We keep only the
+     * configuration + identity tables so a fresh seed is indistinguishable
+     * from a clean install.
      */
-    private function purgeOperationalData(): void
+    private function resetOperationalData(): void
     {
-        foreach ([Transaction::class, FloatTransaction::class, Reconciliation::class, AuditLog::class, NetworkBalance::class, CommissionRate::class] as $model) {
+        foreach ([
+            Transaction::class,
+            FloatTransaction::class,
+            Reconciliation::class,
+            AuditLog::class,
+            NetworkBalance::class,
+            CommissionRate::class,
+        ] as $model) {
             $model::query()->delete();
         }
     }
 
     private function seedNetworks(): void
     {
-        foreach ($this->networkData as $network) {
-            Network::updateOrCreate(
-                ['code' => $network['code']],
-                $network + ['is_active' => true]
-            );
+        $networks = [
+            ['name' => 'Vodacom M-Pesa', 'code' => 'VODACOM', 'color' => '#E60000'],
+            ['name' => 'Airtel Money', 'code' => 'AIRTEL', 'color' => '#ED1C24'],
+            ['name' => 'Mixx by Yas (HaloPesa)', 'code' => 'HALOPESA', 'color' => '#F7931E'],
+            ['name' => 'Tigo Pesa', 'code' => 'TIGOPESA', 'color' => '#0033A0'],
+        ];
+
+        foreach ($networks as $network) {
+            Network::updateOrCreate(['code' => $network['code']], $network);
         }
     }
 
-    /**
-     * The single cash point (wakala) this system manages.
-     */
-    private function seedCashPointAgent(): void
+    private function seedCashPoint(): Agent
     {
-        $cashPoint = [
-            'code' => 'DMN-001',
-            'name' => 'Kilimani Money Point',
-            'owner_name' => 'Baraka Mwenda',
-            'phone' => '0712345678',
-            'national_id' => '19840514-12345-00001-23',
-            'region' => 'Dar es Salaam',
-            'district' => 'Kinondoni',
-            'ward' => 'Mikocheni',
-            'street' => 'Old Bagamoyo Rd',
-            'agent_level' => 'platinum',
-            'status' => 'active',
-            'cash_balance' => 0.0,
-        ];
-
-        $this->agentOneId = Agent::updateOrCreate(['code' => 'DMN-001'], $cashPoint)->id;
+        return Agent::updateOrCreate(
+            ['code' => 'DMN-001'],
+            [
+                'name' => 'Kilimani Cash Point',
+                'owner_name' => 'Wakala Feed Tan Store',
+                'phone' => '0712345678',
+                'national_id' => '19840514-601210-00121-1',
+                'region' => 'Kilimanjaro',
+                'district' => 'Moshi',
+                'ward' => 'Mfumuni',
+                'street' => 'Bondeni Street',
+                'agent_level' => 'platinum',
+                'status' => 'active',
+                'cash_balance' => 0,
+            ]
+        );
     }
 
-    private function deleteExtraAgents(): void
+    /**
+     * The demo installer used to ship DMN-001..006 placeholders. Production
+     * should only ever have DMN-001 (the one cash point).
+     */
+    private function pruneOtherAgents(): void
     {
-        Agent::where('code', '!=', 'DMN-001')->delete();
+        Agent::where('code', '!=', 'DMN-001')->where('code', 'like', 'DMN-%')->delete();
     }
 
     private function seedUsers(): void
@@ -122,7 +135,7 @@ class DatabaseSeeder extends Seeder
             ],
         ];
 
-        foreach ($users as $index => $user) {
+        foreach ($users as $user) {
             User::updateOrCreate(
                 ['email' => $user['email']],
                 [
@@ -130,13 +143,10 @@ class DatabaseSeeder extends Seeder
                     'phone' => $user['phone'],
                     'role' => $user['role'],
                     'agent_id' => $user['agent_id'],
-                    'is_active' => true,
-                    'last_login_at' => now()->subMinutes($index * 45),
                     'password' => Hash::make('password'),
-                    'two_factor_enabled' => false,
+                    'is_active' => true,
                     'two_factor_secret' => null,
-                    'two_factor_recovery_codes' => null,
-                    'profile_photo_path' => null,
+                    'two_factor_enabled' => false,
                 ]
             );
         }
@@ -159,9 +169,9 @@ class DatabaseSeeder extends Seeder
                 'reversal_fee' => 0,
             ],
             'security' => [
-                'max_transaction_limit' => 3_000_000,
-                'min_withdrawal_limit' => 1_000,
-                'require_approval_above' => 1_000_000,
+                'max_transaction_limit' => 3000000,
+                'min_withdrawal_limit' => 1000,
+                'require_approval_above' => 1000000,
                 'session_timeout_minutes' => 30,
             ],
             'notifications' => [

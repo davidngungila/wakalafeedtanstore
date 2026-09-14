@@ -70,6 +70,14 @@ class Agent extends Model
     }
 
     /**
+     * @return HasMany<Device, $this>
+     */
+    public function devices(): HasMany
+    {
+        return $this->hasMany(Device::class);
+    }
+
+    /**
      * Total float balance across all networks.
      */
     public function totalFloat(): float

@@ -6,12 +6,14 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\CashPointController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\FloatController;
 use App\Http\Controllers\NetworkController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReconciliationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\SmsController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\UserController;
@@ -65,12 +67,18 @@ Route::middleware('auth')->group(function () {
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 
-    // Supervisor + Admin: monitor, reconcile, report, investigate, manage staff
+    // Supervisor + Admin: monitor, reconcile, report, investigate, manage staff, devices, SMS
     Route::middleware('role:supervisor,admin')->group(function () {
         Route::put('/transactions/{transaction}/reverse', [TransactionController::class, 'reverse'])->name('transactions.reverse');
         Route::get('/reports', ReportController::class)->name('reports.index');
         Route::get('/audit', AuditLogController::class)->name('audit.index');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
+
+        Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
+        Route::get('/devices/{device}', [DeviceController::class, 'show'])->name('devices.show');
+
+        Route::get('/sms', [SmsController::class, 'index'])->name('sms.index');
+        Route::get('/sms/stream', [SmsController::class, 'stream'])->name('sms.stream');
     });
 
     // Admin: configuration and management
@@ -84,6 +92,15 @@ Route::middleware('auth')->group(function () {
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+
+        Route::post('/devices', [DeviceController::class, 'store'])->name('devices.store');
+        Route::put('/devices/{device}', [DeviceController::class, 'update'])->name('devices.update');
+        Route::post('/devices/{device}/approve', [DeviceController::class, 'approve'])->name('devices.approve');
+        Route::post('/devices/{device}/suspend', [DeviceController::class, 'suspend'])->name('devices.suspend');
+        Route::post('/devices/{device}/block', [DeviceController::class, 'block'])->name('devices.block');
+        Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke'])->name('devices.revoke');
+        Route::post('/devices/{device}/token', [DeviceController::class, 'regenerateToken'])->name('devices.token');
+        Route::delete('/devices/{device}', [DeviceController::class, 'destroy'])->name('devices.destroy');
 
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
         Route::post('/settings', [SettingController::class, 'store'])->name('settings.store');
