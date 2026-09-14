@@ -468,6 +468,21 @@
         .modal-body::-webkit-scrollbar-track{background:transparent;}
         .modal-foot{flex:none;display:flex;justify-content:flex-end;gap:10px;padding:18px 26px;border-top:1px solid var(--line);}
 
+        /* Compatibility aliases: older views used .drawer-* / .drawer-backdrop names */
+        .drawer-backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(36,20,8,.5);backdrop-filter:blur(2px);display:none;z-index:400;}
+        .drawer-backdrop.show,.modal-backdrop.show{display:block;}
+        .drawer-backdrop.show .drawer,.modal-backdrop.show .modal{transform:translateX(0);}
+        .drawer,.modal{position:fixed;top:0;right:0;bottom:0;width:100%;max-width:540px;background:var(--sand-50);box-shadow:var(--shadow-lg);display:flex;flex-direction:column;transform:translateX(105%);transition:transform .32s cubic-bezier(.2,.8,.2,1);overflow:hidden;}
+        .drawer-head,.modal-head{flex:none;display:flex;align-items:center;justify-content:space-between;padding:22px 26px;border-bottom:1px solid var(--line);}
+        .drawer-head h3,.modal-head h3{font-size:19px;}
+        .drawer-close,.modal-close{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s;}
+        .drawer-close:hover,.modal-close:hover{background:var(--sand-100);}
+        .drawer-body,.modal-body{padding:24px 26px;flex:1 1 auto;min-height:0;overflow-y:auto;max-height:calc(100vh - 170px);overscroll-behavior:contain;}
+        .drawer-body::-webkit-scrollbar,.modal-body::-webkit-scrollbar{width:8px;}
+        .drawer-body::-webkit-scrollbar-thumb,.modal-body::-webkit-scrollbar-thumb{background:var(--coffee-300);border-radius:4px;}
+        .drawer-body::-webkit-scrollbar-track,.modal-body::-webkit-scrollbar-track{background:transparent;}
+        .drawer-foot,.modal-foot{flex:none;display:flex;justify-content:flex-end;gap:10px;padding:18px 26px;border-top:1px solid var(--line);}
+
 
         /* Toast */
         #toastHost{position:fixed;bottom:24px;right:24px;z-index:600;display:flex;flex-direction:column;gap:10px;}
@@ -801,8 +816,10 @@
 
         function openModal(id){ const el = document.getElementById(id); if(el) el.classList.add('show'); }
         function closeModal(id){ const el = document.getElementById(id); if(el) el.classList.remove('show'); }
+        function openDrawer(id){ const el = document.getElementById(id); if(el) el.classList.add('show'); }
+        function closeDrawer(id){ const el = document.getElementById(id); if(el) el.classList.remove('show'); }
         document.addEventListener('click', (e) => {
-            if(e.target.classList && e.target.classList.contains('modal-backdrop') && e.target.classList.contains('show')) {
+            if(e.target.classList && (e.target.classList.contains('modal-backdrop') || e.target.classList.contains('drawer-backdrop')) && e.target.classList.contains('show')) {
                 e.target.classList.remove('show');
             }
         });
