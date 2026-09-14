@@ -814,9 +814,10 @@
             setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateX(20px)'; el.style.transition='all .25s'; setTimeout(()=>el.remove(),250); }, 3200);
         }
 
-        function openModal(id){ const el = document.getElementById(id); if(el) el.classList.add('show'); }
+        let modalStack = 400;
+        function openModal(id){ const el = document.getElementById(id); if(el){ el.style.zIndex = ++modalStack; el.classList.add('show'); } }
         function closeModal(id){ const el = document.getElementById(id); if(el) el.classList.remove('show'); }
-        function openDrawer(id){ const el = document.getElementById(id); if(el) el.classList.add('show'); }
+        function openDrawer(id){ const el = document.getElementById(id); if(el){ el.style.zIndex = ++modalStack; el.classList.add('show'); } }
         function closeDrawer(id){ const el = document.getElementById(id); if(el) el.classList.remove('show'); }
         document.addEventListener('click', (e) => {
             if(e.target.classList && (e.target.classList.contains('modal-backdrop') || e.target.classList.contains('drawer-backdrop')) && e.target.classList.contains('show')) {
