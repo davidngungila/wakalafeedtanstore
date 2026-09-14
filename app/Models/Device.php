@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Crypt;
     'android_version',
     'app_version',
     'authorization_token_hash',
-    'encrypted_token',
+    'authorization_token_encrypted',
     'branch',
     'status',
     'last_ip',
@@ -140,7 +140,7 @@ class Device extends Model
     public function setAuthorizationToken(string $plain): void
     {
         $this->authorization_token_hash = hash('sha256', $plain);
-        $this->encrypted_token = Crypt::encryptString($plain);
+        $this->authorization_token_encrypted = Crypt::encryptString($plain);
     }
 
     /**
@@ -148,12 +148,12 @@ class Device extends Model
      */
     public function getDecryptedToken(): ?string
     {
-        if ($this->encrypted_token === null) {
+        if ($this->authorization_token_encrypted === null) {
             return null;
         }
 
         try {
-            return Crypt::decryptString($this->encrypted_token);
+            return Crypt::decryptString($this->authorization_token_encrypted);
         } catch (DecryptException $e) {
             return null;
         }
@@ -194,7 +194,7 @@ class Device extends Model
         $this->status = 'revoked';
         $this->revoked_at = now();
         $this->authorization_token_hash = null;
-        $this->encrypted_token = null;
+        $this->authorization_token_encrypted = null;
         $this->save();
     }
 

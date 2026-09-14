@@ -70,6 +70,7 @@ class DeviceController extends Controller
             'sms' => $sms,
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
             'credentialsFlash' => session()->pull('credentials_flash'),
+            'authorizationToken' => $device->getDecryptedToken(),
         ]);
     }
 
