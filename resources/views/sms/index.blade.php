@@ -3,6 +3,12 @@
 @section('title', 'Messages')
 
 @section('content')
+    <style>
+        .row-click{cursor:pointer;}
+        .row-click:hover td{background:var(--sand-100);}
+        .box-alert{background:var(--danger-100);border-left:4px solid var(--danger);border-radius:10px;padding:12px 14px;font-size:13.5px;font-weight:600;color:var(--coffee-900);margin-bottom:18px;}
+    </style>
+
     <div class="view-head">
         <div>
             <h2>Messages</h2>
@@ -34,6 +40,13 @@
             </div></div>
             <div class="stat-value">{{ $today['pending'] }}</div>
             <div class="stat-label">Pending processing</div>
+        </div>
+        <div class="stat-card" style="--stat-tint:var(--terracotta-100);--stat-fg:var(--terracotta-600);">
+            <div class="stat-top"><div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>
+            </div></div>
+            <div class="stat-value">{{ $today['stored'] }}</div>
+            <div class="stat-label">Stored · no transaction</div>
         </div>
         <div class="stat-card" style="--stat-tint:var(--danger-100);--stat-fg:var(--danger);">
             <div class="stat-top"><div class="stat-icon">
@@ -100,10 +113,10 @@
                 </thead>
                 <tbody id="smsBody">
                     @forelse ($messages as $message)
-                        <tr data-id="{{ $message->id }}">
+                        <tr data-id="{{ $message->id }}" class="row-click" onclick="openMessage({{ $message->id }})">
                             <td class="cell-sub">{{ $message->server_received_at->format('H:i:s') }}</td>
                             <td>
-                                <a href="{{ route('devices.show', $message->device_id) }}" class="cell-title">{{ $message->device?->name ?? '—' }}</a>
+                                <a href="{{ route('devices.show', $message->device_id) }}" class="cell-title" onclick="event.stopPropagation()">{{ $message->device?->name ?? '—' }}</a>
                             </td>
                             <td>{{ $message->sender }}</td>
                             <td>{!! $message->network
@@ -118,16 +131,16 @@
                             <td>
                                 <span class="cell-title">{{ $message->transaction_reference ?? '—' }}</span>
                                 @if ($message->transaction)
-                                    <div class="cell-sub">→ <a href="{{ route('transactions.index', ['q' => $message->transaction->reference]) }}">{{ $message->transaction->reference }}</a></div>
+                                    <div class="cell-sub">→ <a href="{{ route('transactions.index', ['q' => $message->transaction->reference]) }}" onclick="event.stopPropagation()">{{ $message->transaction->reference }}</a></div>
                                 @endif
                             </td>
                             <td>
-                                <span class="tag {{ status_badge($message->processing_status === 'processed' ? 'completed' : $message->processing_status) }}">
-                                    {{ $message->is_duplicate ? 'Duplicate' : ucfirst($message->processing_status) }}
+                                <span class="tag {{ sms_status_badge($message->processing_status, $message->is_duplicate, $message->processing_error) }}">
+                                    {{ ucfirst(sms_status_label($message->processing_status, $message->is_duplicate, $message->processing_error)) }}
                                 </span>
                             </td>
                             <td>
-                                <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="openMessage({{ $message->id }})">View</button>
+                                <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="event.stopPropagation();openMessage({{ $message->id }})">View</button>
                             </td>
                         </tr>
                     @empty
@@ -138,15 +151,20 @@
         </div>
     </div>
 
-    <!-- SMS body modal -->
-    <div class="modal-backdrop" id="smsBodyModal">
+    <!-- SMS details drawer -->
+    <div class="modal-backdrop" id="smsDetailsDrawer">
         <div class="modal" style="max-width:560px;">
             <div class="modal-head">
-                <h3>SMS content</h3>
-                <button class="modal-close" onclick="closeModal('smsBodyModal')">✕</button>
+                <h3>SMS details</h3>
+                <button class="modal-close" onclick="closeModal('smsDetailsDrawer')">✕</button>
             </div>
             <div class="modal-body">
-                <pre id="smsBodyText" style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:13.5px;line-height:1.6;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px;margin:0;color:var(--coffee-700);"></pre>
+                <div id="smsDetailsError" class="box-alert" style="display:none;"></div>
+                <div class="detail-grid" id="smsDetailsGrid"></div>
+                <div class="receipt">
+                    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:8px;">Full message</div>
+                    <pre id="smsDetailsBody" style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:13.5px;line-height:1.6;margin:0;color:var(--coffee-700);"></pre>
+                </div>
             </div>
         </div>
     </div>
@@ -157,10 +175,13 @@
         const smsRowCache = new Map();
         @foreach ($messages as $message)
             @php
+                $label = sms_status_label($message->processing_status, $message->is_duplicate, $message->processing_error);
                 $row = [
                     'id' => $message->id,
                     'time' => $message->server_received_at->format('H:i:s'),
+                    'datetime' => $message->server_received_at->format('D, j M Y · H:i:s'),
                     'device' => $message->device?->name,
+                    'device_id' => $message->device_id,
                     'sender' => $message->sender,
                     'network' => $message->network?->name,
                     'network_color' => $message->network?->color,
@@ -169,7 +190,10 @@
                     'customer' => $message->customer_name ?? '—',
                     'customer_phone' => $message->customer_phone ?? '',
                     'reference' => $message->transaction_reference ?? '—',
-                    'status' => $message->is_duplicate ? 'duplicate' : $message->processing_status,
+                    'txn_reference' => $message->transaction?->reference,
+                    'label' => ucfirst($label),
+                    'badge' => sms_status_badge($message->processing_status, $message->is_duplicate, $message->processing_error),
+                    'error' => $message->processing_error,
                     'body' => $message->message_body,
                 ];
             @endphp
@@ -186,17 +210,57 @@
             form.submit();
         }
 
-        function statusCls(status) {
-            return status === 'processed' ? 'tag-green'
-                : (status === 'failed' ? 'tag-red'
-                : (status === 'duplicate' ? 'tag-terracotta' : 'tag-gold'));
+        function smsStatusBadge(label) {
+            return label === 'processed' ? 'tag-green'
+                : (label === 'pending' ? 'tag-gold'
+                : (label === 'stored' || label === 'duplicate' ? 'tag-terracotta'
+                : 'tag-red'));
         }
 
         function openMessage(id) {
             const row = smsRowCache.get(Number(id));
             if (!row) return;
-            document.getElementById('smsBodyText').textContent = row.body;
-            openModal('smsBodyModal');
+
+            const errBox = document.getElementById('smsDetailsError');
+            if (row.error) {
+                errBox.style.display = 'block';
+                errBox.textContent = row.error;
+            } else {
+                errBox.style.display = 'none';
+            }
+
+            const entries = [
+                ['Time (EAT)', row.datetime],
+                ['Sender', row.sender],
+                ['Network', row.network && row.network !== '—' ? {__html: '<span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:' + row.network_color + ';display:inline-block;"></span>' + row.network + '</span>'} : '—'],
+                ['Type', row.type],
+                ['Amount', row.amount],
+                ['Customer', row.customer],
+                ['Phone', row.customer_phone || '—'],
+                ['Reference', row.reference],
+                ['Transaction', row.txn_reference ? {__html: '<a href="/transactions?q=' + encodeURIComponent(row.txn_reference) + '">' + row.txn_reference + '</a>'} : '—'],
+                ['Status', {__html: '<span class="tag ' + row.badge + '">' + row.label + '</span>'}],
+            ];
+
+            const grid = document.getElementById('smsDetailsGrid');
+            grid.innerHTML = '';
+            entries.forEach(([label, value]) => {
+                const item = document.createElement('div');
+                item.className = 'detail-item';
+                const k = document.createElement('div');
+                k.className = 'dk';
+                k.textContent = label;
+                const v = document.createElement('div');
+                v.className = 'dv';
+                if (value && value.__html) v.innerHTML = value.__html;
+                else v.textContent = value == null || value === '' ? '—' : value;
+                item.appendChild(k);
+                item.appendChild(v);
+                grid.appendChild(item);
+            });
+
+            document.getElementById('smsDetailsBody').textContent = row.body || '—';
+            openModal('smsDetailsDrawer');
         }
 
         function prependRow(data) {
@@ -205,17 +269,24 @@
             const body = document.getElementById('smsBody');
             const tr = document.createElement('tr');
             tr.dataset.id = data.sms_id;
+            tr.className = 'row-click';
+            tr.onclick = () => openMessage(Number(data.sms_id));
+            const label = data.status;
+            const badge = smsStatusBadge(label);
+            const deviceLink = data.device_id
+                ? '<a href="/devices/' + data.device_id + '" class="cell-title" onclick="event.stopPropagation()">' + (data.device || '—') + '</a>'
+                : '<span class="cell-title">' + (data.device || '—') + '</span>';
             tr.innerHTML = [
                 '<td class="cell-sub">' + data.time + '</td>',
-                '<td><span class="cell-title">' + (data.device || '—') + '</span></td>',
+                '<td>' + deviceLink + '</td>',
                 '<td>' + data.sender + '</td>',
                 '<td>' + (data.network ? '<span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:' + data.network_color + ';display:inline-block;"></span>' + data.network + '</span>' : '—') + '</td>',
                 '<td>' + (data.type || '—') + '</td>',
                 '<td>' + (data.amount || '—') + '</td>',
                 '<td><div class="cell-title">' + (data.customer || '—') + '</div><div class="cell-sub">' + (data.customer_phone || '') + '</div></td>',
                 '<td><span class="cell-title">' + (data.reference || '—') + '</span></td>',
-                '<td><span class="tag ' + statusCls(data.status) + '">' + data.status.charAt(0).toUpperCase() + data.status.slice(1) + '</span></td>',
-                '<td><button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="openMessage(' + data.sms_id + ')">View</button></td>',
+                '<td><span class="tag ' + badge + '">' + label.charAt(0).toUpperCase() + label.slice(1) + '</span></td>',
+                '<td><button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="event.stopPropagation();openMessage(' + data.sms_id + ')">View</button></td>',
             ].join('');
             body.prepend(tr);
         }
@@ -231,6 +302,8 @@
                     ...data,
                     time: new Date(data.server_received_at).toLocaleTimeString('en-GB', { hour12: false }),
                     device: data.device || '—',
+                    network: data.network || null,
+                    customer: data.customer || '—',
                 });
                 prependRow(smsRowCache.get(data.sms_id));
             };

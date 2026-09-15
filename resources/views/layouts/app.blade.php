@@ -544,6 +544,7 @@
         $isFloatArea = str_starts_with($routeName, 'float');
         $isReconArea = str_starts_with($routeName, 'reconciliation');
         $isReportArea = str_starts_with($routeName, 'reports');
+        $isFinanceArea = str_starts_with($routeName, 'finance');
         $isUserArea = str_starts_with($routeName, 'users');
         $isAuditArea = str_starts_with($routeName, 'audit');
         $isSettingArea = str_starts_with($routeName, 'settings');
@@ -613,6 +614,41 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="m19 9-5 5-4-4-3 3"></path></svg>
                         <span>Reports</span>
                     </a>
+                    @endif
+                    @if (is_role('supervisor', 'admin'))
+                    <div class="sb-drop {{ $isFinanceArea ? 'open' : '' }}">
+                        <button type="button" class="sb-drop-toggle" onclick="toggleSbDrop(this)" style="width:100%;padding:11px 12px;border-radius:10px;background:none;cursor:pointer;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px;flex:none;display:inline;"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                            <span>Finance</span>
+                            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </button>
+                        <div class="sb-drop-menu">
+                            <a href="{{ route('finance.index') }}" class="sb-drop-sub {{ $routeName === 'finance.index' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path><path d="m9 21 6-6"></path></svg>
+                                Dashboard
+                            </a>
+                            <a href="{{ route('finance.accounts.index') }}" class="sb-drop-sub {{ $routeName === 'finance.accounts.index' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h10"></path></svg>
+                                Chart of Accounts
+                            </a>
+                            <a href="{{ route('finance.journals.index') }}" class="sb-drop-sub {{ $routeName === 'finance.journals.index' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path></svg>
+                                Journal Entries
+                            </a>
+                            <a href="{{ route('finance.ledger.index') }}" class="sb-drop-sub {{ $routeName === 'finance.ledger.index' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="m19 9-5 5-4-4-3 3"></path></svg>
+                                General Ledger
+                            </a>
+                            <a href="{{ route('finance.statements.income') }}" class="sb-drop-sub {{ $routeName === 'finance.statements.income' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                                Income Statement
+                            </a>
+                            <a href="{{ route('finance.statements.balance') }}" class="sb-drop-sub {{ $routeName === 'finance.statements.balance' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18v12H3z"></path><path d="M3 10h18"></path></svg>
+                                Balance Sheet
+                            </a>
+                        </div>
+                    </div>
                 @endif
 
                 @if (is_role('supervisor', 'admin'))

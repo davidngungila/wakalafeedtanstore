@@ -122,6 +122,7 @@ class SmsApiTest extends TestCase
 
         $senders = collect($response->json('senders'));
 
+        $this->assertTrue($response->json('capture_all'));
         $this->assertNotEmpty($senders);
         $this->assertTrue($senders->contains(fn ($s) => $s['keyword'] === 'MPESA' && $s['network'] === 'VODACOM'));
         $this->assertTrue($senders->contains(fn ($s) => $s['keyword'] === 'AIRTEL' && $s['network'] === 'AIRTEL'));
@@ -149,7 +150,7 @@ class SmsApiTest extends TestCase
         $this->assertNotContains('AIRTEL', $response->json('device.networks'));
     }
 
-    public function test_unknown_sender_is_stored_but_ignored(): void
+    public function test_unknown_sender_is_accepted_and_attributed_to_device_network(): void
     {
         $device = $this->makeDevice('active', Network::where('code', 'VODACOM')->first());
 
@@ -160,12 +161,35 @@ class SmsApiTest extends TestCase
             ->assertOk();
 
         $this->assertSame(1, $response->json('summary.received'));
-        $this->assertSame(1, $response->json('summary.ignored_senders'));
-        $this->assertTrue($response->json('results.0.ignored_sender'));
+        $this->assertSame(1, $response->json('summary.processed'));
+        $this->assertSame(0, $response->json('summary.ignored_senders'));
+        $this->assertArrayNotHasKey('ignored_sender', $response->json('results.0'));
+
+        $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
+        $this->assertSame('processed', $sms->processing_status);
+        $this->assertSame('TIGO PESA', $sms->sender);
+        $this->assertSame('VODACOM', $sms->network?->code);
+        $this->assertNotNull($sms->transaction_id);
+        $this->assertSame(1, Transaction::count());
+    }
+
+    public function test_unknown_sender_with_non_financial_message_is_stored_but_not_processed(): void
+    {
+        $device = $this->makeDevice('active', Network::where('code', 'VODACOM')->first());
+
+        $response = $this->withHeaders($this->deviceHeaders($device))
+            ->postJson('/api/v1/sms/ingest', [
+                'sms' => [['sender' => 'TATU BANK', 'message' => 'Your OTP for login is 123456. Do not share it.']],
+            ])
+            ->assertOk();
+
+        $this->assertSame(1, $response->json('summary.received'));
+        $this->assertSame(0, $response->json('summary.ignored_senders'));
+        $this->assertSame('SMS did not match any financial template.', $response->json('results.0.error'));
 
         $this->assertDatabaseHas('sms_messages', [
             'device_id' => $device->id,
-            'sender' => 'TIGO PESA',
+            'sender' => 'TATU BANK',
             'processing_status' => 'failed',
         ]);
         $this->assertSame(0, Transaction::count());

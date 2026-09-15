@@ -1,0 +1,124 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Account;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+
+class ChartOfAccountsController extends Controller
+{
+    /**
+     * List the chart of accounts with their current balances.
+     */
+    public function index(): View
+    {
+        $accounts = Account::query()
+            ->withCount('journalLines')
+            ->orderBy('code')
+            ->get();
+
+        $tree = $accounts
+            ->reject(fn (Account $account) => $account->parent_id !== null)
+            ->map(fn (Account $account) => $this->node($account, $accounts))
+            ->values();
+
+        $totals = $accounts->groupBy('type')->map->count();
+
+        return view('finance.chart-of-accounts', compact('tree', 'accounts', 'totals'));
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:20', 'unique:chart_of_accounts,code'],
+            'name' => ['required', 'string', 'max:150'],
+            'type' => ['required', 'in:'.implode(',', [
+                Account::TYPE_ASSET,
+                Account::TYPE_LIABILITY,
+                Account::TYPE_EQUITY,
+                Account::TYPE_INCOME,
+                Account::TYPE_EXPENSE,
+            ])],
+            'parent_id' => ['nullable', 'exists:chart_of_accounts,id'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'is_active' => ['sometimes', 'boolean'],
+        ]);
+
+        $account = Account::create([
+            ...$validated,
+            'is_active' => $request->boolean('is_active', true),
+        ]);
+
+        $this->recordAudit('Chart of account created', 'Account', $account->id, ['code' => $account->code]);
+
+        return back()->with('status', 'Account '.$account->code.' created.');
+    }
+
+    public function update(Request $request, Account $account): RedirectResponse
+    {
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:20', 'unique:chart_of_accounts,code,'.$account->id],
+            'name' => ['required', 'string', 'max:150'],
+            'type' => ['required', 'in:'.implode(',', [
+                Account::TYPE_ASSET,
+                Account::TYPE_LIABILITY,
+                Account::TYPE_EQUITY,
+                Account::TYPE_INCOME,
+                Account::TYPE_EXPENSE,
+            ])],
+            'parent_id' => ['nullable', 'exists:chart_of_accounts,id'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'is_active' => ['sometimes', 'boolean'],
+        ]);
+
+        $account->update([...$validated, 'is_active' => $request->boolean('is_active')]);
+
+        $this->recordAudit('Chart of account updated', 'Account', $account->id, ['code' => $account->code]);
+
+        return back()->with('status', 'Account '.$account->code.' updated.');
+    }
+
+    public function destroy(Account $account): RedirectResponse
+    {
+        if ($account->journalLines()->exists()) {
+            return back()->withErrors(['account' => 'Cannot delete: journal lines reference this account.']);
+        }
+
+        $code = $account->code;
+        $account->delete();
+
+        $this->recordAudit('Chart of account deleted', 'Account', null, ['code' => $code]);
+
+        return back()->with('status', 'Account '.$code.' deleted.');
+    }
+
+    /**
+     * Recursively build a flat list ready for the tree view.
+     *
+     * @param  Collection<int, Account>  $all
+     * @return array<string, mixed>
+     */
+    private function node(Account $account, $all): array
+    {
+        $children = $all
+            ->filter(fn (Account $candidate) => $candidate->parent_id === $account->id)
+            ->map(fn (Account $child) => $this->node($child, $all))
+            ->values()
+            ->all();
+
+        return [
+            'id' => $account->id,
+            'code' => $account->code,
+            'name' => $account->name,
+            'type' => $account->type,
+            'parent_id' => $account->parent_id,
+            'description' => $account->description,
+            'is_active' => $account->is_active,
+            'line_count' => $account->journal_lines_count,
+            'children' => $children,
+        ];
+    }
+}

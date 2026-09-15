@@ -5,9 +5,10 @@ return [
     |--------------------------------------------------------------------------
     | SMS ingestion
     |--------------------------------------------------------------------------
-    | Sender keywords: map the "from" name of an incoming SMS to a network
-    | code. The first matching entry wins, otherwise the device's assigned
-    | network is used.
+    | Sender keywords: a best-effort hint mapping the "from" name of an SMS to
+    | a network code. Every SMS is accepted regardless of sender; when no
+    | keyword matches, the message is attributed to the device's assigned
+    | network. The first matching entry wins.
     */
     'senders' => [
         'MPESA' => 'VODACOM',

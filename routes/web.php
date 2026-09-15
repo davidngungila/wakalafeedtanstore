@@ -5,9 +5,14 @@ use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\CashPointController;
+use App\Http\Controllers\ChartOfAccountsController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeviceController;
+use App\Http\Controllers\FinanceController;
+use App\Http\Controllers\FinancialStatementController;
 use App\Http\Controllers\FloatController;
+use App\Http\Controllers\GeneralLedgerController;
+use App\Http\Controllers\JournalEntryController;
 use App\Http\Controllers\NetworkController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReconciliationController;
@@ -72,6 +77,12 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:supervisor,admin')->group(function () {
         Route::put('/transactions/{transaction}/reverse', [TransactionController::class, 'reverse'])->name('transactions.reverse');
         Route::get('/reports', ReportController::class)->name('reports.index');
+        Route::get('/finance', FinanceController::class)->name('finance.index');
+        Route::get('/finance/chart-of-accounts', [ChartOfAccountsController::class, 'index'])->name('finance.accounts.index');
+        Route::get('/finance/journal-entries', [JournalEntryController::class, 'index'])->name('finance.journals.index');
+        Route::get('/finance/general-ledger', GeneralLedgerController::class)->name('finance.ledger.index');
+        Route::get('/finance/statements/income', [FinancialStatementController::class, 'income'])->name('finance.statements.income');
+        Route::get('/finance/statements/balance', [FinancialStatementController::class, 'balance'])->name('finance.statements.balance');
         Route::get('/audit', AuditLogController::class)->name('audit.index');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
 
@@ -89,6 +100,14 @@ Route::middleware('auth')->group(function () {
     // Admin: configuration and management
     Route::middleware('role:admin')->group(function () {
         Route::put('/cash-point', [CashPointController::class, 'update'])->name('cash-point.update');
+
+        Route::post('/finance/chart-of-accounts', [ChartOfAccountsController::class, 'store'])->name('finance.accounts.store');
+        Route::put('/finance/chart-of-accounts/{account}', [ChartOfAccountsController::class, 'update'])->name('finance.accounts.update');
+        Route::delete('/finance/chart-of-accounts/{account}', [ChartOfAccountsController::class, 'destroy'])->name('finance.accounts.destroy');
+
+        Route::post('/finance/journal-entries', [JournalEntryController::class, 'store'])->name('finance.journals.store');
+        Route::post('/finance/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post'])->name('finance.journals.post');
+        Route::post('/finance/journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])->name('finance.journals.reverse');
 
         Route::post('/networks', [NetworkController::class, 'store'])->name('networks.store');
         Route::put('/networks/{network}', [NetworkController::class, 'update'])->name('networks.update');

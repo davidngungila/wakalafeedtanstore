@@ -1,10 +1,11 @@
 # MobiControl — Wakala Feedtan Store companion app
 
-Single-file Flutter application (`mobile/lib/main.dart`, ~1 544 lines) that runs on
-Android handsets at agent locations. It captures mobile-money SMS in the
-background, matches the sender against a server-side watchlist, queues matches
-offline, and uploads them in batches to the Wakala backend for automatic
-transaction recording.
+Single-file Flutter application (`mobile/lib/main.dart`, ~1 576 lines) that runs on
+Android handsets at agent locations. It captures every SMS in the background,
+queues the messages offline, and uploads them in batches to the Wakala backend
+for automatic transaction recording. The server contract is **capture-all**
+(`capture_all: true` from `GET /sms/senders`) — the phone forwards every SMS
+regardless of sender.
 
 ---
 
@@ -59,7 +60,7 @@ services, API classes, and UI live in `main.dart`.
 ```
 mobile/
   lib/
-    main.dart          ← the entire app (1 544 lines)
+    main.dart          ← the entire app (~1 576 lines)
 ```
 
 Internal section numbering inside `main.dart`:
@@ -263,15 +264,18 @@ class SenderRule {
 ```dart
 class SenderWatchlist {
   final DeviceInfo device;
-  final List<SenderRule> senders;
-  final int maxBatch;            // default 500
+  final List<SenderRule> senders;   // reference: known keyword → network
+  final int maxBatch;               // default 500
   final DateTime serverTime;
+  final bool captureAll;            // true → forward every SMS
 
-  bool matches(String sender);   // case-insensitive contains
+  bool matches(String sender);      // true when captureAll; else keyword contains
 }
 ```
 
-Returned by `GET /sms/senders`.
+Returned by `GET /sms/senders`. When `captureAll` is true every captured SMS is
+uploaded regardless of sender — `senders` is then shown in the UI as reference
+only (keyword → network mapping).
 
 ### SmsMessage
 
@@ -471,13 +475,15 @@ Returns the current device profile.
 
 ### GET /sms/senders
 
-Returns the sender watchlist scoped to the device's networks.
+Returns the capture contract: `capture_all` plus the sender reference list
+scoped to the device's networks.
 
 **Response 200:**
 
 ```json
 {
   "device": { ... },
+  "capture_all": true,
   "senders": [
     { "keyword": "MPESA", "network": "VODACOM" },
     { "keyword": "AIRTEL", "network": "AIRTEL" }
@@ -506,10 +512,10 @@ Uploads a batch of captured SMS.
 
 ```json
 {
-  "summary": { "received": 2, "processed": 1, "duplicates": 0, "ignored_senders": 1, "failed": 0 },
+  "summary": { "received": 2, "processed": 1, "duplicates": 0, "ignored_senders": 0, "failed": 1 },
   "results": [
-    { "ok": true, "sms_id": 42, "reference": "TXN-001" },
-    { "ok": false, "ignored_sender": true }
+    { "ok": true, "sms_id": 42, "reference": "P98765", "type": "deposit", "amount": 100000.0, "network": "VODACOM", "transaction_reference": "TXN-001" },
+    { "ok": false, "sms_id": 43, "error": "SMS did not match any financial template." }
   ]
 }
 ```
@@ -521,9 +527,9 @@ Uploads a batch of captured SMS.
 | `ok` | Successfully processed into a transaction |
 | `sms_id` | Server-side SMS record id |
 | `reference` | Transaction reference |
+| `type` / `amount` / `network` | Parsed transaction details (present when `ok`) |
 | `duplicate` | Body already seen (sha256 match) — safe to drop |
-| `ignored_sender` | Sender not in the watchlist — safe to drop |
-| `error` | Human-readable error (server-side parse failure, etc.) |
+| `error` | Stored but no transaction (no network assigned, or template didn't match), or server-side failure |
 
 An item is considered **acknowledged** (removed from the queue) when `ok` or
 `duplicate` is true.
@@ -826,14 +832,16 @@ a refresh button (triggers `cycle()`).
 
 Subscribes to `deviceStream`. Shows:
 - Overview heading with agent + network
-- Stat cards: Status, Tracked senders, Queued SMS
+- Stat cards: Status, Captured senders, Queued SMS
 - Device details card: ID, Networks, Last sync, Last heartbeat, Last SMS
 - If `!canIngest`: gold info banner explaining the device is not yet approved
 
 ### WatchlistScreen
 
-Displays the current sender watchlist as chips (`keyword → network`). Shows
-server time and max batch size. Loads on the next sync if not yet fetched.
+Displays the capture contract. When `captureAll` is true it shows a
+"Capturing all senders" banner and explains that every SMS on the phone is
+uploaded; the known senders are listed as reference chips (`keyword → network`).
+Shows server time and max batch size. Loads on the next sync if not yet fetched.
 
 ### IngestLogScreen
 
@@ -935,8 +943,8 @@ Heartbeat failures are silently ignored (the queue persists locally).
 - The app never logs message bodies or customer data.
 - On revoke, the code stops working immediately. The app must handle the 403
   by clearing the local code and returning to pairing.
-- SenderKeys: if an SMS matches no watchlist keyword, it is dropped locally
-  (never uploaded).
+- Capture-all: every SMS is uploaded regardless of sender (`capture_all`). The
+  sender list is reference-only and never gates uploads.
 - Client-side length validation: sender ≤ 30 chars, message ≤ 1 000 chars
   (server enforces the real limits).
 - The device code must never be embedded in the APK — always operator-entered.

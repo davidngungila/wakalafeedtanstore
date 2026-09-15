@@ -52,6 +52,117 @@ if (! function_exists('status_badge')) {
     }
 }
 
+if (! function_exists('sms_status_label')) {
+    /**
+     * Human friendly label for an SMS processing state.
+     *
+     * A "failed" SMS that simply did not match any financial template is not
+     * an operational error: capture-all stores every message, so these are
+     * labelled "Stored" instead of a scary red "Failed". Genuine failures
+     * (device without a network, empty body) stay "Failed".
+     */
+    function sms_status_label(string $status, bool $isDuplicate = false, ?string $error = null): string
+    {
+        if ($isDuplicate) {
+            return 'duplicate';
+        }
+
+        if ($status === 'processed') {
+            return 'processed';
+        }
+
+        if (in_array($status, ['received', 'identified', 'parsed'], true)) {
+            return 'pending';
+        }
+
+        if ($status === 'failed' && $error !== null && str_contains($error, 'financial template')) {
+            return 'stored';
+        }
+
+        return $status;
+    }
+}
+
+if (! function_exists('sms_status_badge')) {
+    /**
+     * Badge CSS class for an SMS processing state.
+     */
+    function sms_status_badge(string $status, bool $isDuplicate = false, ?string $error = null): string
+    {
+        return match (sms_status_label($status, $isDuplicate, $error)) {
+            'processed' => 'tag-green',
+            'pending' => 'tag-gold',
+            'stored' => 'tag-terracotta',
+            'duplicate' => 'tag-terracotta',
+            default => 'tag-red',
+        };
+    }
+}
+
+if (! function_exists('account_type_label')) {
+    /**
+     * Human friendly label for a chart of accounts type.
+     */
+    function account_type_label(string $type): string
+    {
+        return match ($type) {
+            'asset' => 'Asset',
+            'liability' => 'Liability',
+            'equity' => 'Equity',
+            'income' => 'Income',
+            'expense' => 'Expense',
+            default => ucfirst($type),
+        };
+    }
+}
+
+if (! function_exists('account_type_badge')) {
+    /**
+     * Badge CSS class for a chart of accounts type.
+     */
+    function account_type_badge(string $type): string
+    {
+        return match ($type) {
+            'asset' => 'tag-terracotta',
+            'liability' => 'tag-gold',
+            'equity' => 'tag-green',
+            'income' => 'tag-green',
+            'expense' => 'tag-red',
+            default => 'tag-grey',
+        };
+    }
+}
+
+if (! function_exists('journal_status_label')) {
+    /**
+     * Human friendly label for a journal entry status.
+     */
+    function journal_status_label(string $status): string
+    {
+        return match ($status) {
+            'draft' => 'Draft',
+            'posted' => 'Posted',
+            'reversed' => 'Reversed',
+            default => ucfirst($status),
+        };
+    }
+}
+
+if (! function_exists('journal_status_badge')) {
+    /**
+     * Badge CSS class for a journal entry status.
+     */
+    function journal_status_badge(string $status): string
+    {
+        return match ($status) {
+            'draft' => 'tag-gold',
+            'posted' => 'tag-green',
+            'reversed' => 'tag-grey',
+            default => 'tag-terracotta',
+        };
+    }
+}
+
 if (! function_exists('agent_level_label')) {
     /**
      * Human friendly label for an agent level.

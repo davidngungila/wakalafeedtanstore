@@ -39,12 +39,18 @@ class SmsController extends Controller
 
         $messages = $query->latest('server_received_at')->limit(200)->get();
 
+        $todayBase = SmsMessage::whereDate('server_received_at', today());
+
         $today = [
-            'received' => SmsMessage::whereDate('server_received_at', today())->count(),
-            'processed' => SmsMessage::whereDate('server_received_at', today())->where('processing_status', 'processed')->count(),
-            'failed' => SmsMessage::whereDate('server_received_at', today())->where('processing_status', 'failed')->count(),
-            'duplicates' => SmsMessage::whereDate('server_received_at', today())->where('is_duplicate', true)->count(),
-            'pending' => SmsMessage::whereDate('server_received_at', today())->whereIn('processing_status', ['received', 'identified', 'parsed'])->count(),
+            'received' => (clone $todayBase)->count(),
+            'processed' => (clone $todayBase)->where('processing_status', 'processed')->count(),
+            'pending' => (clone $todayBase)->whereIn('processing_status', ['received', 'identified', 'parsed'])->count(),
+            'stored' => (clone $todayBase)->where('processing_status', 'failed')->where('processing_error', 'like', '%financial template%')->count(),
+            'failed' => (clone $todayBase)->where('processing_status', 'failed')->where(function ($q) {
+                $q->whereNull('processing_error')
+                    ->orWhere('processing_error', 'not like', '%financial template%');
+            })->count(),
+            'duplicates' => (clone $todayBase)->where('is_duplicate', true)->count(),
         ];
 
         return view('sms.index', [
@@ -82,12 +88,16 @@ class SmsController extends Controller
                         'network' => $row->network?->name,
                         'network_color' => $row->network?->color,
                         'device' => $row->device?->name,
-                        'status' => $row->is_duplicate ? 'duplicate' : $row->processing_status,
+                        'device_id' => $row->device_id,
+                        'status' => sms_status_label($row->processing_status, $row->is_duplicate, $row->processing_error),
+                        'error' => $row->processing_error,
                         'reference' => $row->transaction_reference,
                         'type' => $row->transaction_type ? txn_type_label($row->transaction_type) : null,
                         'amount' => $row->amount ? money($row->amount) : null,
                         'customer' => $row->customer_name,
                         'customer_phone' => $row->customer_phone,
+                        'body' => $row->message_body,
+                        'datetime' => $row->server_received_at->format('D, j M Y · H:i:s'),
                         'server_received_at' => $row->server_received_at->toIso8601String(),
                     ], JSON_UNESCAPED_SLASHES)."\n\n";
 

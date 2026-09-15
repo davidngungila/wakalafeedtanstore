@@ -26,9 +26,9 @@ This document covers:
 A phone runs the **MobiControl** app. The app:
 
 - registers to **receive every incoming SMS** (via a native `BroadcastReceiver`),
-- decides whether an SMS is worth forwarding by matching its **sender name**
-  against the watchlist downloaded from `GET /api/v1/sms/senders`,
-- queues the matching SMS locally (offline-safe),
+- forwards **every** SMS — the capture contract (`GET /api/v1/sms/senders`)
+  sets `capture_all`, so there is no sender filtering on the phone,
+- queues the captured SMS locally (offline-safe),
 - uploads them in batches of ≤ 500 to `POST /api/v1/sms/ingest`,
 - parses the server response, keeps anything that failed for retry, and
   drops the rest,
@@ -43,7 +43,7 @@ A phone runs the **MobiControl** app. The app:
                                 ▼
                     Native Android SmsReceiver
                     (BroadcastReceiver, always-on)
-                                │   filter: sender ∈ watchlist
+                                │   forward all SMS (capture_all)
                                 ▼
                     Local durable queue (SQLite / shared_prefs)
                                 │
@@ -201,9 +201,9 @@ Response `200`:
 
 ### 4.3 `GET /sms/senders` — capture watchlist
 
-Returns the **sender keywords** the phone must capture, mapped to the network
-they belong to. Only senders of the networks assigned to *this* device are
-returned.
+Returns the **capture contract**: whether the phone must forward every SMS
+(`capture_all`) plus the reference list of known mobile-money sender keywords,
+mapped to the network they belong to.
 
 Response `200`:
 
@@ -216,6 +216,7 @@ Response `200`:
     "network": "VODACOM",
     "networks": ["VODACOM", "AIRTEL"]
   },
+  "capture_all": true,
   "senders": [
     { "keyword": "MPESA",     "network": "VODACOM" },
     { "keyword": "VODACOM",   "network": "VODACOM" },
@@ -227,14 +228,16 @@ Response `200`:
 }
 ```
 
-The app caches this watchlist and re-fetches it periodically (e.g. after every
+The app caches this contract and re-fetches it periodically (e.g. after every
 successful heartbeat) so admin changes propagate.
 
-> **Matching rule:** compare the SMS `sender` (the "from" label shown by the
-> phone, e.g. `MPESA`, `AIRTEL`) **case-insensitively, substring-wise** — the
-> server uses `stripos`. An SMS whose sender matches **any** keyword is
-> forwarded; the server re-identifies the exact network itself, so the phone
-> does not need to assign a network.
+> **Capture rule:** `capture_all: true` (the current server contract) tells the
+> phone to forward **every** SMS regardless of sender. The `senders` list is
+> then reference-only: it maps the known mobile-money keywords to their
+> networks. When `capture_all` is `false`, the phone falls back to
+> case-insensitive substring matching (the server uses `stripos`) and only
+> forwards SMS whose sender contains a keyword. The server re-identifies the
+> exact network itself; the phone never needs to assign one.
 
 ### 4.4 `POST /sms/ingest` — upload captured SMS
 
@@ -304,12 +307,12 @@ Response `200`:
 
 **Per-message result shape:**
 
-| Outcome               | Flags                                                              | Meaning                                   |
-| --------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
-| Processed             | `ok: true`                                                         | Created a transaction                     |
-| Duplicate             | `ok:false, duplicate:true`                                          | Same body already ingested → safe to drop |
-| Ignored sender        | `ok:false, ignored_sender:true`                                     | Sender not mapped to a known network      |
-| Parse failed          | `ok:false` (no special flag)                                        | Sender known but SMS not a financial msg  |
+| Outcome                         | Flags               | Meaning                                             |
+| ------------------------------- | ------------------- | --------------------------------------------------- |
+| Processed                       | `ok: true`          | Created a transaction                               |
+| Duplicate                       | `ok:false, duplicate:true` | Same body already ingested → safe to drop     |
+| Not a financial message         | `ok:false`          | Stored but no transaction — template didn't match   |
+| Device has no network assigned  | `ok:false`          | Stored but failed — admin must assign a network     |
 
 **Business rules the phone must respect**
 
@@ -321,13 +324,13 @@ Response `200`:
   ```
 
 - Do **not** resend items the server already accepted (`ok:true`) or flagged as
-  `duplicate:true`. Only retry `failed` items (and optionally `ignored_sender`
-  once, in case config grew).
+  `duplicate:true`. Only retry `failed` items.
 - Requests are capped at `max_batch` (500) — chunk larger queues.
 
 **Server-side processing** (what happens per accepted SMS): the server computes
 `sha256(message_body)`, checks the per-device duplicate index, identifies the
-network from the sender, parses the SMS template, creates a `Transaction`
+network from the sender — falling back to the device's first assigned network
+when the sender is not a known keyword — parses the SMS template, creates a `Transaction`
 (status `completed`), adjusts float/cash balances, links the SMS to the
 transaction, and returns the `transaction_reference`. All inside a transaction.
 
@@ -612,9 +615,12 @@ Android minimum config:
   `duplicate:true` items. Failed items stay queued (with an attempt counter and
   exponential backoff).
 
-### 6.4 Matching + dedupe discipline
+### 6.4 Capture + dedupe discipline
 
-- Match: `sender.toLowerCase().contains(keyword.toLowerCase())`.
+- Capture decision: `capture_all` (the current contract) uploads every SMS;
+  `SenderWatchlist.matches()` keeps the old keyword check
+  (`sender.toLowerCase().contains(keyword.toLowerCase())`) as a fallback for
+  servers that do not set `capture_all`.
 - Keep a local bloom/set of `sha256(message)` per device to skip obvious
   replays before uploading (the server still de-dupes authoritatively).
 - Never drop an item on network failure — only on server acknowledgement.
@@ -626,7 +632,7 @@ Android minimum config:
 ### 7.1 Happy path
 
 1. SMS arrives → native `SmsReceiver` fires.
-2. Sender matches watchlist (`MPESA` ⊂ `mpesa`, device serves VODACOM) → enqueue.
+2. Every SMS is enqueued (`capture_all`) — no sender filtering on the phone.
 3. `AgentService` notices the queue is non-empty → builds a batch → `POST
    /sms/ingest` with the device code header.
 4. Server returns `results[i].ok:true` with `transaction_reference` → item
@@ -667,8 +673,9 @@ Android minimum config:
 - On `revoke`, the device code stops working immediately — the app must handle
   `403` by clearing the local code and returning the operator to the pairing
   screen.
-- Keep the SenderKeys fluent: if an SMS matches **no** watchlist keyword, drop
-  it locally (don't upload unknown senders).
+- Forward **every** SMS: the server accepts all senders (`capture_all`). The
+  sender list is reference-only (keyword → network) and never gates uploads;
+  unknown senders are attributed to the device's assigned network.
 - Validate lengths client-side (`sender ≤ 30`, etc.) to fail fast, but rely on
   the server for correctness.
 - Do not embed the code in the APK; always operator-entered.
@@ -687,7 +694,8 @@ Android minimum config:
 | `4xx` validation on ingest                  | 400/422 per item         | Keep item, mark `failed`, do not infinitely retry (max attempts)   |
 | Network timeout / connection                | Exception                | Keep queue, exponential backoff, heartbeat deferred                |
 | `results[i].ok:false, duplicate:true`       | 200                      | Drop item (already known)                                          |
-| `results[i].ok:false, ignored_sender:true`  | 200                      | Drop item, log; re-check watchlist freshness (config may have grown) |
+| `results[i].ok:false` — "Device has no network assigned." | 200      | Keep item, log; admin must assign a network to the device         |
+| `results[i].ok:false` — "SMS did not match any financial template." | 200 | Drop item, log; wording not covered by `config('sms.templates')` |
 | Server 5xx / 429                            | 5xx                      | Backoff, never clear queue                                         |
 
 Batch safety rule: **an item is removed only when the server acknowledges it**
@@ -704,10 +712,11 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 - [ ] Reboot → `BootReceiver` restarts service; device returns online.
 - [ ] Turn off Wi-Fi/data → queue grows; re-enable → drains with **no duplicates** created.
 - [ ] Resend the same SMS body → `duplicate` result, transaction count unchanged.
-- [ ] Unknown sender (e.g. bank OTP) → captured and locally dropped (never uploaded unless in watchlist).
+- [ ] Unknown sender (e.g. bank OTP) → captured, uploaded and stored; no transaction unless it matches a financial template.
 - [ ] Revoke device → next API call returns 403 → code cleared, pairing screen shown.
 - [ ] Battery saver / Doze after 30 min idle → device still heartbeat within 10 min of going offline? (Use the visual **offline** check.) Then run the OEM auto-start fix.
 - [ ] A device serving 2 networks (VODACOM + AIRTEL) captures MPESA **and** AIRTEL senders and creates transactions on both networks.
+- [ ] `GET /sms/senders` returns `capture_all: true` → app shows the "Capturing all senders" banner and forwards every SMS, even from senders not in the reference list.
 
 ---
 
@@ -716,8 +725,9 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 | Symptom                          | Likely cause                                            | Fix                                                              |
 | -------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------- |
 | Device shows **offline**         | No heartbeat for > 10 min (Doze, OEM kill, no network)  | Battery exemption + Auto-start; enable notifications; re-verify in app self-test |
-| SMS captured but never uploaded  | Watchlist mismatch / queue stuck / no connectivity      | Refresh watchlist (`GET /sms/senders`); check Ingest log & error; connectivity |
-| `unknown sender` in log          | Sender not in config SSenders or device lacks the network | Assign the network to the device; add the sender in `config/sms.php` |
+| SMS captured but never uploaded  | Queue stuck / no connectivity                     | Check Ingest log & error; connectivity |
+| "Device has no network assigned." in ingest results | Device has no networks assigned | Assign at least one network in the admin screens |
+| Unknown sender stored, no transaction | Sender not a known keyword and message not a financial template | Expected with `capture_all`; extend `config('sms.templates')` if it should parse |
 | App dead after reboot            | Auto-start disabled on OEM ROM                          | Enable manufacturer auto-start; confirm `BootReceiver` registered |
 | Duplicate transactions           | Items re-sent after a successful upload but before removal | Check the queue removes on `ok:true`; server dedupe is authoritative and hash-based |
 | "SMS did not match any financial template." | Template doesn't cover this bank's phrasing   | Extend `config('sms.templates')` (backend)                      |
@@ -726,8 +736,11 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 
 ## 12. Related backend configuration
 
-- `config/sms.php` → `senders` map (keyword ⇒ network code) drives both the
-  watchlist and server-side network identification; `templates` drives parsing;
-  `offline_after_minutes => 10` drives the offline label.
+- `config/sms.php` → `senders` map (keyword ⇒ network code) is a best-effort
+  hint for network attribution. Every SMS is accepted; when no keyword matches,
+  the message is attributed to the device's first assigned network. `templates`
+  drives parsing; `offline_after_minutes => 10` drives the offline label.
 - Device ↔ networks is a **many-to-many** relationship (`device_network`
-  pivot); assign networks in the Devices admin screen to widen capture scope.
+  pivot). A device with **no** assigned network cannot process SMS — every
+  message returns `Device has no network assigned.` Assign networks in the
+  Devices admin screen.

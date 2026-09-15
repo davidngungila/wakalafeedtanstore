@@ -69,7 +69,7 @@ class SmsProcessor
             ];
         }
 
-        $network = $this->parser->identifyNetwork($sender, null);
+        $network = $this->parser->identifyNetwork($sender, $device->assignedNetworks()->first());
 
         $sms = SmsMessage::create([
             'device_id' => $device->id,
@@ -98,16 +98,10 @@ class SmsProcessor
         if ($network === null) {
             $sms->update([
                 'processing_status' => 'failed',
-                'processing_error' => 'Unsupported sender network.',
+                'processing_error' => 'Device has no network assigned.',
             ]);
 
-            return [
-                'ok' => false,
-                'ignored_sender' => true,
-                'sms_id' => $sms->id,
-                'sender' => $sender,
-                'error' => $sms->processing_error,
-            ];
+            return ['ok' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
         }
 
         if ($parsed['reference'] === '' || $parsed['amount'] <= 0) {
