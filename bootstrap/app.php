@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureDailyOpeningSet;
 use App\Http\Middleware\EnsureDeviceCode;
 use App\Http\Middleware\EnsureRole;
 use Illuminate\Foundation\Application;
@@ -18,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => EnsureRole::class,
             'device.code' => EnsureDeviceCode::class,
+            'daily.opening' => EnsureDailyOpeningSet::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

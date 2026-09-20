@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 
 #[Fillable(['name', 'email', 'phone', 'password', 'role', 'agent_id', 'is_active', 'two_factor_secret', 'two_factor_enabled', 'two_factor_recovery_codes', 'profile_photo_path'])]
 #[Hidden(['password', 'remember_token'])]
@@ -45,8 +46,16 @@ class User extends Authenticatable
 
     public function avatarUrl(): string
     {
-        return $this->profile_photo_path
-            ? route('avatar.show', ['file' => str_replace('avatars/', '', ltrim($this->profile_photo_path, '/'))])
-            : '';
+        if (! $this->profile_photo_path) {
+            return '';
+        }
+
+        $path = ltrim($this->profile_photo_path, '/');
+
+        if (Storage::disk('public')->exists($path)) {
+            return Storage::disk('public')->url($path);
+        }
+
+        return '';
     }
 }

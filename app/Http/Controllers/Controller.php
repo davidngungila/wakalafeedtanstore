@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
+use App\Models\DailyOpening;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -53,6 +54,20 @@ abstract class Controller
         }
 
         $request->session()->regenerate();
+
+        if (in_array($user->role, ['cashier', 'supervisor', 'admin'], true)) {
+            $agent = cash_point();
+
+            if ($agent !== null) {
+                $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())
+                    ->open()
+                    ->first();
+
+                if ($todayOpening === null) {
+                    return redirect()->intended(route('daily-opening.create'));
+                }
+            }
+        }
 
         return redirect()->intended(route('dashboard'));
     }

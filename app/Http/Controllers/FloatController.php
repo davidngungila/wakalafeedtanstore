@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DailyOpening;
 use App\Models\FloatTransaction;
 use App\Models\Network;
 use App\Models\NetworkBalance;
@@ -21,6 +22,16 @@ class FloatController extends Controller
             return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before managing float.');
         }
 
+        $todayOpening = DailyOpening::forAgentAndDate($cashPoint->id, today())->first();
+
+        if (! $todayOpening) {
+            return redirect()->route('daily-opening.create')->with('error', 'Record daily opening first before managing float.');
+        }
+
+        if ($todayOpening->is_closed) {
+            return redirect()->route('daily-opening.show', $todayOpening)->with('error', 'Daily session is already closed. Cannot manage float.');
+        }
+
         $balances = $cashPoint->balances()->with('network')->orderBy('network_id')->get();
 
         $summary = [
@@ -32,13 +43,14 @@ class FloatController extends Controller
         $summary['floatCapacity'] = $summary['floatOut'] + $summary['totalCash'];
 
         $floatTransactions = FloatTransaction::with(['network', 'operator'])
+            ->where('agent_id', $cashPoint->id)
             ->latest()
             ->limit(50)
             ->get();
 
         $networks = Network::active()->pluck('name', 'id');
 
-        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'summary'));
+        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'summary', 'todayOpening'));
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse
@@ -59,6 +71,32 @@ class FloatController extends Controller
             }
 
             return redirect()->route('cash-point.index')->with('error', $message);
+        }
+
+        $todayOpening = null;
+        if (is_cashier()) {
+            $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())->first();
+
+            if (! $todayOpening) {
+                $message = 'Record daily opening first before managing float.';
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 422);
+                }
+
+                return redirect()->route('daily-opening.create')->with('error', $message);
+            }
+
+            if ($todayOpening->is_closed) {
+                $message = 'Daily session is already closed. Cannot manage float.';
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 422);
+                }
+
+                return back()->with('error', $message);
+            }
+        } else {
+            // For supervisor/admin, get today's opening if exists
+            $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())->first();
         }
 
         $balance = NetworkBalance::firstOrCreate(
@@ -97,6 +135,7 @@ class FloatController extends Controller
                 'status' => 'completed',
                 'performed_by' => auth()->id(),
                 'notes' => $validated['notes'] ?? null,
+                'daily_opening_id' => $todayOpening?->id,
             ]);
         });
 

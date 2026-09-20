@@ -82,10 +82,13 @@
                     <tr>
                         @if (($report ?? 'daily') === 'daily')
                             <th>Date</th>
+                            <th>Opening Cash</th>
+                            <th>Opening Float</th>
                             <th>Deposits</th>
                             <th>Withdrawals</th>
                             <th>Volume</th>
                             <th>Commission</th>
+                            <th>Net Revenue</th>
                             <th>Count</th>
                         @else
                             <th>Network</th>
@@ -101,14 +104,17 @@
                         @forelse ($daily as $day)
                             <tr data-search="{{ strtolower($day['date']) }}">
                                 <td class="cell-title">{{ $day['date'] }}</td>
+                                <td>@money($day['opening_cash'])</td>
+                                <td>@money($day['opening_float'])</td>
                                 <td>@money($day['deposits'])</td>
                                 <td>@money($day['withdrawals'])</td>
                                 <td class="cell-title">@money($day['volume'])</td>
                                 <td>@money($day['commission'])</td>
+                                <td style="color:{{ $day['net_revenue'] >= 0 ? 'var(--acacia-600)' : 'var(--danger)' }};font-weight:700;">@money($day['net_revenue'])</td>
                                 <td>{{ $day['count'] }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="empty-state">No daily data</td></tr>
+                            <tr><td colspan="9" class="empty-state">No daily data</td></tr>
                         @endforelse
                     @else
                         @forelse ($byNetwork as $network)

@@ -114,6 +114,8 @@
                         <th>Network</th>
                         <th>Amount</th>
                         <th>Commission</th>
+                        <th>Running Cash</th>
+                        <th>Running Float</th>
                         <th>Status</th>
                         <th></th>
                     </tr>
@@ -139,6 +141,8 @@
                             </td>
                             <td class="cell-title">@money($txn->amount)</td>
                             <td>@money($txn->commission)</td>
+                            <td style="font-weight:600;">{{ $txn->running_cash_balance !== null ? money($txn->running_cash_balance) : '—' }}</td>
+                            <td style="font-weight:600;">{{ $txn->running_float_balance !== null ? money($txn->running_float_balance) : '—' }}</td>
                             <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
                             <td>
                                 <div class="row-actions">
@@ -154,7 +158,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="empty-state"><h4>No transactions found</h4><p>Try a different filter or process a new transaction.</p></td></tr>
+                        <tr><td colspan="10" class="empty-state"><h4>No transactions found</h4><p>Try a different filter or process a new transaction.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -277,6 +281,8 @@
                 'provider_reference' => $t->provider_reference,
                 'notes' => $t->notes,
                 'reversal_reason' => $t->reversal_reason,
+                'running_cash_balance' => $t->running_cash_balance !== null ? (float) $t->running_cash_balance : null,
+                'running_float_balance' => $t->running_float_balance !== null ? (float) $t->running_float_balance : null,
                 'network' => $t->network?->name,
                 'network_color' => $t->network?->color,
                 'created_at' => $t->created_at->format('d M Y H:i'),
@@ -330,6 +336,8 @@
                     <div class="rc-amount"><span>Amount</span><b>${fmt(t.amount)}</b></div>
                     <div class="rc-row"><span>Fee</span><b>${fmt(t.fee)}</b></div>
                     <div class="rc-row"><span>Commission</span><b>${fmt(t.commission)}</b></div>
+                    <div class="rc-row"><span>Running Cash</span><b>${t.running_cash_balance === null ? '—' : fmt(t.running_cash_balance)}</b></div>
+                    <div class="rc-row"><span>Running Float</span><b>${t.running_float_balance === null ? '—' : fmt(t.running_float_balance)}</b></div>
                     <div class="rc-row"><span>Status</span><b>${t.status.toUpperCase()}</b></div>
                     ${t.reversal_reason ? `<div class="rc-row"><span>Reason</span><b>${t.reversal_reason}</b></div>` : ''}
                     ${t.notes ? `<div class="rc-row"><span>Notes</span><b>${t.notes}</b></div>` : ''}

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\DailyOpening;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -29,6 +30,9 @@ class CashPointController extends Controller
             ->limit(12)
             ->get();
 
+        $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())->first();
+        $isOpeningDone = $todayOpening !== null;
+
         $summary = [
             'cash' => (float) $agent->cash_balance,
             'float' => agent_total_float($agent),
@@ -36,7 +40,27 @@ class CashPointController extends Controller
             'count' => $agent->transactions()->count(),
         ];
 
-        return view('cash_point.index', compact('agent', 'recentTransactions', 'summary'));
+        // Today's running totals (if opening done)
+        $todayStats = null;
+        if ($isOpeningDone) {
+            $todayTxns = Transaction::where('agent_id', $agent->id)
+                ->whereDate('created_at', today())
+                ->where('status', 'completed')
+                ->get();
+
+            $todayStats = [
+                'volume' => (float) $todayTxns->sum('amount'),
+                'commission' => (float) $todayTxns->sum('commission'),
+                'count' => $todayTxns->count(),
+                'cash_opening' => (float) $todayOpening->cash_opening,
+                'float_opening' => (float) array_sum($todayOpening->float_openings ?? []),
+                'cash_current' => (float) $agent->cash_balance,
+                'float_current' => agent_total_float($agent),
+                'is_closed' => $todayOpening->is_closed,
+            ];
+        }
+
+        return view('cash_point.index', compact('agent', 'recentTransactions', 'summary', 'todayOpening', 'isOpeningDone', 'todayStats'));
     }
 
     public function update(Request $request): JsonResponse|RedirectResponse

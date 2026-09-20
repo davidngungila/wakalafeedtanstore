@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
+    'daily_opening_id',
     'reference',
     'agent_id',
     'network_id',
@@ -25,6 +26,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'reversed_at',
     'reversal_reason',
     'notes',
+    'running_cash_balance',
+    'running_float_balance',
 ])]
 class Transaction extends Model
 {
@@ -36,8 +39,18 @@ class Transaction extends Model
             'amount' => 'decimal:2',
             'fee' => 'decimal:2',
             'commission' => 'decimal:2',
+            'running_cash_balance' => 'decimal:2',
+            'running_float_balance' => 'decimal:2',
             'reversed_at' => 'datetime',
         ];
+    }
+
+    /**
+     * @return BelongsTo<DailyOpening, $this>
+     */
+    public function dailyOpening(): BelongsTo
+    {
+        return $this->belongsTo(DailyOpening::class);
     }
 
     /**

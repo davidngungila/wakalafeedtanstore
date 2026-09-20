@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\CashPointController;
 use App\Http\Controllers\ChartOfAccountsController;
+use App\Http\Controllers\DailyOpeningController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\FinanceController;
@@ -41,12 +42,17 @@ Route::middleware('guest')->group(function () {
     Route::post('/two-factor/cancel', [TwoFactorController::class, 'cancel'])->name('two-factor.cancel');
 });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'daily.opening'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
-    // Personal account & security (available to all roles)
+    Route::get('/daily-opening', [DailyOpeningController::class, 'index'])->name('daily-opening.index');
+    Route::get('/daily-opening/create', [DailyOpeningController::class, 'create'])->name('daily-opening.create');
+    Route::post('/daily-opening', [DailyOpeningController::class, 'store'])->name('daily-opening.store');
+    Route::get('/daily-opening/{dailyOpening}', [DailyOpeningController::class, 'show'])->name('daily-opening.show');
+    Route::post('/daily-opening/{dailyOpening}/close', [DailyOpeningController::class, 'close'])->name('daily-opening.close');
+
     Route::get('/account', [AccountController::class, 'index'])->name('account.index');
     Route::put('/account/password', [AccountController::class, 'updatePassword'])->name('account.password');
     Route::post('/account/two-factor/confirm', [AccountController::class, 'confirmTwoFactor'])->name('account.two-factor.confirm');
@@ -54,7 +60,6 @@ Route::middleware('auth')->group(function () {
     Route::post('/account/recovery-codes', [AccountController::class, 'refreshRecoveryCodes'])->name('account.recovery-codes');
     Route::delete('/account/sessions/{session}', [AccountController::class, 'revokeSession'])->name('account.sessions.destroy');
 
-    // Cashier + (everything above is available to all roles)
     Route::get('/cash-point', [CashPointController::class, 'index'])->name('cash-point.index');
 
     Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
@@ -73,7 +78,6 @@ Route::middleware('auth')->group(function () {
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 
-    // Supervisor + Admin: monitor, reconcile, report, investigate, manage staff, devices, SMS
     Route::middleware('role:supervisor,admin')->group(function () {
         Route::put('/transactions/{transaction}/reverse', [TransactionController::class, 'reverse'])->name('transactions.reverse');
         Route::get('/reports', ReportController::class)->name('reports.index');
@@ -99,7 +103,6 @@ Route::middleware('auth')->group(function () {
         Route::get('/sms/stream', [SmsController::class, 'stream'])->name('sms.stream');
     });
 
-    // Admin: configuration and management
     Route::middleware('role:admin')->group(function () {
         Route::put('/cash-point', [CashPointController::class, 'update'])->name('cash-point.update');
 

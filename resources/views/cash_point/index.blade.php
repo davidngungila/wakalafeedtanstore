@@ -21,54 +21,82 @@
         </div>
     </div>
 
-    <div class="stat-grid">
-        <div class="stat-card" style="--stat-tint:var(--gold-100);--stat-fg:#8a6418;">
-            <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2"></circle><path d="M6 12h.01M18 12h.01"></path></svg></div><span class="stat-trend up">Till</span></div>
-            <div class="stat-value">@money($summary['cash'])</div>
-            <div class="stat-label">Cash at till</div>
+    @if (! $isOpeningDone)
+        <div class="box-alert" style="background:var(--gold-100);border-left-color:var(--gold-600);">
+            <strong>Daily opening not recorded yet.</strong> You must record opening cash and float balances before processing transactions.
+            <a href="{{ route('daily-opening.create') }}" class="btn btn-primary" style="margin-left:12px;">Record Daily Opening</a>
         </div>
-        <div class="stat-card" style="--stat-tint:var(--acacia-100);--stat-fg:var(--acacia-600);">
-            <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg></div></div>
-            <div class="stat-value">@money($summary['float'])</div>
-            <div class="stat-label">Total float balance</div>
-        </div>
-        <div class="stat-card" style="--stat-tint:var(--terracotta-100);--stat-fg:var(--terracotta-600);">
-            <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="m19 9-5 5-4-4-3 3"></path></svg></div></div>
-            <div class="stat-value">@money($summary['volume'])</div>
-            <div class="stat-label">Completed volume</div>
-        </div>
-        <div class="stat-card" style="--stat-tint:var(--danger-100);--stat-fg:var(--danger);">
-            <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg></div></div>
-            <div class="stat-value">{{ $summary['count'] }}</div>
-            <div class="stat-label">Total transactions</div>
-        </div>
-    </div>
-
-    <div class="panel-grid">
-        <div class="panel">
+    @else
+        <div class="panel" style="margin-bottom:16px;">
             <div class="panel-head">
-                <h3>Network float balances</h3>
-                <span class="link">Live</span>
+                <h3>Today's Session {{ $todayStats['is_closed'] ? '<span class="tag tag-grey">Closed</span>' : '<span class="tag tag-green">Open</span>' }}</h3>
+                <a href="{{ route('daily-opening.show', $todayOpening) }}" class="link">View details</a>
             </div>
             <div class="panel-body">
                 <div class="activity-list">
-                    @forelse ($agent->balances as $balance)
+                    <div class="activity-row">
+                        <div class="activity-ico" style="background:var(--gold-100);color:var(--gold-600);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2"></circle></svg>
+                        </div>
+                        <div class="activity-text">
+                            <b>Cash in Hand</b>
+                            <div class="activity-time">
+                                Opening: <strong>@money($todayStats['cash_opening'])</strong> ·
+                                Current: <strong style="color:var(--coffee-900);">@money($todayStats['cash_current'])</strong> ·
+                                Expected: <strong style="color:var(--acacia-600);">@money($todayStats['cash_opening'] + $todayStats['commission'])</strong>
+                            </div>
+                        </div>
+                        <div style="font-weight:600;color:{{ $todayStats['cash_current'] >= $todayStats['cash_opening'] + $todayStats['commission'] ? 'var(--acacia-600)' : 'var(--danger)' }};">
+                            @money($todayStats['cash_current'] - $todayStats['cash_opening'] - $todayStats['commission'])
+                        </div>
+                    </div>
+                    @foreach ($agent->balances as $balance)
+                        @php
+                            $openingFloat = $todayOpening->getFloatOpening($balance->network_id);
+                            $currentFloat = $balance->balance;
+                            $variance = $currentFloat - $openingFloat;
+                        @endphp
                         <div class="activity-row">
                             <div class="activity-ico" style="background:{{ $balance->network?->color }}22;color:{{ $balance->network?->color }};">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
                             </div>
-                            <div class="activity-text">
+                            <div class="activity-text" style="flex:1;min-width:0;">
                                 <b>{{ $balance->network?->name }}</b>
-                                <div class="activity-time">Opening: <strong>@money($balance->opening_balance)</strong> · Current: <strong style="color:var(--coffee-900);">@money($balance->balance)</strong></div>
+                                <div class="activity-time">
+                                    Opening: <strong>@money($openingFloat)</strong> ·
+                                    Current: <strong style="color:var(--coffee-900);">@money($currentFloat)</strong>
+                                </div>
+                            </div>
+                            <div style="font-weight:600;color:{{ $variance >= 0 ? 'var(--acacia-600)' : 'var(--danger)' }};">
+                                @money($variance)
                             </div>
                         </div>
-                    @empty
-                        <p class="empty-state" style="padding:30px 10px;">No network balances yet.</p>
-                    @endforelse
+                    @endforeach
                 </div>
             </div>
         </div>
 
+        <div class="stat-grid">
+            <div class="stat-card" style="--stat-tint:var(--terracotta-100);--stat-fg:var(--terracotta-600);">
+                <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="m19 9-5 5-4-4-3 3"></path></svg></div></div>
+                <div class="stat-value">@money($todayStats['volume'])</div>
+                <div class="stat-label">Today's Volume</div>
+            </div>
+            <div class="stat-card" style="--stat-tint:var(--gold-100);--stat-fg:#8a6418;">
+                <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 12 2 2 4-4"></path><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div></div>
+                <div class="stat-value">@money($todayStats['commission'])</div>
+                <div class="stat-label">Commission Earned</div>
+            </div>
+            <div class="stat-card" style="--stat-tint:var(--acacia-100);--stat-fg:var(--acacia-600);">
+                <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg></div></div>
+                <div class="stat-value">{{ $todayStats['count'] }}</div>
+                <div class="stat-label">Today's Transactions</div>
+            </div>
+        </div>
+    @endif
+
+    @if ($isOpeningDone)
+    <div class="panel-grid">
         <div class="panel">
             <div class="panel-head">
                 <h3>Cash point details</h3>

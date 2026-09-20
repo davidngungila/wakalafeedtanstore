@@ -726,6 +726,19 @@
                     </div>
                 </div>
             </nav>
+            <div class="sb-footer">
+                <a href="{{ route('profile.index') }}" class="sb-user" style="text-decoration:none;">
+                    @if ($currentUser->avatarUrl())
+                        <div class="sb-avatar"><img src="{{ $currentUser->avatarUrl() }}" alt=""></div>
+                    @else
+                        <div class="sb-avatar {{ $currentUser->role === 'admin' ? 'gold' : '' }}">{{ $initials }}</div>
+                    @endif
+                    <div class="sb-user-text">
+                        <strong>{{ $currentUser->name }}</strong>
+                        <span>{{ ucfirst($currentUser->role) }}</span>
+                    </div>
+                </a>
+            </div>
         </aside>
 
         <!-- Main -->
@@ -797,7 +810,7 @@
                     </div>
                     <div class="tb-user-wrap">
                         <button type="button" class="tb-user" onclick="toggleUserMenu(this)" title="Account">
-                            @if ($currentUser->profile_photo_path)
+                            @if ($currentUser->avatarUrl())
                                 <div class="tb-user-avatar"><img src="{{ $currentUser->avatarUrl() }}" alt=""></div>
                             @else
                                 <div class="tb-user-avatar {{ $currentUser->role === 'admin' ? 'gold' : ($currentUser->role === 'supervisor' ? 'acacia' : '') }}">{{ $initials }}</div>

@@ -22,7 +22,7 @@
                     <input type="hidden" name="_method" value="PUT">
                     <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
                         <div id="avatarPreview" style="width:72px;height:72px;border-radius:50%;overflow:hidden;flex:none;background:var(--sand-100);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-weight:700;font-size:20px;border:2px solid var(--line);">
-                            @if ($user->profile_photo_path)
+                            @if ($user->avatarUrl())
                                 <img src="{{ $user->avatarUrl() }}" style="width:100%;height:100%;object-fit:cover;">
                             @else
                                 {{ strtoupper(substr($user->name, 0, 2)) }}
@@ -31,7 +31,7 @@
                         <div style="flex:1;min-width:0;">
                             <input type="file" name="avatar" id="avatarInput" accept="image/jpeg,image/png,image/webp,image/gif" style="font-size:13px;max-width:100%;">
                             <p style="margin:7px 0 0;font-size:12px;color:var(--ink-soft);">JPG, PNG, WebP or GIF up to 2&nbsp;MB. Leave empty to keep the current photo.</p>
-                            @if ($user->profile_photo_path)
+                            @if ($user->avatarUrl())
                                 <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--danger);margin-top:8px;cursor:pointer;">
                                     <input type="checkbox" name="remove_avatar" value="1" style="cursor:pointer;"> Remove current photo
                                 </label>

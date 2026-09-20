@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DailyOpening;
 use App\Models\Network;
+use App\Models\NetworkBalance;
 use App\Models\Transaction;
 use App\Services\TransactionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class TransactionController extends Controller
@@ -16,7 +19,7 @@ class TransactionController extends Controller
 
     public function index(Request $request): View
     {
-        $query = Transaction::with(['network', 'agent', 'operator']);
+        $query = Transaction::with(['network', 'agent', 'operator', 'dailyOpening']);
 
         if ($request->filled('status') && $request->input('status') !== 'all') {
             $query->where('status', $request->input('status'));
@@ -76,6 +79,29 @@ class TransactionController extends Controller
             return redirect()->route('cash-point.index')->with('error', $message);
         }
 
+        // Check if daily opening is recorded for today (only for cashiers)
+        if (is_cashier()) {
+            $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())->first();
+
+            if (! $todayOpening) {
+                $message = 'Record daily opening first before processing transactions.';
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 422);
+                }
+
+                return redirect()->route('daily-opening.create')->with('error', $message);
+            }
+
+            if ($todayOpening->is_closed) {
+                $message = 'Daily session is already closed. Cannot process transactions.';
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 422);
+                }
+
+                return back()->with('error', $message);
+            }
+        }
+
         $transaction = $this->transactions->process(
             [
                 'network_id' => $validated['network_id'],
@@ -87,6 +113,11 @@ class TransactionController extends Controller
             $agent,
             auth()->id(),
         );
+
+        // Associate with today's daily opening (if exists, e.g. for cashiers)
+        if ($todayOpening) {
+            $transaction->update(['daily_opening_id' => $todayOpening->id]);
+        }
 
         $this->recordAudit('Transaction processed', 'Transaction', $transaction->id, [
             'reference' => $transaction->reference,
@@ -128,6 +159,13 @@ class TransactionController extends Controller
                 $agent = $transaction->agent;
                 $agent->cash_balance = ((float) $agent->cash_balance) + $direction * $amount;
                 $agent->save();
+            }
+
+            if ($transaction->daily_opening_id) {
+                $opening = DailyOpening::find($transaction->daily_opening_id);
+                if ($opening) {
+                    $opening->reverseTransactionVolume($amount, (float) $transaction->commission);
+                }
             }
 
             $transaction->update([

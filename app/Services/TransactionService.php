@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Agent;
 use App\Models\CommissionRate;
+use App\Models\DailyOpening;
 use App\Models\NetworkBalance;
 use App\Models\Transaction;
 use Illuminate\Support\Facades\DB;
@@ -38,9 +39,13 @@ class TransactionService
             ['opening_balance' => 0, 'balance' => 0]
         );
 
+        $dailyOpening = DailyOpening::forAgentAndDate($agent->id, today())
+            ->open()
+            ->first();
+
         $reference = 'TXN-'.now()->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
 
-        return DB::transaction(function () use ($agent, $balance, $data, $commission, $fee, $reference, $performedBy, $providerReference, $notes) {
+        return DB::transaction(function () use ($agent, $balance, $data, $commission, $fee, $reference, $performedBy, $providerReference, $notes, $dailyOpening) {
             $adjustFloat = function (float $delta) use ($balance) {
                 $balance->balance += $delta;
                 $balance->save();
@@ -51,13 +56,17 @@ class TransactionService
                 default => $adjustFloat(-(float) $data['amount']),
             };
 
+            $cashDelta = 0;
+
             if (in_array($data['type'], ['deposit', 'withdrawal'], true)) {
                 $direction = $data['type'] === 'deposit' ? -1 : 1;
-                $agent->cash_balance = ((float) $agent->cash_balance) + $direction * (float) $data['amount'];
+                $cashDelta = $direction * (float) $data['amount'];
+                $agent->cash_balance = ((float) $agent->cash_balance) + $cashDelta;
                 $agent->save();
             }
 
             $txn = Transaction::create([
+                'daily_opening_id' => $dailyOpening?->id,
                 'reference' => $reference,
                 'agent_id' => $agent->id,
                 'network_id' => $data['network_id'],
@@ -71,7 +80,13 @@ class TransactionService
                 'provider_reference' => $providerReference ?? 'SR'.random_int(10000000, 99999999),
                 'performed_by' => $performedBy,
                 'notes' => $notes,
+                'running_cash_balance' => $agent->cash_balance,
+                'running_float_balance' => $agent->totalFloat(),
             ]);
+
+            if ($dailyOpening !== null) {
+                $dailyOpening->addTransactionVolume((float) $txn->amount, (float) $txn->commission);
+            }
 
             return $txn;
         });

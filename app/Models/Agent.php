@@ -87,4 +87,12 @@ class Agent extends Model
     {
         return (float) $this->balances()->sum('balance');
     }
+
+    /**
+     * @return HasMany<DailyOpening, $this>
+     */
+    public function dailyOpenings(): HasMany
+    {
+        return $this->hasMany(DailyOpening::class);
+    }
 }
