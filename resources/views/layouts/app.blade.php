@@ -465,6 +465,8 @@
             position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:60;
             background:var(--white);border:1.5px solid var(--line);border-radius:var(--radius-sm);
             box-shadow:var(--shadow-md);padding:8px;max-height:220px;overflow-y:auto;
+        }
+        .net-picker-menu:not([hidden]){
             display:flex;flex-direction:column;gap:2px;
         }
         .net-option{
