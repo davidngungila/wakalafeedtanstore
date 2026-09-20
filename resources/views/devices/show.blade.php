@@ -428,19 +428,8 @@
                     @method('PUT')
                     <div class="modal-body">
                         <div class="form-row">
-                            <div class="field">
-                                <label>Networks (access)</label>
-                                <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--white);">
-                                    @php $assignedIds = $device->networks->pluck('id')->toArray() ?: ($device->network_id ? [$device->network_id] : []); @endphp
-                                    @foreach ($networks ?? [] as $network)
-                                        <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;color:var(--coffee-700);cursor:pointer;">
-                                            <input type="checkbox" name="network_ids[]" value="{{ $network->id }}" {{ in_array($network->id, $assignedIds, true) ? 'checked' : '' }} style="accent-color:var(--terracotta-600);">
-                                            <span class="net-dot" style="background:{{ $network->color }};"></span>
-                                            {{ $network->name }}
-                                        </label>
-                                    @endforeach
-                                </div>
-                            </div>
+                            @php $assignedIds = $device->networks->pluck('id')->toArray() ?: ($device->network_id ? [$device->network_id] : []); @endphp
+                            @include('devices.partials.network-picker', ['networks' => $networks ?? [], 'selectedIds' => $assignedIds, 'pickerKey' => 'edit'])
                             <div class="field">
                                 <label>Device name</label>
                                 <input type="text" name="name" value="{{ $device->name }}" required>

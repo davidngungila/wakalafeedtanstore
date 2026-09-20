@@ -58,18 +58,7 @@
             <form id="wizardForm" data-device-form action="{{ route('devices.store') }}">
                 <div style="padding:18px 0 4px;">
                     <div class="form-row">
-                        <div class="field">
-                            <label>Networks (access)</label>
-                            <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--white);">
-                                @foreach ($networks as $network)
-                                    <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;color:var(--coffee-700);cursor:pointer;">
-                                        <input type="checkbox" name="network_ids[]" value="{{ $network->id }}" style="accent-color:var(--terracotta-600);">
-                                        <span class="net-dot" style="background:{{ $network->color }};"></span>
-                                        {{ $network->name }}
-                                    </label>
-                                @endforeach
-                            </div>
-                        </div>
+                        @include('devices.partials.network-picker', ['networks' => $networks, 'pickerKey' => 'reg'])
                         <div class="field">
                             <label>Device name</label>
                             <input type="text" name="name" placeholder="e.g. Samsung A15" required>
