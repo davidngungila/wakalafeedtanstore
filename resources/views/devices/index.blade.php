@@ -10,7 +10,7 @@
         </div>
         @if (is_admin())
             <div class="view-actions">
-                <button class="btn btn-primary" onclick="openModal('deviceModal')">+ Register device</button>
+                <a href="{{ route('devices.register') }}" class="btn btn-primary">+ Register device</a>
             </div>
         @endif
     </div>
@@ -127,73 +127,6 @@
     </div>
 
     @if (is_admin())
-        <!-- Register device modal -->
-        <div class="modal-backdrop" id="deviceModal">
-            <div class="modal">
-                <div class="modal-head">
-                    <h3>Register device</h3>
-                    <button class="modal-close" onclick="closeModal('deviceModal')">✕</button>
-                </div>
-                <form id="deviceForm" data-device-form action="{{ route('devices.store') }}">
-                    <div class="modal-body">
-                        <div class="form-row">
-                            <div class="field">
-                                <label>Device name</label>
-                                <input type="text" name="name" placeholder="e.g. Samsung A15" required>
-                            </div>
-                            <div class="field">
-                                <label>Networks (access)</label>
-                                <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--white);">
-                                    @foreach ($networks as $network)
-                                        <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;color:var(--coffee-700);cursor:pointer;">
-                                            <input type="checkbox" name="network_ids[]" value="{{ $network->id }}" style="accent-color:var(--terracotta-600);">
-                                            <span class="net-dot" style="background:{{ $network->color }};"></span>
-                                            {{ $network->name }}
-                                        </label>
-                                    @endforeach
-                                </div>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="field">
-                                <label>Phone number</label>
-                                <input type="text" name="phone_number" placeholder="0712345678">
-                            </div>
-                            <div class="field">
-                                <label>SIM number (ICCID)</label>
-                                <input type="text" name="sim_number" placeholder="SIM ICCID or label">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="field">
-                                <label>Branch</label>
-                                <input type="text" name="branch" placeholder="e.g. Moshi">
-                            </div>
-                            <div class="field">
-                                <label>Model</label>
-                                <input type="text" name="model" placeholder="e.g. SM-A156">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="field">
-                                <label>Android version</label>
-                                <input type="text" name="android_version" placeholder="e.g. 14">
-                            </div>
-                            <div class="field">
-                                <label>App version</label>
-                                <input type="text" name="app_version" placeholder="e.g. 1.0.1">
-                            </div>
-                        </div>
-                        <p style="font-size:12px;color:var(--ink-soft);margin:0;">The device starts as <b>Pending</b>. The device code is shown once — approve the device on the list to activate it.</p>
-                    </div>
-                    <div class="modal-foot">
-                        <button type="button" class="btn btn-ghost" onclick="closeModal('deviceModal')">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Register device</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-        
         <!-- Regenerate code confirmation popup -->
         <div class="modal-backdrop" id="regenerateCodeModal">
             <div class="popup">
@@ -228,14 +161,6 @@
         function copyText(value, label) {
             navigator.clipboard.writeText(value).then(() => toast(label, 'success'));
         }
-        document.querySelectorAll('[data-device-form]').forEach(form => {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                submitForm(form, {
-                    done: () => setTimeout(() => location.reload(), 600),
-                });
-            });
-        });
         bindRowClick('#devicesBody tr[data-id]', tr => {
             const st = tr.dataset.status.toLowerCase();
             const cls = st === 'active' ? 'tag-green' : (st === 'pending' ? 'tag-gold' : (st === 'offline' || st === 'revoked' ? 'tag-grey' : 'tag-red'));

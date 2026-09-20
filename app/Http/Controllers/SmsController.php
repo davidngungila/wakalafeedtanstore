@@ -42,26 +42,28 @@ class SmsController extends Controller
 
         $today = [
             'received' => (clone $todayBase)->count(),
-            'processed' => (clone $todayBase)->where('processing_status', 'processed')->count(),
-            'pending' => (clone $todayBase)->whereIn('processing_status', ['received', 'identified', 'parsed'])->count(),
-            'stored' => (clone $todayBase)->where('processing_status', 'failed')->where('processing_error', 'like', '%financial template%')->count(),
-            'failed' => (clone $todayBase)->where('processing_status', 'failed')->where(function ($q) {
+            'processed' => (clone $todayBase)->where('processing_status', 'RECORDED')->count(),
+            'pending' => (clone $todayBase)->whereIn('processing_status', ['RECEIVED', 'PARSED'])->count(),
+            'stored' => (clone $todayBase)->whereIn('processing_status', ['NEEDS_REVIEW', 'FAILED'])
+                ->where('processing_error', 'like', '%financial template%')->count(),
+            'failed' => (clone $todayBase)->where('processing_status', 'FAILED')->where(function ($q) {
                 $q->whereNull('processing_error')
                     ->orWhere('processing_error', 'not like', '%financial template%');
             })->count(),
-            'duplicates' => (clone $todayBase)->where('is_duplicate', true)->count(),
+            'duplicates' => (clone $todayBase)->where(fn ($q) => $q->where('is_duplicate', true)->orWhere('processing_status', 'DUPLICATE'))->count(),
         ];
 
         $counts = [
             'all' => SmsMessage::count(),
-            'processed' => SmsMessage::where('processing_status', 'processed')->count(),
-            'pending' => SmsMessage::whereIn('processing_status', ['received', 'identified', 'parsed'])->count(),
-            'stored' => SmsMessage::where('processing_status', 'failed')->where('processing_error', 'like', '%financial template%')->count(),
-            'failed' => SmsMessage::where('processing_status', 'failed')->where(function ($q) {
+            'processed' => SmsMessage::where('processing_status', 'RECORDED')->count(),
+            'pending' => SmsMessage::whereIn('processing_status', ['RECEIVED', 'PARSED'])->count(),
+            'stored' => SmsMessage::whereIn('processing_status', ['NEEDS_REVIEW', 'FAILED'])
+                ->where('processing_error', 'like', '%financial template%')->count(),
+            'failed' => SmsMessage::where('processing_status', 'FAILED')->where(function ($q) {
                 $q->whereNull('processing_error')
                     ->orWhere('processing_error', 'not like', '%financial template%');
             })->count(),
-            'duplicate' => SmsMessage::where('is_duplicate', true)->count(),
+            'duplicate' => SmsMessage::where(fn ($q) => $q->where('is_duplicate', true)->orWhere('processing_status', 'DUPLICATE'))->count(),
         ];
 
         return view('sms.index', [
@@ -82,24 +84,24 @@ class SmsController extends Controller
     {
         switch ($status) {
             case 'processed':
-                $query->where('processing_status', 'processed');
+                $query->where('processing_status', 'RECORDED');
                 break;
             case 'pending':
-                $query->whereIn('processing_status', ['received', 'identified', 'parsed']);
+                $query->whereIn('processing_status', ['RECEIVED', 'PARSED']);
                 break;
             case 'stored':
-                $query->where('processing_status', 'failed')
+                $query->whereIn('processing_status', ['NEEDS_REVIEW', 'FAILED'])
                     ->where('processing_error', 'like', '%financial template%');
                 break;
             case 'failed':
-                $query->where('processing_status', 'failed')
+                $query->where('processing_status', 'FAILED')
                     ->where(function ($q) {
                         $q->whereNull('processing_error')
                             ->orWhere('processing_error', 'not like', '%financial template%');
                     });
                 break;
             case 'duplicate':
-                $query->where('is_duplicate', true);
+                $query->where(fn ($q) => $q->where('is_duplicate', true)->orWhere('processing_status', 'DUPLICATE'));
                 break;
             default:
                 break;

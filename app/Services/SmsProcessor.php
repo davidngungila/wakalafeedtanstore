@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Agent;
 use App\Models\Device;
 use App\Models\SmsMessage;
+use App\Models\Transaction;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -12,6 +13,11 @@ use Illuminate\Support\Facades\DB;
  * The automatic ingestion pipeline: a connected Android device pushes an SMS
  * batch and each message is identified, parsed, de-duplicated, validated and
  * finally turned into a transaction with matching float/cash adjustments.
+ *
+ * Duplicate protection has two layers:
+ *   1. SMS-level: sha256(sender | body | received_at) unique per device.
+ *   2. Transaction-level: an existing transaction for the same provider
+ *      (network) + provider reference is never recorded twice.
  */
 class SmsProcessor
 {
@@ -27,6 +33,13 @@ class SmsProcessor
     public function ingest(Device $device, array $items): array
     {
         $agent = $device->agent ?? cash_point();
+
+        if ($agent === null) {
+            return array_map(
+                fn () => ['ok' => false, 'error' => 'Cash point not configured. An admin must set up the cash point in Settings before SMS can be recorded.'],
+                $items,
+            );
+        }
 
         $results = [];
         foreach ($items as $item) {
@@ -53,7 +66,8 @@ class SmsProcessor
             return ['ok' => false, 'error' => 'Empty message body.'];
         }
 
-        $hash = hash('sha256', $body);
+        $receivedAt = $this->normalizeReceivedAt($item['received_at'] ?? null);
+        $hash = hash('sha256', $sender.'|'.$body.'|'.($receivedAt?->format('Y-m-d H:i:s') ?? ''));
 
         $duplicate = SmsMessage::query()
             ->where('device_id', $device->id)
@@ -76,6 +90,7 @@ class SmsProcessor
 
         $fallbackNetwork = $line?->network ?? $device->assignedNetworks()->first();
 
+        $provider = $this->parser->identifyProvider($sender);
         $network = $this->parser->identifyNetwork($sender, $fallbackNetwork);
 
         $sms = SmsMessage::create([
@@ -85,17 +100,18 @@ class SmsProcessor
             'agent_id' => $agent->id,
             'network_id' => $network?->id,
             'sender' => $sender,
+            'provider' => $provider,
             'message_body' => $body,
-            'received_at' => $this->normalizeReceivedAt($item['received_at'] ?? null),
+            'received_at' => $receivedAt,
             'sms_hash' => $hash,
-            'processing_status' => $network ? 'identified' : 'received',
+            'processing_status' => 'RECEIVED',
             'server_received_at' => now(),
         ]);
 
-        $parsed = $this->parser->parse($body);
+        $parsed = $this->parser->parse($body, $provider);
 
         $sms->update([
-            'processing_status' => 'parsed',
+            'processing_status' => 'PARSED',
             'transaction_reference' => $parsed['reference'] !== '' ? $parsed['reference'] : null,
             'amount' => $parsed['amount'] > 0 ? $parsed['amount'] : null,
             'transaction_type' => $parsed['type'] !== '' ? $parsed['type'] : null,
@@ -106,7 +122,7 @@ class SmsProcessor
 
         if ($network === null) {
             $sms->update([
-                'processing_status' => 'failed',
+                'processing_status' => 'FAILED',
                 'processing_error' => 'Device has no network assigned.',
             ]);
 
@@ -115,11 +131,32 @@ class SmsProcessor
 
         if ($parsed['reference'] === '' || $parsed['amount'] <= 0) {
             $sms->update([
-                'processing_status' => 'failed',
+                'processing_status' => 'NEEDS_REVIEW',
                 'processing_error' => 'SMS did not match any financial template.',
             ]);
 
             return ['ok' => false, 'ignored_sender' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
+        }
+
+        $alreadyRecorded = Transaction::query()
+            ->where('network_id', $network->id)
+            ->where('provider_reference', $parsed['reference'])
+            ->exists();
+
+        if ($alreadyRecorded) {
+            $sms->update([
+                'is_duplicate' => true,
+                'processing_status' => 'DUPLICATE',
+                'processing_error' => 'Duplicate transaction reference already recorded.',
+            ]);
+
+            return [
+                'ok' => false,
+                'duplicate' => true,
+                'sms_id' => $sms->id,
+                'reference' => $parsed['reference'],
+                'error' => $sms->processing_error,
+            ];
         }
 
         $transaction = $this->transactions->process(
@@ -137,7 +174,7 @@ class SmsProcessor
         );
 
         $sms->update([
-            'processing_status' => 'processed',
+            'processing_status' => 'RECORDED',
             'processing_error' => null,
             'transaction_id' => $transaction->id,
             'received_at' => $parsed['received_at'] ?? $sms->received_at,

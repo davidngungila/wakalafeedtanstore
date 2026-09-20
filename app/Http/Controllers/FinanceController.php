@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Network;
 use App\Models\Transaction;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\View\View;
@@ -24,8 +25,12 @@ class FinanceController extends Controller
 
     private const TABS = ['pnl', 'network', 'type', 'settlement'];
 
-    public function __invoke(Request $request): View|StreamedResponse
+    public function __invoke(Request $request): View|RedirectResponse|StreamedResponse
     {
+        if (cash_point() === null) {
+            return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before viewing finance.');
+        }
+
         $range = $request->string('range', 'month')->toString();
 
         if (! in_array($range, array_keys(self::RANGES), true)) {

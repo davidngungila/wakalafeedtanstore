@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\Agent;
 use App\Models\AuditLog;
 use App\Models\CommissionRate;
 use App\Models\FloatTransaction;
@@ -18,24 +17,19 @@ use Illuminate\Support\Facades\Hash;
 class DatabaseSeeder extends Seeder
 {
     /**
-     * The cash-point agent we actually operate (a single wakala).
-     */
-    private int $agentOneId;
-
-    /**
      * Seed the application with the absolute minimum it needs to run: the
-     * business settings, the networks we transact on, the single cash-point
-     * agent, and the staff accounts. Everything else (transactions, float,
-     * reconciliations, audit trail, commission configurations) is intentionally
-     * left empty and reset whenever this seeder runs, so this is a single
-     * source of truth for "how a brand-new deployment looks".
+     * business settings, the networks we transact on, and the staff accounts.
+     * The cash point agent itself is intentionally NOT seeded — an admin sets
+     * it up after logging in, via Settings → Cash Point. Everything else
+     * (transactions, float, reconciliations, audit trail, commission
+     * configurations) is intentionally left empty and reset whenever this
+     * seeder runs, so this is a single source of truth for "how a brand-new
+     * deployment looks".
      */
     public function run(): void
     {
         $this->resetOperationalData();
         $this->seedNetworks();
-        $this->agentOneId = $this->seedCashPoint()->id;
-        $this->pruneOtherAgents();
         $this->seedUsers();
         $this->seedSettings();
         $this->call(ChartOfAccountsSeeder::class);
@@ -74,20 +68,6 @@ class DatabaseSeeder extends Seeder
         }
     }
 
-    private function seedCashPoint(): Agent
-    {
-        return Agent::defaultCashPoint();
-    }
-
-    /**
-     * The demo installer used to ship DMN-001..006 placeholders. Production
-     * should only ever have DMN-001 (the one cash point).
-     */
-    private function pruneOtherAgents(): void
-    {
-        Agent::where('code', '!=', 'DMN-001')->where('code', 'like', 'DMN-%')->delete();
-    }
-
     private function seedUsers(): void
     {
         $users = [
@@ -110,14 +90,14 @@ class DatabaseSeeder extends Seeder
                 'email' => 'cashier@moneyagent.local',
                 'phone' => '0712345678',
                 'role' => 'cashier',
-                'agent_id' => $this->agentOneId,
+                'agent_id' => null,
             ],
             [
                 'name' => 'Neema Kimaro',
                 'email' => 'neema@moneyagent.local',
                 'phone' => '0722123456',
                 'role' => 'cashier',
-                'agent_id' => $this->agentOneId,
+                'agent_id' => null,
             ],
         ];
 

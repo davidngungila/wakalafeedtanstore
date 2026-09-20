@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Agent;
 use App\Models\Device;
 use App\Models\DeviceLine;
 use App\Models\Network;
@@ -41,7 +42,7 @@ class DeviceModuleTest extends TestCase
     {
         return Device::create([
             'name' => 'Redmi Note 12',
-            'agent_id' => cash_point()->id,
+            'agent_id' => $this->cashPoint()->id,
             'network_id' => Network::firstOrFail()->id,
             'device_code' => Device::generateDeviceCode(),
             'status' => $status,
@@ -68,8 +69,91 @@ class DeviceModuleTest extends TestCase
         $this->actingAs($this->cashier())->get(route('devices.index'))->assertForbidden();
     }
 
+    public function test_admin_can_open_the_register_wizard(): void
+    {
+        $this->cashPoint();
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.register'))
+            ->assertOk()
+            ->assertSee('Register device')
+            ->assertSee('Connect the phone')
+            ->assertSee('Authorize the device')
+            ->assertSee('Continue to connect');
+    }
+
+    public function test_supervisor_cannot_open_the_register_wizard(): void
+    {
+        $this->actingAs($this->supervisor())
+            ->get(route('devices.register'))
+            ->assertForbidden();
+    }
+
+    public function test_register_wizard_requires_a_cash_point_first(): void
+    {
+        Agent::query()->delete();
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.register'))
+            ->assertRedirect(route('cash-point.index'));
+    }
+
+    public function test_register_wizard_can_resume_a_pending_device(): void
+    {
+        $device = $this->makeDevice();
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.register', ['device' => $device->getRouteKey()]))
+            ->assertOk()
+            ->assertSee('Resuming registration')
+            ->assertSee($device->name);
+    }
+
+    public function test_connect_status_reports_waiting_until_a_phone_pairs(): void
+    {
+        $device = $this->makeDevice();
+
+        $response = $this->actingAs($this->admin())
+            ->getJson(route('devices.connect-status', $device));
+
+        $response->assertOk()
+            ->assertJson(['connected' => false, 'phone' => null]);
+
+        $device->phones()->create([
+            'device_uid' => 'G0A3F9B2C4',
+            'model' => 'SM-A156',
+            'android_version' => '14',
+            'app_version' => '1.0.1',
+            'first_seen_at' => now(),
+            'last_seen_at' => now(),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->getJson(route('devices.connect-status', $device))
+            ->assertOk()
+            ->assertJson([
+                'connected' => true,
+                'phone' => [
+                    'device_uid' => 'G0A3F9B2C4',
+                    'model' => 'SM-A156',
+                    'android_version' => '14',
+                    'app_version' => '1.0.1',
+                ],
+            ]);
+    }
+
+    public function test_connect_status_is_denied_to_cashiers(): void
+    {
+        $device = $this->makeDevice();
+
+        $this->actingAs($this->cashier())
+            ->getJson(route('devices.connect-status', $device))
+            ->assertForbidden();
+    }
+
     public function test_admin_can_register_a_device_and_it_starts_pending(): void
     {
+        $this->cashPoint();
         $network = Network::firstOrFail();
 
         $response = $this->actingAs($this->admin())
@@ -216,6 +300,7 @@ class DeviceModuleTest extends TestCase
 
     public function test_admin_can_register_a_device_with_multiple_networks(): void
     {
+        $this->cashPoint();
         $networks = Network::orderBy('id')->take(2)->get();
 
         $response = $this->actingAs($this->admin())
@@ -243,7 +328,7 @@ class DeviceModuleTest extends TestCase
         $network = Network::firstOrFail();
         Transaction::create([
             'reference' => 'NETTXN-'.$network->id,
-            'agent_id' => cash_point()->id,
+            'agent_id' => $this->cashPoint()->id,
             'network_id' => $network->id,
             'type' => 'deposit',
             'customer_name' => 'Asha Omari',
@@ -381,7 +466,7 @@ class DeviceModuleTest extends TestCase
 
         $txn = Transaction::create([
             'reference' => 'DEV-TXN-'.$device->id,
-            'agent_id' => cash_point()->id,
+            'agent_id' => $this->cashPoint()->id,
             'network_id' => $network->id,
             'type' => 'deposit',
             'customer_name' => 'Neema Petro',
@@ -402,7 +487,7 @@ class DeviceModuleTest extends TestCase
             'received_at' => now(),
             'sms_hash' => hash('sha256', 'dev-txn-tab'),
             'transaction_reference' => 'DEV-TXN-'.$device->id,
-            'processing_status' => 'processed',
+            'processing_status' => 'RECORDED',
             'server_received_at' => now(),
         ]);
 

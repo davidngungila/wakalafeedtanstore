@@ -23,6 +23,11 @@ class TransactionService
         ?string $providerReference = null,
     ): Transaction {
         $agent ??= cash_point();
+
+        if ($agent === null) {
+            throw new \LogicException('The cash point has not been set up. Configure it in Settings → Cash Point first.');
+        }
+
         $rate = $this->commissionFor($agent, $data['network_id'], $data['type'], (float) $data['amount']);
 
         $commission = round((float) $data['amount'] * $rate / 100, 2);

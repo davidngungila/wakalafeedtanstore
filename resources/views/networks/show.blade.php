@@ -148,7 +148,7 @@
                                 <tr>
                                     <td class="cell-sub">{{ $message->server_received_at->format('H:i:s · d M Y') }}</td>
                                     <td>
-                                        <a href="{{ route('devices.show', $message->device_id) }}" class="cell-title">{{ $message->device?->name ?? '—' }}</a>
+                                        <a href="{{ route('devices.show', $message->device) }}" class="cell-title">{{ $message->device?->name ?? '—' }}</a>
                                     </td>
                                     <td>{{ $message->sender }}</td>
                                     <td>{{ $message->transaction_type ? txn_type_label($message->transaction_type) : '—' }}</td>

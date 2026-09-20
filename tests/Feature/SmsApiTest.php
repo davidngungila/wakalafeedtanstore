@@ -25,7 +25,7 @@ class SmsApiTest extends TestCase
     {
         return Device::create([
             'name' => 'Flutter Phone',
-            'agent_id' => cash_point()->id,
+            'agent_id' => $this->cashPoint()->id,
             'network_id' => $network?->id ?? Network::firstOrFail()->id,
             'device_code' => Device::generateDeviceCode(),
             'status' => $status,
@@ -208,7 +208,7 @@ class SmsApiTest extends TestCase
 
         $response = $this->withHeaders($this->deviceHeaders($device))
             ->postJson('/api/v1/sms/ingest', [
-                'sms' => [['sender' => 'TIGO PESA', 'message' => 'TIGO0001 confirmed. You have received TZS 5,000.00 from TANA OMARI 0722333444.']],
+                'sms' => [['sender' => 'TATU BANK', 'message' => 'P1234 confirmed. You have received TZS 5,000.00 from TANA OMARI 0722333444.']],
             ])
             ->assertOk();
 
@@ -218,8 +218,9 @@ class SmsApiTest extends TestCase
         $this->assertArrayNotHasKey('ignored_sender', $response->json('results.0'));
 
         $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
-        $this->assertSame('processed', $sms->processing_status);
-        $this->assertSame('TIGO PESA', $sms->sender);
+        $this->assertSame('RECORDED', $sms->processing_status);
+        $this->assertSame('TATU BANK', $sms->sender);
+        $this->assertSame('bank', $sms->provider);
         $this->assertSame('VODACOM', $sms->network?->code);
         $this->assertNotNull($sms->transaction_id);
         $this->assertSame(1, Transaction::count());
@@ -242,7 +243,7 @@ class SmsApiTest extends TestCase
         $this->assertDatabaseHas('sms_messages', [
             'device_id' => $device->id,
             'sender' => 'TATU BANK',
-            'processing_status' => 'failed',
+            'processing_status' => 'NEEDS_REVIEW',
         ]);
         $this->assertSame(0, Transaction::count());
     }
@@ -281,7 +282,7 @@ class SmsApiTest extends TestCase
         $this->assertSame(1, $response->json('summary.processed'));
 
         $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
-        $this->assertSame('processed', $sms->processing_status);
+        $this->assertSame('RECORDED', $sms->processing_status);
         $this->assertSame('deposit', $sms->transaction_type);
         $this->assertSame(100_000.0, (float) $sms->amount);
         $this->assertSame('JUMA ATHUMANI', $sms->customer_name);
@@ -309,6 +310,59 @@ class SmsApiTest extends TestCase
         $this->withHeaders($this->deviceHeaders($device))->postJson('/api/v1/sms/ingest', $payload)->assertOk();
 
         $this->assertSame(1, SmsMessage::where('device_id', $device->id)->count());
+    }
+
+    public function test_tigo_swahili_message_is_parsed_by_the_tigo_parser(): void
+    {
+        $device = $this->makeDevice('active', Network::where('code', 'TIGOPESA')->first());
+
+        $response = $this->withHeaders($this->deviceHeaders($device))
+            ->postJson('/api/v1/sms/ingest', [
+                'sms' => [[
+                    'sender' => 'TIGO PESA',
+                    'message' => 'Tigo Pesa: Umepokea TZS 50,000 kutoka kwa JOHN DOE 0712345678. Transaction ID: MP250920ABC123. Salio lako ni TZS 350,000.',
+                ]],
+            ])
+            ->assertOk();
+
+        $this->assertSame(1, $response->json('summary.processed'));
+
+        $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
+        $this->assertSame('tigo', $sms->provider);
+        $this->assertSame('TIGOPESA', $sms->network?->code);
+        $this->assertSame('RECORDED', $sms->processing_status);
+        $this->assertSame('deposit', $sms->transaction_type);
+        $this->assertSame('MP250920ABC123', $sms->transaction_reference);
+        $this->assertSame(50_000.0, (float) $sms->amount);
+        $this->assertSame('JOHN DOE', $sms->customer_name);
+        $this->assertSame('0712345678', $sms->customer_phone);
+        $this->assertSame(350_000.0, (float) $sms->balance);
+        $this->assertSame(1, Transaction::count());
+    }
+
+    public function test_same_provider_reference_is_only_recorded_once_across_devices(): void
+    {
+        $network = Network::where('code', 'VODACOM')->first();
+        $first = $this->makeDevice('active', $network);
+        $second = $this->makeDevice('active', $network);
+
+        $bodyA = 'P98765 confirmed. You have received TZS 100,000.00 from JUMA ATHUMANI 0712345678.';
+        $bodyB = 'P98765 confirmed. You have received TZS 100,000.00 from JUMA ATHUMANI 0712345678 today.';
+
+        $this->withHeaders($this->deviceHeaders($first))
+            ->postJson('/api/v1/sms/ingest', ['sms' => [['sender' => 'MPESA', 'message' => $bodyA]]])
+            ->assertOk();
+
+        $response = $this->withHeaders($this->deviceHeaders($second))
+            ->postJson('/api/v1/sms/ingest', ['sms' => [['sender' => 'MPESA', 'message' => $bodyB]]])
+            ->assertOk();
+
+        $this->assertTrue($response->json('results.0.duplicate'));
+        $this->assertSame(1, Transaction::count());
+
+        $duplicate = SmsMessage::where('device_id', $second->id)->firstOrFail();
+        $this->assertTrue($duplicate->is_duplicate);
+        $this->assertSame('DUPLICATE', $duplicate->processing_status);
     }
 
     public function test_cashiers_and_staff_cannot_touch_device_api(): void

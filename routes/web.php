@@ -87,6 +87,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
 
         Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
+        Route::get('/devices/register', [DeviceController::class, 'register'])->name('devices.register');
         Route::get('/devices/{device}', [DeviceController::class, 'show'])->name('devices.show');
         Route::get('/devices/{device}/phones/status', [DeviceController::class, 'phonesStatus'])->name('devices.phones.status');
         Route::post('/devices/{device}/approve', [DeviceController::class, 'approve'])->name('devices.approve');
@@ -121,6 +122,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/devices', [DeviceController::class, 'store'])->name('devices.store');
         Route::put('/devices/{device}', [DeviceController::class, 'update'])->name('devices.update');
         Route::post('/devices/{device}/code', [DeviceController::class, 'regenerateCode'])->name('devices.code');
+        Route::get('/devices/{device}/connect-status', [DeviceController::class, 'connectStatus'])->name('devices.connect-status');
         Route::post('/devices/{device}/lines', [DeviceController::class, 'storeLine'])->name('devices.lines.store');
         Route::delete('/devices/{device}/lines/{line}', [DeviceController::class, 'destroyLine'])->name('devices.lines.destroy');
         Route::delete('/devices/{device}', [DeviceController::class, 'destroy'])->name('devices.destroy');

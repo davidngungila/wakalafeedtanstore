@@ -13,9 +13,13 @@ use Illuminate\View\View;
 
 class FloatController extends Controller
 {
-    public function index(): View
+    public function index(): View|RedirectResponse
     {
         $cashPoint = cash_point();
+
+        if ($cashPoint === null) {
+            return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before managing float.');
+        }
 
         $balances = $cashPoint->balances()->with('network')->orderBy('network_id')->get();
 
@@ -47,6 +51,16 @@ class FloatController extends Controller
         ]);
 
         $agent = cash_point();
+
+        if ($agent === null) {
+            $message = 'Set up the cash point first before managing float.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return redirect()->route('cash-point.index')->with('error', $message);
+        }
+
         $balance = NetworkBalance::firstOrCreate(
             ['agent_id' => $agent->id, 'network_id' => $validated['network_id']],
             ['opening_balance' => 0, 'balance' => 0]

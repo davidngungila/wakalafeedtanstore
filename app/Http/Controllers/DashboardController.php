@@ -14,7 +14,8 @@ class DashboardController extends Controller
     {
         $today = today();
 
-        $cashAvailable = cash_point()->cash_balance;
+        $cashPoint = cash_point();
+        $cashAvailable = $cashPoint?->cash_balance;
         $floatAvailable = NetworkBalance::sum('balance');
 
         $todayDeposits = Transaction::whereDate('created_at', $today)->where('type', 'deposit')->where('status', 'completed')->sum('amount');
@@ -81,6 +82,7 @@ class DashboardController extends Controller
         ]);
 
         return view('dashboard.index', compact(
+            'cashPoint',
             'cashAvailable',
             'floatAvailable',
             'todayDeposits',

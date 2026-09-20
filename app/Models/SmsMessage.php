@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'network_id',
     'transaction_id',
     'sender',
+    'provider',
     'message_body',
     'received_at',
     'sms_hash',

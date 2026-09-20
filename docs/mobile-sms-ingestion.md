@@ -104,23 +104,40 @@ subscription id; the server then attributes the SMS to the right line and networ
 
 **Onboarding flow**
 
-1. On the web app, an admin registers the phone and receives one credential
-   (shown **once**, never retrievable again): the **device code** — short,
-   human-friendly, 6 chars (e.g. `F7KQ2M`).
-2. On the phone, the operator **scans the QR code** shown under the device's
-   "Connect phone" button, or types the code manually.
-3. The QR encodes a deep link the app parses to get the device code **and** the
-   server host:
+Registration is a **three-step wizard** on the web app
+(`/devices/register`, reached from the "+ Register device" button):
 
-   ```
-   mobicontrol://connect?code=F7KQ2M&host=https%3A%2F%2Fwakala.feedtanstore.com
-   ```
+1. **Details** — the admin enters the phone's name, networks, number / SIM /
+   branch. The device is created as `pending` with its device code. The
+   technical details (model, Android & app versions) are **not** entered here:
+   the phone reports them itself when it connects.
+2. **Connect** — the wizard shows the device's QR code and its 6-character
+   **device code**. The phone **must** connect using this code before it can be
+   authorized:
+   - The operator opens the **MobiControl** app and taps **Scan QR** (or types
+     the code manually).
+   - The QR encodes a deep link the app parses to get the device code **and**
+     the server host:
 
-   The app should register the `mobicontrol` URI scheme, read `code` and `host`,
-   store both (the code in secure storage, §8), and prefill the pairing screen.
-4. The app calls `POST /devices/bootstrap` to pair and report handset info.
-5. The admin approves the device on the dashboard → `active`.
-6. The app starts ingesting.
+     ```
+     mobicontrol://connect?code=F7KQ2M&host=https%3A%2F%2Fwakala.feedtanstore.com
+     ```
+
+     The app should register the `mobicontrol` URI scheme, read `code` and `host`,
+     store both (the code in secure storage, §8), and prefill the pairing screen.
+   - The app calls `POST /devices/bootstrap` to pair and report handset info.
+     The wizard polls `GET /devices/{device}/connect-status` and, the moment a
+     phone pairs, shows the handset's **real** model / manufacturer name and
+     Android / app version in the next step.
+3. **Authorize** — the wizard shows the details the app reported about the
+   physical phone (model, device UID, Android & app version, IP, last seen).
+   The admin clicks **Authorize & activate** → the device becomes `active` and
+   the phone starts ingesting SMS.
+
+The device code is shown **once** (the credential is never retrievable again).
+If an admin leaves the wizard mid-way, they can resume with
+`/devices/register?device=<encrypted-id>` and the wizard picks up at the
+correct step (connect, or authorize once the phone has paired).
 
 The app must handle the `pending` state gracefully: poll `GET /devices/me`
 (and/or heartbeat) until `status == active`, and only then start sending SMS.
@@ -812,7 +829,7 @@ Android minimum config:
 | Network timeout / connection                | Exception                | Keep queue, exponential backoff, heartbeat deferred                |
 | `results[i].ok:false, duplicate:true`       | 200                      | Drop item (already known)                                          |
 | `results[i].ok:false` — "Device has no network assigned." | 200      | Keep item, log; admin must assign a network to the device         |
-| `results[i].ok:false` — "SMS did not match any financial template." | 200 | Drop item, log; wording not covered by `config('sms.templates')` |
+| `results[i].ok:false` — "SMS did not match any financial template." | 200 | Drop item, log; wording not covered by the provider parsers |
 | Server 5xx / 429                            | 5xx                      | Backoff, never clear queue                                         |
 
 Batch safety rule: **an item is removed only when the server acknowledges it**
@@ -823,13 +840,15 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 ## 10. Testing / QA checklist
 
 - [ ] Fresh install → pairing (code entry) → bootstrap shows `pending` → no upload until approved.
-- [ ] **QR pairing:** tap "Connect phone" on a device → scan the QR with the app's "Scan QR" → app captures the `code` and `host`, pre-fills pairing, bootstrap succeeds.
+- [ ] **Registration wizard:** "/devices/register" → Step 1 details → Step 2 shows QR/code and waits → scan the QR with the app's "Scan QR" → the wizard detects the phone and shows its real model (Step 3) → Authorize & activate → device `active`.
+- [ ] **QR pairing (existing path):** tap "Connect phone" on a device → scan the QR with the app's "Scan QR" → app captures the `code` and `host`, pre-fills pairing, bootstrap succeeds. Resuming an in-flight registration via `/devices/register?device=…` picks up at the correct step.
 - [ ] Approval on dashboard → app flips to `Active` (≤ next heartbeat) → first SMS uploads and appears on `/sms` and `/transactions`.
 - [ ] Send 600+ SMS in a burst → chunks of ≤ 500 are sent, all recorded, no loss.
 - [ ] Kill the app (swipe) → SMS still captured & uploaded via WorkManager watchdog.
 - [ ] Reboot → `BootReceiver` restarts service; device returns online.
 - [ ] Turn off Wi-Fi/data → queue grows; re-enable → drains with **no duplicates** created.
 - [ ] Resend the same SMS body → `duplicate` result, transaction count unchanged.
+- [ ] Two phones on the same network upload the same M-Pesa SMS (same provider reference) → only **one** transaction is recorded; the second upload returns `duplicate:true`.
 - [ ] Unknown sender (e.g. bank OTP) → captured, uploaded and stored; no transaction unless it matches a financial template.
 - [ ] Revoke device → next API call returns 403 → code cleared, pairing screen shown.
 - [ ] Battery saver / Doze after 30 min idle → device still heartbeat within 10 min of going offline? (Use the visual **offline** check.) Then run the OEM auto-start fix.
@@ -851,10 +870,10 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 | SMS captured but never uploaded  | Queue stuck / no connectivity                     | Check Ingest log & error; connectivity |
 | "Device has no network assigned." in ingest results | Device has no networks assigned | Assign at least one network in the admin screens |
 | Dual-SIM SMS attributed to the **wrong** network | App sent no `sim_slot`/`subscription_id`, or the server's line map doesn't match the phone | Send the subscription id with each SMS; verify the device's SIM lines config matches the phone's actual slots |
-| Unknown sender stored, no transaction | Sender not a known keyword and message not a financial template | Expected with `capture_all`; extend `config('sms.templates')` if it should parse |
+| Unknown sender stored, no transaction | Sender not a known keyword and message not a financial template | Expected with `capture_all`; extend the provider parsers if it should parse |
 | App dead after reboot            | Auto-start disabled on OEM ROM                          | Enable manufacturer auto-start; confirm `BootReceiver` registered |
 | Duplicate transactions           | Items re-sent after a successful upload but before removal | Check the queue removes on `ok:true`; server dedupe is authoritative and hash-based |
-| "SMS did not match any financial template." | Template doesn't cover this bank's phrasing   | Extend `config('sms.templates')` (backend)                      |
+| "SMS did not match any financial template." | Template doesn't cover this bank's phrasing   | Extend the provider parser for that sender (backend)             |
 
 ---
 
@@ -862,8 +881,14 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 
 - `config/sms.php` → `senders` map (keyword ⇒ network code) is a best-effort
   hint for network attribution. Every SMS is accepted; when no keyword matches,
-  the message is attributed to the device's first assigned network. `templates`
-  drives parsing; `offline_after_minutes => 10` drives the offline label.
+  the message is attributed to the device's first assigned network.
+  `providers` routes a sender to its provider parser; `offline_after_minutes
+  => 10` drives the offline label.
+- Parsing is handled by **provider-specific parsers** in
+  `app/Services/Parsers/` (`mpesa`, `airtel`, `tigo`, `halopesa`, `mixx`,
+  `bank`, `generic`). The sender keyword picks the parser; unknown senders fall
+  back to the generic parser, so no single SMS format is load-bearing. A
+  provider that changes its format is fixed inside its own parser class.
 - Device ↔ networks is a **many-to-many** relationship (`device_network`
   pivot). A device with **no** assigned network cannot process SMS — every
   message returns `Device has no network assigned.` Assign networks in the
@@ -878,3 +903,10 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
   `ip`, `first_seen_at`, `last_seen_at`. The device page reads from here for the
   **Connected phones** panel and LEDs; `GET /devices/{device}/phones/status`
   feeds the 15-second live refresh.
+- SMS lifecycle statuses (column `processing_status`) follow the spec
+  vocabulary: `RECEIVED` → `PARSED` → `RECORDED`, plus `NEEDS_REVIEW` (captured
+  but no financial template match), `FAILED` (real errors), and `DUPLICATE`.
+  Duplicate protection is two-layered: `sms_hash = sha256(sender | body |
+  received_at)` unique per device, plus a unique index on
+  `(network_id, provider_reference)` so the same provider transaction is never
+  recorded twice, even when it arrives from a second phone.

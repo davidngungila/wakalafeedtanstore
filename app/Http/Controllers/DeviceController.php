@@ -10,6 +10,7 @@ use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -42,9 +43,9 @@ class DeviceController extends Controller
             ->map(function ($rows) {
                 return [
                     'received' => (int) $rows->sum('total'),
-                    'processed' => (int) $rows->where('processing_status', 'processed')->sum('total'),
-                    'failed' => (int) $rows->where('processing_status', 'failed')->sum('total'),
-                    'pending' => (int) $rows->whereIn('processing_status', ['received', 'identified', 'parsed'])->sum('total'),
+                    'processed' => (int) $rows->where('processing_status', 'RECORDED')->sum('total'),
+                    'failed' => (int) $rows->where('processing_status', 'FAILED')->sum('total'),
+                    'pending' => (int) $rows->whereIn('processing_status', ['RECEIVED', 'PARSED', 'NEEDS_REVIEW', 'DUPLICATE'])->sum('total'),
                 ];
             });
 
@@ -106,6 +107,77 @@ class DeviceController extends Controller
         return response()->json(['phones' => $phones]);
     }
 
+    /**
+     * Step-by-step registration wizard. Starts on the details step, then walks
+     * through connecting the phone (QR / device code) and authorizing it. An
+     * in-flight registration can be resumed with ?device=<encrypted id>.
+     */
+    public function register(Request $request): View|RedirectResponse
+    {
+        abort_unless(is_admin(), 403);
+
+        if (cash_point() === null) {
+            return redirect()->route('cash-point.index')
+                ->with('error', 'Set up the cash point first before registering devices.');
+        }
+
+        $device = null;
+        if ($request->filled('device')) {
+            try {
+                $device = Device::find((int) Crypt::decryptString($request->query('device')));
+            } catch (\Throwable) {
+                $device = null;
+            }
+        }
+
+        $phone = $device?->phones()->first();
+
+        return view('devices.register', [
+            'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
+            'resume' => $device ? [
+                'id' => $device->id,
+                'name' => $device->name,
+                'device_code' => $device->device_code,
+                'status' => $device->status,
+                'connected' => $phone !== null,
+                'connect_status_url' => route('devices.connect-status', $device),
+                'approve_url' => route('devices.approve', $device),
+                'device_page_url' => route('devices.show', $device),
+            ] : null,
+        ]);
+    }
+
+    /**
+     * Polled by the registration wizard so it can detect when the phone has
+     * paired (the app reports its real model/version details on bootstrap).
+     */
+    public function connectStatus(Request $request, Device $device): JsonResponse
+    {
+        $phone = $device->phones()->first();
+
+        return response()->json([
+            'connected' => $phone !== null,
+            'device' => [
+                'id' => $device->id,
+                'name' => $device->name,
+                'device_code' => $device->device_code,
+                'status' => $device->status,
+                'model' => $device->model,
+                'device_uid' => $device->device_uid,
+            ],
+            'phone' => $phone ? [
+                'device_uid' => $phone->device_uid,
+                'model' => $phone->model,
+                'android_version' => $phone->android_version,
+                'app_version' => $phone->app_version,
+                'ip' => $phone->ip,
+                'first_seen_at' => $phone->first_seen_at?->toIso8601String(),
+                'last_seen_at' => $phone->last_seen_at?->toIso8601String(),
+                'online' => $phone->isOnline(),
+            ] : null,
+        ]);
+    }
+
     public function store(Request $request): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
@@ -125,6 +197,15 @@ class DeviceController extends Controller
 
         if ($networkIds === []) {
             return response()->json(['success' => false, 'message' => 'Select at least one network.'], 422);
+        }
+
+        if (cash_point() === null) {
+            $message = 'Set up the cash point first before registering devices.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return redirect()->route('cash-point.index')->with('error', $message);
         }
 
         $deviceCode = Device::generateDeviceCode();
@@ -159,7 +240,11 @@ class DeviceController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Device registered. Credentials generated.',
+                'device_id' => $device->id,
                 'device_code' => $deviceCode,
+                'connect_status_url' => route('devices.connect-status', $device),
+                'approve_url' => route('devices.approve', $device),
+                'device_page_url' => route('devices.show', $device),
             ]);
         }
 

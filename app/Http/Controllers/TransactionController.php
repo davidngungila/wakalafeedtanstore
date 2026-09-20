@@ -67,6 +67,15 @@ class TransactionController extends Controller
 
         $agent = cash_point();
 
+        if ($agent === null) {
+            $message = 'Set up the cash point first (Settings → Cash Point), then try again.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return redirect()->route('cash-point.index')->with('error', $message);
+        }
+
         $transaction = $this->transactions->process(
             [
                 'network_id' => $validated['network_id'],

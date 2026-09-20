@@ -14,14 +14,15 @@ class SettingController extends Controller
     {
         $pane = $request->input('pane', 'general');
 
-        $panes = ['general', 'commissions', 'security', 'notifications'];
+        $panes = ['general', 'commissions', 'security', 'notifications', 'cashpoint'];
         if (! in_array($pane, $panes, true)) {
             $pane = 'general';
         }
 
         $settings = Setting::all()->pluck('value', 'key');
+        $agent = cash_point();
 
-        return view('settings.index', compact('pane', 'settings'));
+        return view('settings.index', compact('pane', 'settings', 'agent'));
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse

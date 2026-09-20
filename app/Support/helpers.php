@@ -206,18 +206,12 @@ if (! function_exists('agent_total_float')) {
 
 if (! function_exists('cash_point')) {
     /**
-     * The single cash point (wakala) this system manages. Provisions DMN-001
-     * on first call when none exists so an unseeded install can still render.
+     * The single cash point (wakala) this system manages. Null until an admin
+     * sets it up in Settings — callers must handle the not-configured state.
      */
-    function cash_point(): Agent
+    function cash_point(): ?Agent
     {
-        static $cashPoint = null;
-
-        if ($cashPoint === null) {
-            $cashPoint = Agent::defaultCashPoint();
-        }
-
-        return $cashPoint;
+        return Agent::query()->orderBy('id')->first();
     }
 }
 

@@ -37,6 +37,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
                 Notifications
             </a>
+            <a href="{{ route('settings.index') }}?pane=cashpoint" class="{{ $pane === 'cashpoint' ? 'active' : '' }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l1.5-2.5h17L22 7z"></path><path d="M3 7h18v13H3z"></path><path d="M9 13h6"></path></svg>
+                Cash Point
+            </a>
         </nav>
 
         <div class="settings-panel" id="settingsPanel">
@@ -88,6 +92,26 @@
                         <div class="field"><label>Session timeout (minutes)</label><input type="number" name="security[session_timeout_minutes]" step="1" min="1" value="{{ $sec['session_timeout_minutes'] ?? 30 }}"></div>
                     </div>
                     <button type="submit" class="btn btn-primary">Save security settings</button>
+                </form>
+            @elseif ($pane === 'cashpoint')
+                <h3>Cash Point</h3>
+                @if ($agent !== null && filled([$agent->code, $agent->name, $agent->phone]) && $agent->status === 'active')
+                    <p style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">The cash point is configured as <strong>{{ $agent->name }}</strong> ({{ $agent->code }}). You can update its details below.</p>
+                @else
+                    <p style="font-size:13px;color:var(--terracotta-600);margin-bottom:16px;">The cash point is not set up yet. Create it below to activate the system.</p>
+                @endif
+                <form method="POST" action="{{ route('cash-point.update') }}" data-cashpoint-form>
+                    @csrf
+                    <input type="hidden" name="_method" value="PUT">
+                    @if ($errors->any())
+                        <div class="form-errors" style="color:var(--danger);margin-bottom:16px;">
+                            @foreach ($errors->all() as $error)
+                                <div>• {{ $error }}</div>
+                            @endforeach
+                        </div>
+                    @endif
+                    @include('cash_point._fields')
+                    <button type="submit" class="btn btn-primary">Save cash point</button>
                 </form>
             @else
                 <h3>Notifications</h3>
@@ -146,6 +170,13 @@
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
                 submitForm(form, { method: 'POST', done: () => toast('Settings saved successfully.', 'success') });
+            });
+        });
+
+        document.querySelectorAll('[data-cashpoint-form]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitForm(form, { method: 'PUT', done: () => toast('Cash point saved successfully.', 'success') });
             });
         });
     </script>

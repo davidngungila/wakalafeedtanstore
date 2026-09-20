@@ -3,44 +3,45 @@
 namespace App\Services;
 
 use App\Models\Network;
-use Illuminate\Support\Carbon;
+use App\Services\Parsers\AirtelSmsParser;
+use App\Services\Parsers\BankSmsParser;
+use App\Services\Parsers\GenericSmsParser;
+use App\Services\Parsers\HaloPesaSmsParser;
+use App\Services\Parsers\MixxSmsParser;
+use App\Services\Parsers\MpesaSmsParser;
+use App\Services\Parsers\SmsParserContract;
+use App\Services\Parsers\TigoSmsParser;
 
 /**
- * Parses Tanzanian mobile-money SMS messages into the fields the system
- * stores on a transaction.
+ * Routes an incoming SMS to the parser for its provider. The sender name is
+ * matched against each provider's keywords; when nothing is recognised the
+ * generic parser handles it, so the pipeline never depends on a single SMS
+ * format or a single operator.
  */
 class SmsParser
 {
     /**
      * @return array{reference: string, type: string, amount: float, customer_name: string, customer_phone: string, balance: float, received_at: string|null}
      */
-    public function parse(string $body): array
+    public function parse(string $body, ?string $provider = null): array
     {
-        foreach (config('sms.templates', []) as $template) {
-            if (! preg_match($template['pattern'], $body, $m)) {
-                continue;
-            }
+        return $this->parserFor($provider)->parse($body);
+    }
 
-            return [
-                'reference' => strtoupper(trim($m['ref'])),
-                'type' => $template['type'],
-                'amount' => (float) str_replace(',', '', $m['amount']),
-                'customer_name' => trim(preg_replace('/\s+/', ' ', $m['customer'] ?? '')),
-                'customer_phone' => $m['phone'] ?? '',
-                'balance' => isset($m['balance']) ? (float) str_replace(',', '', $m['balance']) : 0.0,
-                'received_at' => $this->parseDateTime($m['date'] ?? null, $m['time'] ?? null),
-            ];
+    /**
+     * Resolve the provider (parser route) an SMS belongs to from its sender.
+     */
+    public function identifyProvider(string $sender): ?string
+    {
+        foreach (config('sms.providers', []) as $key => $provider) {
+            foreach ($provider['senders'] ?? [] as $keyword) {
+                if (stripos($sender, $keyword) !== false) {
+                    return $key;
+                }
+            }
         }
 
-        return [
-            'reference' => '',
-            'type' => '',
-            'amount' => 0.0,
-            'customer_name' => '',
-            'customer_phone' => '',
-            'balance' => 0.0,
-            'received_at' => null,
-        ];
+        return null;
     }
 
     /**
@@ -57,22 +58,16 @@ class SmsParser
         return $fallback;
     }
 
-    private function parseDateTime(?string $date, ?string $time): ?string
+    private function parserFor(?string $provider): SmsParserContract
     {
-        if ($date === null) {
-            return null;
-        }
-
-        $parts = explode('/', str_replace('-', '/', $date));
-        if (count($parts) !== 3) {
-            return null;
-        }
-
-        $year = strlen($parts[2]) === 4 ? $parts[2] : '20'.$parts[2];
-
-        return Carbon::createFromFormat(
-            'Y-m-d H:i',
-            $year.'-'.$parts[1].'-'.$parts[0].' '.($time ?? '00:00')
-        )->format('Y-m-d H:i:s');
+        return match ($provider) {
+            'mpesa' => new MpesaSmsParser,
+            'airtel' => new AirtelSmsParser,
+            'tigo' => new TigoSmsParser,
+            'halopesa' => new HaloPesaSmsParser,
+            'mixx' => new MixxSmsParser,
+            'bank' => new BankSmsParser,
+            default => new GenericSmsParser,
+        };
     }
 }

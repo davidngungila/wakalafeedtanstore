@@ -343,7 +343,7 @@
                                         <div class="cell-sub">→ <a href="{{ route('transactions.index', ['q' => $message->transaction->reference]) }}">{{ $message->transaction->reference }}</a></div>
                                     @endif
                                 </td>
-                                <td><span class="tag {{ status_badge($message->processing_status === 'processed' ? 'completed' : $message->processing_status) }}">{{ ucfirst($message->processing_status) }}</span></td>
+                                <td><span class="tag {{ status_badge($message->processing_status === 'RECORDED' ? 'completed' : strtolower($message->processing_status)) }}">{{ ucfirst(strtolower($message->processing_status)) }}</span></td>
                                 <td>
                                     <div class="row-actions">
                                         <button type="button" title="View full SMS" onclick="openMessage('{{ addslashes($message->message_body) }}')">
@@ -408,7 +408,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="8" class="empty-state"><h4>No transactions from this device</h4><p>Transactions are created automatically when captured SMS match a financial template.</p></td></tr>
+                            <tr><td colspan="8" class="empty-state"><h4>No transactions from this device</h4><p>Your captured SMS messages are automatically analyzed. When a message matches a supported financial template, the transaction is extracted and recorded automatically.</p></td></tr>
                         @endforelse
                     </tbody>
                 </table>

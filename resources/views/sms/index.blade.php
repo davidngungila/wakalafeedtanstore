@@ -126,7 +126,7 @@
                         <tr data-id="{{ $message->id }}" class="row-click" onclick="openMessage({{ $message->id }})">
                             <td class="cell-sub">{{ $message->server_received_at->format('H:i:s') }}</td>
                             <td>
-                                <a href="{{ route('devices.show', $message->device_id) }}" class="cell-title" onclick="event.stopPropagation()">{{ $message->device?->name ?? '—' }}</a>
+                                <a href="{{ route('devices.show', $message->device) }}" class="cell-title" onclick="event.stopPropagation()">{{ $message->device?->name ?? '—' }}</a>
                             </td>
                             <td>
                                 @if ($message->deviceLine)

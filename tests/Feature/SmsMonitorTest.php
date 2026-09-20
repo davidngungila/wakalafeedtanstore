@@ -31,7 +31,7 @@ class SmsMonitorTest extends TestCase
 
         $device = Device::create([
             'name' => 'Redmi Note 12',
-            'agent_id' => cash_point()->id,
+            'agent_id' => $this->cashPoint()->id,
             'network_id' => $network->id,
             'device_code' => Device::generateDeviceCode(),
             'status' => 'active',
@@ -42,7 +42,7 @@ class SmsMonitorTest extends TestCase
             'sender' => 'MPESA',
             'message_body' => 'Hello world, not a financial message.',
             'sms_hash' => hash('sha256', $overrides['message_body'] ?? 'Hello world, not a financial message.'),
-            'processing_status' => 'failed',
+            'processing_status' => 'NEEDS_REVIEW',
             'processing_error' => 'SMS did not match any financial template.',
             'is_duplicate' => false,
             'server_received_at' => now(),
@@ -60,8 +60,8 @@ class SmsMonitorTest extends TestCase
         $response->assertSee('Stored');
         $response->assertSee('SMS did not match any financial template.');
 
-        $this->assertSame('stored', sms_status_label('failed', false, 'SMS did not match any financial template.'));
-        $this->assertSame('tag-terracotta', sms_status_badge('failed', false, 'SMS did not match any financial template.'));
+        $this->assertSame('stored', sms_status_label('NEEDS_REVIEW', false, 'SMS did not match any financial template.'));
+        $this->assertSame('tag-terracotta', sms_status_badge('NEEDS_REVIEW', false, 'SMS did not match any financial template.'));
     }
 
     public function test_genuine_failure_is_not_relabelled(): void
@@ -73,17 +73,17 @@ class SmsMonitorTest extends TestCase
             ->assertOk()
             ->assertSee('Failed');
 
-        $this->assertSame('failed', sms_status_label('failed', false, 'Device has no network assigned.'));
-        $this->assertSame('tag-red', sms_status_badge('failed', false, 'Device has no network assigned.'));
+        $this->assertSame('failed', sms_status_label('FAILED', false, 'Device has no network assigned.'));
+        $this->assertSame('tag-red', sms_status_badge('FAILED', false, 'Device has no network assigned.'));
     }
 
     public function test_processed_and_duplicate_helpers(): void
     {
-        $this->assertSame('processed', sms_status_label('processed'));
-        $this->assertSame('tag-green', sms_status_badge('processed'));
+        $this->assertSame('processed', sms_status_label('RECORDED'));
+        $this->assertSame('tag-green', sms_status_badge('RECORDED'));
 
-        $this->assertSame('duplicate', sms_status_label('failed', true));
-        $this->assertSame('tag-terracotta', sms_status_badge('failed', true));
+        $this->assertSame('duplicate', sms_status_label('RECORDED', true));
+        $this->assertSame('tag-terracotta', sms_status_badge('RECORDED', true));
     }
 
     public function test_failed_stat_only_counts_genuine_failures(): void
@@ -104,7 +104,7 @@ class SmsMonitorTest extends TestCase
         $this->makeMessage(); // stored (template mismatch)
 
         $this->makeMessage([
-            'processing_status' => 'failed',
+            'processing_status' => 'FAILED',
             'processing_error' => 'Device has no network assigned.',
             'is_duplicate' => false,
             'message_body' => 'Genuine failure body',
@@ -112,7 +112,7 @@ class SmsMonitorTest extends TestCase
         ]);
 
         $this->makeMessage([
-            'processing_status' => 'processed',
+            'processing_status' => 'RECORDED',
             'is_duplicate' => true,
             'message_body' => 'Duplicate body',
             'sms_hash' => hash('sha256', 'duplicate-body'),

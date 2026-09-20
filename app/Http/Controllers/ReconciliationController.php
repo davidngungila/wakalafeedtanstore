@@ -41,6 +41,15 @@ class ReconciliationController extends Controller
 
         $agent = cash_point();
 
+        if ($agent === null) {
+            $message = 'Set up the cash point first before reconciling.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return redirect()->route('cash-point.index')->with('error', $message);
+        }
+
         $expectedCash = (float) $agent->cash_balance;
         $countedCash = (float) $validated['counted_cash'];
 

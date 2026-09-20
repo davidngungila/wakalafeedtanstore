@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Crypt;
 
 #[Fillable([
     'device_uid',
@@ -35,9 +36,32 @@ class Device extends Model
 {
     public const MANAGED_STATUSES = ['pending', 'active', 'suspended', 'blocked', 'revoked'];
 
-    public function getRouteKeyName(): string
+    /**
+     * Device URLs carry an encrypted id instead of the plain integer or pairing
+     * code:
+     *
+     *   /devices/{encrypted}-token
+     *
+     * Decrypting happens in resolveRouteBinding() so every device route keeps
+     * working while the address bar reveals nothing about the record.
+     */
+    public function getRouteKey(): string
     {
-        return 'device_code';
+        return Crypt::encryptString((string) $this->getKey());
+    }
+
+    /**
+     * @return static|null
+     */
+    public function resolveRouteBinding($value, $field = null): ?self
+    {
+        try {
+            $id = (int) Crypt::decryptString((string) $value);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return static::find($id);
     }
 
     private const DEVICE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -211,10 +235,10 @@ class Device extends Model
     {
         return [
             'received' => $this->smsMessages()->whereDate('server_received_at', today())->count(),
-            'processed' => $this->smsMessages()->whereDate('server_received_at', today())->where('processing_status', 'processed')->count(),
-            'pending' => $this->smsMessages()->whereDate('server_received_at', today())->where('processing_status', 'received')->count(),
-            'failed' => $this->smsMessages()->whereDate('server_received_at', today())->where('processing_status', 'failed')->count(),
-            'duplicate' => $this->smsMessages()->whereDate('server_received_at', today())->where('is_duplicate', true)->count(),
+            'processed' => $this->smsMessages()->whereDate('server_received_at', today())->where('processing_status', 'RECORDED')->count(),
+            'pending' => $this->smsMessages()->whereDate('server_received_at', today())->whereIn('processing_status', ['RECEIVED', 'PARSED', 'NEEDS_REVIEW'])->count(),
+            'failed' => $this->smsMessages()->whereDate('server_received_at', today())->where('processing_status', 'FAILED')->count(),
+            'duplicate' => $this->smsMessages()->whereDate('server_received_at', today())->where(fn ($q) => $q->where('is_duplicate', true)->orWhere('processing_status', 'DUPLICATE'))->count(),
         ];
     }
 

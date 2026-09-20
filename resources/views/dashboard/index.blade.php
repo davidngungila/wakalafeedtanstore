@@ -14,6 +14,20 @@
         </div>
     </div>
 
+    @if ($cashPoint === null || empty($cashPoint->code) || empty($cashPoint->name) || empty($cashPoint->phone))
+        <div style="display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap;background:var(--terracotta-100);color:var(--terracotta-600);border:1px solid var(--terracotta-500);border-radius:14px;padding:14px 18px;margin-bottom:20px;font-weight:600;">
+            <div>
+                The cash point (wakala) is not set up yet — the system cannot record transactions until it is.
+                @if (! is_admin())
+                    Ask an administrator to set it up in Settings → Cash Point.
+                @endif
+            </div>
+            @if (is_admin())
+                <a class="btn btn-primary" href="{{ route('cash-point.index') }}" style="background:var(--terracotta-600);border-color:var(--terracotta-600);">Set up cash point</a>
+            @endif
+        </div>
+    @endif
+
     <div class="stat-grid">
         <div class="stat-card" style="--stat-tint:var(--gold-100);--stat-fg:#8a6418;">
             <div class="stat-top">
