@@ -60,7 +60,7 @@
                     <span class="tag {{ $network['is_active'] ? 'tag-green' : 'tag-grey' }}">{{ $network['is_active'] ? 'API connected' : 'Suspended' }}</span>
                     <span class="tag tag-terracotta" style="margin-left:auto;">{{ $network['code'] }}</span>
                 </div>
-                <a href="{{ route('networks.show', $network['id']) }}" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font-size:12.5px;font-weight:700;color:var(--terracotta-600);background:var(--sand-50);">
+                <a href="{{ route('networks.show', $network['route_key']) }}" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font-size:12.5px;font-weight:700;color:var(--terracotta-600);background:var(--sand-50);">
                     View all transactions
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </a>
@@ -218,7 +218,7 @@
                 document.getElementById('networkModalTitle').textContent = 'Edit network';
                 document.getElementById('networkMethod').value = 'PUT';
                 document.getElementById('networkId').value = n.id;
-                form.action = `/networks/${n.id}`;
+                form.action = `/networks/${n.route_key}`;
                 document.getElementById('networkName').value = n.name;
                 document.getElementById('networkCode').value = n.code;
                 document.getElementById('networkColor').value = n.color || '#C2592B';

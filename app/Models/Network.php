@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Crypt;
 
 #[Fillable([
     'name',
@@ -18,6 +19,33 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Network extends Model
 {
     use HasFactory;
+
+    /**
+     * Network URLs carry an encrypted id instead of the plain integer:
+     *
+     *   /networks/{encrypted}-token
+     *
+     * Decrypting happens in resolveRouteBinding() so every network route
+     * keeps working while the address bar reveals nothing about the record.
+     */
+    public function getRouteKey(): string
+    {
+        return Crypt::encryptString((string) $this->getKey());
+    }
+
+    /**
+     * @return static|null
+     */
+    public function resolveRouteBinding($value, $field = null): ?self
+    {
+        try {
+            $id = (int) Crypt::decryptString((string) $value);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return static::find($id);
+    }
 
     protected function casts(): array
     {

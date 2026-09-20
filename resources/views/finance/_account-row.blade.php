@@ -23,11 +23,11 @@
     <td>
         @if (is_admin())
             <div class="row-actions">
-                <button onclick="editAccount({{ $node['id'] }}, '{{ addslashes($node['code']) }}', '{{ addslashes($node['name']) }}', '{{ $node['type'] }}', {{ $node['parent_id'] ?? 'null' }}, '{{ addslashes($node['description'] ?? '') }}')" title="Edit">
+                <button onclick="editAccount({{ $node['id'] }}, @js($node['code']), @js($node['name']), @js($node['type']), {{ $node['parent_id'] ?? 'null' }}, @js($node['description'] ?? ''))" title="Edit">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
                 </button>
                 @if (($node['line_count'] ?? 0) === 0 && ! count($node['children']))
-                    <button class="danger" onclick="deleteAccount({{ $node['id'] }}, '{{ addslashes($node['code']) }}')" title="Delete">
+                    <button class="danger" onclick="deleteAccount({{ $node['id'] }}, @js($node['code']))" title="Delete">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                     </button>
                 @endif

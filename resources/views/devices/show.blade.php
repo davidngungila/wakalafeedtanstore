@@ -346,7 +346,7 @@
                                 <td><span class="tag {{ status_badge($message->processing_status === 'RECORDED' ? 'completed' : strtolower($message->processing_status)) }}">{{ ucfirst(strtolower($message->processing_status)) }}</span></td>
                                 <td>
                                     <div class="row-actions">
-                                        <button type="button" title="View full SMS" onclick="openMessage('{{ addslashes($message->message_body) }}')">
+                                        <button type="button" title="View full SMS" onclick="openMessage(@js($message->message_body))">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                         </button>
                                     </div>

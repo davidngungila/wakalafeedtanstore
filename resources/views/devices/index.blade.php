@@ -84,7 +84,10 @@
                             data-today="{{ $stats ? ($stats['processed'].' processed · '.$stats['received'].' received') : 'No SMS today' }}"
                             data-sms="{{ $device->last_sms_at?->format('d M Y H:i') ?? 'Never' }}"
                             data-regenerate-code-route="{{ route('devices.code', $device) }}"
-                            data-approve-route="{{ route('devices.approve', $device) }}">
+                            data-approve-route="{{ route('devices.approve', $device) }}"
+                            @if (is_admin())
+                                data-delete-route="{{ route('devices.destroy', $device) }}"
+                            @endif>
                             <td>
                                 <div class="cell-main">
                                     <div class="avatar" style="background:var(--terracotta-100);color:var(--terracotta-600);">{{ strtoupper(substr($device->name, 0, 2)) }}</div>
@@ -115,6 +118,11 @@
                                     <button type="button" title="View all SMS" onclick="window.location='{{ route('sms.index', ['device' => $device->id]) }}'">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                                     </button>
+                                    @if (is_admin())
+                                        <button type="button" title="Delete device" onclick="deleteDevice('{{ route('devices.destroy', $device) }}', '{{ $device->name }}')">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                        </button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -286,6 +294,33 @@
             } catch (error) {
                 console.error('Error approving device:', error);
                 toast('Failed to approve device.', 'error');
+            }
+        }
+
+        async function deleteDevice(route, name) {
+            if (!confirm(`Delete "${name}" and all its SMS records? This cannot be undone.`)) return;
+
+            try {
+                const response = await fetch(route, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    toast('Device removed.', 'success');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    toast(data.message || 'Failed to remove device.', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting device:', error);
+                toast('Failed to remove device.', 'error');
             }
         }
     </script>

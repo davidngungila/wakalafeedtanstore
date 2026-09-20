@@ -24,6 +24,7 @@ class NetworkController extends Controller
             ->map(function (Network $network) {
                 return [
                     'id' => $network->id,
+                    'route_key' => $network->getRouteKey(),
                     'name' => $network->name,
                     'code' => $network->code,
                     'color' => $network->color,
