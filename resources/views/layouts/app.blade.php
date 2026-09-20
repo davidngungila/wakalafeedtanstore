@@ -256,7 +256,8 @@
 
 
         /* Stats */
-        .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:24px;}
+        .stat-grid{display:flex;flex-wrap:nowrap;gap:18px;margin-bottom:24px;overflow-x:auto;}
+.stat-card{flex:0 0 auto;min-width:160px;}
         .stat-card{
             background:var(--white);border:1px solid var(--line);border-radius:var(--radius-md);
             padding:20px 20px 18px;box-shadow:var(--shadow-sm);position:relative;overflow:hidden;
@@ -549,7 +550,6 @@
         .mobile-overlay{position:fixed;inset:0;background:rgba(36,20,8,.45);z-index:190;display:none;}
         .mobile-overlay.show{display:block;}
         @media (max-width:1180px){
-            .stat-grid{grid-template-columns:repeat(2,1fr);}
             .panel-grid{grid-template-columns:1fr;}
             .settings-layout{grid-template-columns:1fr;}
         }
@@ -559,11 +559,11 @@
             .main{margin-left:0 !important;}
             .tb-search{display:none;}
         }
-        @media (max-width:640px){
-            .stat-grid{grid-template-columns:1fr;}
+@media (max-width:640px){
             .view-wrap{padding:16px;}
             .topbar{padding:0 14px;gap:10px;}
             .form-row,.detail-grid{grid-template-columns:1fr;}
+            .tb-search{display:none;}
             .tb-live span{display:none;}
             .tb-user-text{display:none;}
             .view-head h2{font-size:22px;}
@@ -638,10 +638,6 @@
                     <a href="{{ route('devices.index') }}" class="sb-item {{ $isDeviceArea ? 'active' : '' }}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
                         <span>Devices</span>
-                    </a>
-                    <a href="{{ route('sms.index') }}" class="sb-item {{ $isMessageArea ? 'active' : '' }}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="10" x2="17" y2="10"></line></svg>
-                        <span>Messages</span>
                     </a>
                 @endif
 
