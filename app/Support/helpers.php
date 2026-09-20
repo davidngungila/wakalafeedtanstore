@@ -63,23 +63,29 @@ if (! function_exists('sms_status_label')) {
      */
     function sms_status_label(string $status, bool $isDuplicate = false, ?string $error = null): string
     {
-        if ($isDuplicate) {
+        $status = strtoupper($status);
+
+        if ($isDuplicate || $status === 'DUPLICATE') {
             return 'duplicate';
         }
 
-        if ($status === 'processed') {
+        if (in_array($status, ['RECORDED', 'PROCESSED'], true)) {
             return 'processed';
         }
 
-        if (in_array($status, ['received', 'identified', 'parsed'], true)) {
+        if (in_array($status, ['RECEIVED', 'PARSED'], true)) {
             return 'pending';
         }
 
-        if ($status === 'failed' && $error !== null && str_contains($error, 'financial template')) {
+        if ($status === 'NEEDS_REVIEW' || ($status === 'FAILED' && $error !== null && str_contains($error, 'financial template'))) {
             return 'stored';
         }
 
-        return $status;
+        if ($status === 'FAILED') {
+            return 'failed';
+        }
+
+        return strtolower($status);
     }
 }
 
@@ -200,14 +206,15 @@ if (! function_exists('agent_total_float')) {
 
 if (! function_exists('cash_point')) {
     /**
-     * The single cash point (wakala) this system manages.
+     * The single cash point (wakala) this system manages. Provisions DMN-001
+     * on first call when none exists so an unseeded install can still render.
      */
     function cash_point(): Agent
     {
         static $cashPoint = null;
 
         if ($cashPoint === null) {
-            $cashPoint = Agent::query()->orderBy('id')->first();
+            $cashPoint = Agent::defaultCashPoint();
         }
 
         return $cashPoint;

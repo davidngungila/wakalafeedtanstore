@@ -76,22 +76,7 @@ class DatabaseSeeder extends Seeder
 
     private function seedCashPoint(): Agent
     {
-        return Agent::updateOrCreate(
-            ['code' => 'DMN-001'],
-            [
-                'name' => 'Kilimani Cash Point',
-                'owner_name' => 'Wakala Feed Tan Store',
-                'phone' => '0712345678',
-                'national_id' => '19840514-601210-00121-1',
-                'region' => 'Kilimanjaro',
-                'district' => 'Moshi',
-                'ward' => 'Mfumuni',
-                'street' => 'Bondeni Street',
-                'agent_level' => 'platinum',
-                'status' => 'active',
-                'cash_balance' => 0,
-            ]
-        );
+        return Agent::defaultCashPoint();
     }
 
     /**
