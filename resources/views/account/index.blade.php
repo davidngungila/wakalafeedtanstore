@@ -67,39 +67,10 @@
                     <button type="button" class="btn btn-danger" onclick="openPasswordModal('Disable two-factor authentication', '{{ route('account.two-factor.disable') }}', 'Disable two-factor')">Disable two-factor</button>
                 </div>
             @else
-                <p style="margin:0 0 6px;color:var(--ink-soft);font-size:14px;line-height:1.7;">
+                <p style="margin:0 0 16px;color:var(--ink-soft);font-size:14px;line-height:1.7;">
                     Add an extra layer of security. Once enabled, every sign-in will also require a six-digit code from an authenticator app.
                 </p>
-                <ol style="color:var(--ink-soft);font-size:14px;line-height:1.9;margin:14px 0 20px;padding-left:20px;">
-                    <li>Install an authenticator app (Google Authenticator, Microsoft Authenticator, Aegis, 1Password…).</li>
-                    <li>Add a new account using the key below, or scan the URI with your app.</li>
-                    <li>Enter the 6-digit code from your app to verify and enable.</li>
-                </ol>
-
-                <div style="background:var(--sand-100);border:1px dashed var(--line);border-radius:14px;padding:16px 18px;margin-bottom:18px;">
-                    <div style="text-align:center;margin-bottom:16px;">
-                        <div id="otpauthQr" data-uri="{{ \App\Support\TwoFactor::otpauthUri($pendingSecret, $user->email) }}" style="display:inline-block;background:#fff;border-radius:12px;padding:12px;"></div>
-                        <div style="font-size:12px;color:var(--ink-soft);margin-top:8px;">Scan this code with your authenticator app.</div>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
-                        <div>
-                            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--coffee-500);margin-bottom:4px;">Setup key (Manual entry)</div>
-                            <code style="font-size:16px;font-weight:800;letter-spacing:.14em;color:var(--coffee-900);">{{ implode(' ', str_split($pendingSecret, 4)) }}</code>
-                        </div>
-                        <button type="button" class="btn" style="padding:8px 14px;font-size:12.5px;" onclick="copyText('{{ $pendingSecret }}', this)">Copy key</button>
-                    </div>
-                    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--coffee-500);margin-bottom:4px;">otpauth URI (apps that offer "Scan with camera")</div>
-                    <code style="font-size:12px;word-break:break-all;color:var(--coffee-700);display:block;">{{ \App\Support\TwoFactor::otpauthUri($pendingSecret, $user->email) }}</code>
-                </div>
-
-                <form method="POST" action="{{ route('account.two-factor.confirm') }}" data-2fa-confirm-form>
-                    @csrf
-                    <div class="field" style="max-width:260px;">
-                        <label>Verification code</label>
-                        <input type="text" name="code" inputmode="numeric" maxlength="6" placeholder="6-digit code" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Verify &amp; enable</button>
-                </form>
+                <button type="button" class="btn btn-primary" onclick="openModal('enableTwoFactorModal')">Set up two-factor</button>
             @endif
         </div>
     </div>
@@ -172,6 +143,55 @@
             </div>
             <div class="modal-foot">
                 <button class="btn btn-primary" onclick="closeModal('recoveryCodesModal'); location.reload();">I've saved my codes</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="enableTwoFactorModal">
+        <div class="modal" style="max-width:520px;">
+            <div class="modal-head">
+                <h3>Set up two-factor authentication</h3>
+                <button class="modal-close" onclick="closeModal('enableTwoFactorModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <ol style="margin:0 0 18px;padding-left:20px;color:var(--ink-soft);font-size:13.5px;line-height:1.8;">
+                    <li>Install an authenticator app (Google Authenticator, Authy, Microsoft Authenticator, 1Password, etc.).</li>
+                    <li>Add a new account by scanning the QR code below or manually entering the setup key.</li>
+                    <li>Enter the 6-digit code from the app to verify and enable two-factor authentication.</li>
+                </ol>
+
+                <div style="background:var(--sand-100);border:1px dashed var(--line);border-radius:12px;padding:24px;text-align:center;margin-bottom:20px;">
+                    <div id="otpauthQr" data-uri="{{ TwoFactor::otpauthUri($pendingSecret, $user->email) }}" style="display:inline-block;margin:0 auto 12px;"></div>
+                    <p style="margin:0 0 18px;color:var(--ink-soft);font-size:13px;">Scan this code with your authenticator app.</p>
+
+                    <div style="margin-bottom:18px;">
+                        <strong style="display:block;margin-bottom:8px;color:var(--coffee-900);font-size:13px;">Setup key (Manual entry)</strong>
+                        <div style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;">
+                            <code style="font-family:ui-monospace,monospace;background:var(--white);border:1px solid var(--line);border-radius:8px;padding:10px 14px;font-size:14px;font-weight:700;letter-spacing:.05em;color:var(--coffee-900);user-select:all;"
+                                id="setupKey">{{ chunk_split($pendingSecret, 4, ' ') }}</code>
+                            <button type="button" class="btn btn-ghost" onclick="copyText('{{ $pendingSecret }}', this)" style="padding:8px 14px;font-size:12.5px;">Copy key</button>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:14px;">
+                        <strong style="display:block;margin-bottom:8px;color:var(--coffee-900);font-size:13px;">otpauth URI (apps that offer "Scan with camera")</strong>
+                        <code style="font-family:ui-monospace,monospace;background:var(--white);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;color:var(--ink-soft);word-break:break-all;display:block;max-height:80px;overflow:auto;">
+                            {{ TwoFactor::otpauthUri($pendingSecret, $user->email) }}
+                        </code>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ route('account.two-factor.confirm') }}" data-2fa-confirm-form>
+                    @csrf
+                    <div class="field">
+                        <label>Verification code</label>
+                        <input type="text" name="code" inputmode="numeric" maxlength="6" placeholder="6-digit code" required autocomplete="one-time-code" style="text-align:center;letter-spacing:.3em;font-size:18px;font-weight:700;">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">Verify & enable</button>
+                </form>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="closeModal('enableTwoFactorModal')">Cancel</button>
             </div>
         </div>
     </div>
@@ -275,6 +295,7 @@
                 e.preventDefault();
                 submitForm(form, { method: 'POST', done: (data) => {
                     if (data.recovery_codes) {
+                        closeModal('enableTwoFactorModal');
                         setTimeout(() => showRecoveryCodes(data.recovery_codes), 150);
                     }
                 } });
