@@ -21,7 +21,7 @@ class SmsProcessor
     ) {}
 
     /**
-     * @param  array<int, array{sender: string, message: string, received_at?: string}>  $items
+     * @param  array<int, array{sender: string, message: string, received_at?: string, sim_slot?: int, subscription_id?: string}>  $items
      * @return array<int, array<string, mixed>>
      */
     public function ingest(Device $device, array $items): array
@@ -41,7 +41,7 @@ class SmsProcessor
     }
 
     /**
-     * @param  array{sender: string, message: string, received_at?: string}  $item
+     * @param  array{sender: string, message: string, received_at?: string, sim_slot?: int, subscription_id?: string}  $item
      * @return array<string, mixed>
      */
     private function processOne(Device $device, Agent $agent, array $item): array
@@ -69,10 +69,19 @@ class SmsProcessor
             ];
         }
 
-        $network = $this->parser->identifyNetwork($sender, $device->assignedNetworks()->first());
+        $line = $device->lineFor(
+            array_key_exists('subscription_id', $item) ? (string) $item['subscription_id'] : null,
+            $item['sim_slot'] ?? null,
+        );
+
+        $fallbackNetwork = $line?->network ?? $device->assignedNetworks()->first();
+
+        $network = $this->parser->identifyNetwork($sender, $fallbackNetwork);
 
         $sms = SmsMessage::create([
             'device_id' => $device->id,
+            'device_line_id' => $line?->id,
+            'sim_slot' => $line?->sim_slot ?? ($item['sim_slot'] ?? null),
             'agent_id' => $agent->id,
             'network_id' => $network?->id,
             'sender' => $sender,
@@ -144,6 +153,8 @@ class SmsProcessor
             'type' => $sms->transaction_type,
             'amount' => (float) $sms->amount,
             'network' => $network->code,
+            'sim_slot' => $sms->sim_slot,
+            'line' => $line?->displayName(),
             'transaction_reference' => $transaction->reference,
         ];
     }

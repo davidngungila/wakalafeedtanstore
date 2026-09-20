@@ -21,6 +21,10 @@
         </div>
         <div class="view-actions">
             <a href="{{ route('devices.index') }}" class="btn btn-ghost">← All devices</a>
+            <button class="btn btn-ghost" onclick="openConnectModal('{{ $device->device_code }}')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;"><rect x="7" y="2" width="10" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                Connect phone
+            </button>
             @if (is_admin())
                 <button class="btn btn-primary" onclick="openModal('editDeviceModal')">Edit device</button>
             @endif
@@ -28,6 +32,7 @@
     </div>
 
     @include('devices.partials.credentials-popup')
+    @include('devices.partials.connect-popup')
 
     <div class="stat-grid">
         <div class="stat-card" style="--stat-tint:var(--acacia-100);--stat-fg:var(--acacia-600);">
@@ -107,6 +112,87 @@
         </div>
     </div>
 
+    <div class="table-card" style="margin-top:24px;">
+        <div class="table-toolbar" style="border:none;padding:14px 20px;">
+            <strong style="font-size:14px;">SIM lines (chips)</strong>
+            <div style="font-size:12.5px;color:var(--ink-soft);">Each SIM slot maps to a network; the app reports which slot each SMS arrived on.</div>
+        </div>
+        <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SIM slot</th>
+                        <th>Network</th>
+                        <th>Phone number</th>
+                        <th>Subscription ID</th>
+                        @if (is_admin())
+                            <th></th>
+                        @endif
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($device->lines as $line)
+                        <tr>
+                            <td><div class="cell-title">{{ $line->displayName() }}</div></td>
+                            <td>
+                                @if ($line->network)
+                                    <span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:{{ $line->network->color }};display:inline-block;"></span>{{ $line->network->name }}</span>
+                                @else
+                                    —
+                                @endif
+                            </td>
+                            <td>{{ $line->phone_number ?? '—' }}</td>
+                            <td><span class="cell-sub">{{ $line->subscription_id ?? '—' }}</span></td>
+                            @if (is_admin())
+                                <td>
+                                    <div class="row-actions">
+                                        <form method="POST" action="{{ route('devices.lines.destroy', [$device, $line]) }}" onsubmit="return confirm('Remove this SIM line?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-danger" style="padding:5px 10px;font-size:12px;">Remove</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            @endif
+                        </tr>
+                    @empty
+                        <tr><td colspan="{{ is_admin() ? 5 : 4 }}" class="empty-state"><h4>No SIM lines configured</h4><p>Add the SIM chips installed in this phone and the network each one serves.</p></td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        @if (is_admin())
+            <form method="POST" action="{{ route('devices.lines.store', $device) }}" class="table-toolbar" style="border:none;border-top:1px solid var(--line);gap:10px;flex-wrap:wrap;align-items:end;">
+                @csrf
+                <div class="field" style="min-width:120px;">
+                    <label>SIM slot</label>
+                    <select name="sim_slot" required style="padding:8px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13px;font-weight:600;background:var(--white);color:var(--coffee-700);">
+                        @foreach ([1, 2, 3, 4] as $slot)
+                            <option value="{{ $slot }}">{{ $slot }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="field" style="min-width:180px;">
+                    <label>Network</label>
+                    <select name="network_id" required style="padding:8px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13px;font-weight:600;background:var(--white);color:var(--coffee-700);">
+                        @foreach ($networks as $network)
+                            <option value="{{ $network->id }}">{{ $network->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Phone number</label>
+                    <input type="text" name="phone_number" placeholder="07…" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13px;background:var(--white);color:var(--coffee-700);">
+                </div>
+                <div class="field">
+                    <label>Subscription ID (optional)</label>
+                    <input type="text" name="subscription_id" placeholder="Android sub id" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13px;background:var(--white);color:var(--coffee-700);">
+                </div>
+                <button type="submit" class="btn btn-primary">Add line</button>
+            </form>
+        @endif
+    </div>
+
     @if (is_admin() || is_supervisor())
         <div class="table-card" style="margin-top:24px;">
             <div class="table-toolbar" style="border:none;padding:14px 20px;">
@@ -159,68 +245,129 @@
         </div>
     @endif
 
-    <div class="view-head" style="margin-top:28px;">
-        <div>
-            <h2>All SMS</h2>
-            <p class="sub">Every message captured from this phone, most recent first.</p>
-        </div>
-        <div class="view-actions">
-            <a href="{{ route('sms.index', ['device' => $device->id]) }}" class="btn btn-ghost">Open Messages</a>
+    <div class="tabs" style="margin-top:28px;" role="tablist">
+        <button type="button" class="tab-btn {{ $activeTab === 'messages' ? 'active' : '' }}" data-tab="messages" onclick="setDeviceTab('messages', this)">
+            Messages <span class="tab-count">{{ $sms->total() }}</span>
+        </button>
+        <button type="button" class="tab-btn {{ $activeTab === 'transactions' ? 'active' : '' }}" data-tab="transactions" onclick="setDeviceTab('transactions', this)">
+            Transactions <span class="tab-count">{{ $transactions->count() }}</span>
+        </button>
+        <a href="{{ route('sms.index', ['device' => $device->id]) }}" class="btn btn-ghost btn-sm" style="margin-left:auto;">Open Messages</a>
+    </div>
+
+    <div id="dpan-messages" class="tab-panel {{ $activeTab === 'messages' ? '' : 'hidden' }}">
+        <div class="table-card">
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Sender</th>
+                            <th>Network</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Customer</th>
+                            <th>Reference</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($sms as $message)
+                            <tr>
+                                <td class="cell-sub">
+                                    {{ $message->server_received_at->format('H:i:s') }}
+                                    @if ($message->sim_slot)
+                                        <div style="margin-top:3px;">SIM {{ $message->sim_slot }}</div>
+                                    @endif
+                                </td>
+                                <td>{{ $message->sender }}</td>
+                                <td>{!! $message->network
+                                    ? '<span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:'.$message->network->color.';display:inline-block;"></span>'.$message->network->name.'</span>'
+                                    : '—' !!}</td>
+                                <td>{{ $message->transaction_type ? txn_type_label($message->transaction_type) : '—' }}</td>
+                                <td>{{ $message->amount ? money($message->amount) : '—' }}</td>
+                                <td>
+                                    <div class="cell-title">{{ $message->customer_name ?? '—' }}</div>
+                                    <div class="cell-sub">{{ $message->customer_phone ?? '' }}</div>
+                                </td>
+                                <td>
+                                    <span class="cell-title">{{ $message->transaction_reference ?? '—' }}</span>
+                                    @if ($message->transaction)
+                                        <div class="cell-sub">→ <a href="{{ route('transactions.index', ['q' => $message->transaction->reference]) }}">{{ $message->transaction->reference }}</a></div>
+                                    @endif
+                                </td>
+                                <td><span class="tag {{ status_badge($message->processing_status === 'processed' ? 'completed' : $message->processing_status) }}">{{ ucfirst($message->processing_status) }}</span></td>
+                                <td>
+                                    <div class="row-actions">
+                                        <button type="button" title="View full SMS" onclick="openMessage('{{ addslashes($message->message_body) }}')">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="9" class="empty-state"><h4>No SMS yet</h4><p>Once the app connects and the device is active, captured SMS will appear here automatically.</p></td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            {{ $sms->links('pagination.pager') }}
         </div>
     </div>
 
-    <div class="table-card">
-        <div class="table-scroll">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Sender</th>
-                        <th>Network</th>
-                        <th>Type</th>
-                        <th>Amount</th>
-                        <th>Customer</th>
-                        <th>Reference</th>
-                        <th>Status</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($sms as $message)
+    <div id="dpan-transactions" class="tab-panel {{ $activeTab === 'transactions' ? '' : 'hidden' }}">
+        <div class="table-card">
+            <div class="table-scroll">
+                <table>
+                    <thead>
                         <tr>
-                            <td class="cell-sub">{{ $message->server_received_at->format('H:i:s') }}</td>
-                            <td>{{ $message->sender }}</td>
-                            <td>{!! $message->network
-                                ? '<span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:'.$message->network->color.';display:inline-block;"></span>'.$message->network->name.'</span>'
-                                : '—' !!}</td>
-                            <td>{{ $message->transaction_type ? txn_type_label($message->transaction_type) : '—' }}</td>
-                            <td>{{ $message->amount ? money($message->amount) : '—' }}</td>
-                            <td>
-                                <div class="cell-title">{{ $message->customer_name ?? '—' }}</div>
-                                <div class="cell-sub">{{ $message->customer_phone ?? '' }}</div>
-                            </td>
-                            <td>
-                                <span class="cell-title">{{ $message->transaction_reference ?? '—' }}</span>
-                                @if ($message->transaction)
-                                    <div class="cell-sub">→ <a href="{{ route('transactions.index', ['q' => $message->transaction->reference]) }}">{{ $message->transaction->reference }}</a></div>
-                                @endif
-                            </td>
-                            <td><span class="tag {{ status_badge($message->processing_status === 'processed' ? 'completed' : $message->processing_status) }}">{{ ucfirst($message->processing_status) }}</span></td>
-                            <td>
-                                <div class="row-actions">
-                                    <button type="button" title="View full SMS" onclick="openMessage('{{ addslashes($message->message_body) }}')">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                    </button>
-                                </div>
-                            </td>
+                            <th>Reference</th>
+                            <th>Customer</th>
+                            <th>Type</th>
+                            <th>Network</th>
+                            <th>Amount</th>
+                            <th>Commission</th>
+                            <th>Status</th>
+                            <th>Operator</th>
                         </tr>
-                    @empty
-                        <tr><td colspan="9" class="empty-state"><h4>No SMS yet</h4><p>Once the app connects and the device is active, captured SMS will appear here automatically.</p></td></tr>
-                    @endforelse
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody id="devTxnBody">
+                        @forelse ($transactions as $txn)
+                            <tr data-id="{{ $txn->id }}">
+                                <td>
+                                    <div class="cell-title">{{ $txn->reference }}</div>
+                                    <div class="cell-sub">{{ $txn->created_at->format('d M Y · H:i') }}</div>
+                                </td>
+                                <td>
+                                    <div class="cell-title">{{ $txn->customer_name ?? '—' }}</div>
+                                    <div class="cell-sub">{{ $txn->customer_phone }}</div>
+                                </td>
+                                <td>
+                                    <div class="cell-title">{{ txn_type_label($txn->type) }}</div>
+                                    <div class="cell-sub">{{ $txn->provider_reference ?? '—' }}</div>
+                                </td>
+                                <td>
+                                    @if ($txn->network)
+                                        <span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:{{ $txn->network->color }};display:inline-block;"></span>{{ $txn->network->name }}</span>
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td class="cell-title">@money($txn->amount)</td>
+                                <td>@money($txn->commission)</td>
+                                <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
+                                <td>
+                                    <div class="cell-sub">{{ $txn->operator?->name ?? '—' }}</div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="8" class="empty-state"><h4>No transactions from this device</h4><p>Transactions are created automatically when captured SMS match a financial template.</p></td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
-        {{ $sms->links('pagination.pager') }}
     </div>
 
     @if (is_admin())
@@ -294,6 +441,11 @@
 
 @section('scripts')
     <script>
+        const TYPE_LABEL = {
+            deposit: 'Customer Deposit', withdrawal: 'Customer Withdrawal', send_money: 'Send Money',
+            bill_payment: 'Bill Payment', airtime: 'Airtime', data: 'Data Bundle',
+            bank_to_wallet: 'Bank to Wallet', wallet_to_bank: 'Wallet to Bank',
+        };
         function copyFlash(id, label) {
             const el = document.getElementById(id);
             navigator.clipboard.writeText(el.textContent.trim()).then(() => toast(label, 'success'));
@@ -310,11 +462,57 @@
                 console.warn('SMS body modal not available for this role.');
             }
         }
+        function setDeviceTab(tab, btn) {
+            document.querySelectorAll('.tabs .tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('hidden', p.id !== 'dpan-' + tab));
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', tab);
+            history.replaceState({}, '', url);
+        }
         document.querySelectorAll('[data-edit-device-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
                 submitForm(form, { method: 'PUT', done: () => setTimeout(() => location.reload(), 600) });
             });
         });
+
+        @php
+            $deviceTxns = $transactions->map(fn ($t) => [
+                'reference' => $t->reference,
+                'provider_reference' => $t->provider_reference,
+                'type' => $t->type,
+                'customer_name' => $t->customer_name,
+                'customer_phone' => $t->customer_phone,
+                'network' => $t->network?->name,
+                'amount' => (float) $t->amount,
+                'fee' => (float) $t->fee,
+                'commission' => (float) $t->commission,
+                'status' => $t->status,
+                'created_at' => $t->created_at->format('d M Y H:i'),
+                'operator' => $t->operator?->name,
+            ])->values();
+        @endphp
+        const deviceTxnsData = @json($deviceTxns);
+
+        function devFmt(n) { return 'TZS ' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+
+        bindRowClick('#devTxnBody tr[data-id]', tr => {
+            const t = deviceTxnsData.find(x => x.reference === tr.querySelector('.cell-title').textContent.trim());
+            if (!t) return [];
+            return [
+                ['Reference', t.reference],
+                ['Provider ref', t.provider_reference || '—'],
+                ['Date', t.created_at],
+                ['Type', TYPE_LABEL[t.type] || t.type],
+                ['Network', t.network || '—'],
+                ['Customer', t.customer_name || '—'],
+                ['Phone', t.customer_phone],
+                ['Amount', devFmt(t.amount)],
+                ['Fee', devFmt(t.fee)],
+                ['Commission', devFmt(t.commission)],
+                ['Status', { __html: statusBadgeHtml(t.status) }],
+                ['Operator', t.operator || '—'],
+            ];
+        }, 'Transaction details');
     </script>
 @endsection

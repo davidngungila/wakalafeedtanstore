@@ -34,6 +34,8 @@ class SmsApiController extends Controller
             'sms.*.sender' => ['required', 'string', 'max:30'],
             'sms.*.message' => ['required', 'string'],
             'sms.*.received_at' => ['nullable', 'date'],
+            'sms.*.sim_slot' => ['nullable', 'integer', 'between:1,4'],
+            'sms.*.subscription_id' => ['nullable', 'string', 'max:30'],
         ]);
 
         $results = $this->processor->ingest($device, $validated['sms']);
@@ -82,6 +84,12 @@ class SmsApiController extends Controller
                 'network' => $device->network?->code,
                 'networks' => $networkCodes,
             ],
+            'lines' => $device->lines()->with('network')->get()->map(fn ($line) => [
+                'sim_slot' => $line->sim_slot,
+                'subscription_id' => $line->subscription_id,
+                'phone_number' => $line->phone_number,
+                'network' => $line->network?->code,
+            ])->values(),
             'capture_all' => true,
             'senders' => $watchlist,
             'ingest' => [

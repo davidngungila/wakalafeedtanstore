@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Device;
+use App\Models\DeviceLine;
 use App\Models\Network;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
@@ -313,5 +314,166 @@ class DeviceModuleTest extends TestCase
             ->assertSee('Body 0')
             ->assertSee('Showing 51–55 of 55')
             ->assertDontSee('Body 54');
+    }
+
+    public function test_network_detail_page_shows_messages_tab_for_supervisors_and_admins(): void
+    {
+        $network = Network::firstOrFail();
+        $device = $this->makeDevice('active');
+
+        SmsMessage::create([
+            'device_id' => $device->id,
+            'agent_id' => $device->agent_id,
+            'network_id' => $network->id,
+            'sender' => 'MPESA',
+            'message_body' => 'NETWORK SMS UNIQUE BODY',
+            'received_at' => now(),
+            'sms_hash' => hash('sha256', 'net-tab-msg'),
+            'server_received_at' => now(),
+        ]);
+
+        foreach ([$this->admin(), $this->supervisor()] as $user) {
+            $this->actingAs($user)
+                ->get(route('networks.show', ['network' => $network, 'tab' => 'messages']))
+                ->assertOk()
+                ->assertSee('NETWORK SMS UNIQUE BODY');
+        }
+    }
+
+    public function test_network_detail_page_shows_devices_tab(): void
+    {
+        $network = Network::firstOrFail();
+        $this->makeDevice('active');
+
+        $this->actingAs($this->admin())
+            ->get(route('networks.show', ['network' => $network, 'tab' => 'devices']))
+            ->assertOk()
+            ->assertSee('Redmi Note 12');
+    }
+
+    public function test_network_detail_hides_messages_and_devices_tabs_from_cashiers(): void
+    {
+        $network = Network::firstOrFail();
+        $device = $this->makeDevice('active');
+
+        SmsMessage::create([
+            'device_id' => $device->id,
+            'agent_id' => $device->agent_id,
+            'network_id' => $network->id,
+            'sender' => 'MPESA',
+            'message_body' => 'CASHIER MUST NOT SEE THIS SMS',
+            'received_at' => now(),
+            'sms_hash' => hash('sha256', 'cashier-hide'),
+            'server_received_at' => now(),
+        ]);
+
+        $this->actingAs($this->cashier())
+            ->get(route('networks.show', ['network' => $network, 'tab' => 'devices']))
+            ->assertOk()
+            ->assertDontSee('CASHIER MUST NOT SEE THIS SMS')
+            ->assertDontSee('Redmi Note 12');
+    }
+
+    public function test_device_detail_page_lists_transactions_created_from_its_sms(): void
+    {
+        $network = Network::firstOrFail();
+        $device = $this->makeDevice('active');
+
+        $txn = Transaction::create([
+            'reference' => 'DEV-TXN-'.$device->id,
+            'agent_id' => cash_point()->id,
+            'network_id' => $network->id,
+            'type' => 'deposit',
+            'customer_name' => 'Neema Petro',
+            'customer_phone' => '0712345678',
+            'amount' => 50000,
+            'fee' => 0,
+            'commission' => 250,
+            'status' => 'completed',
+        ]);
+
+        SmsMessage::create([
+            'device_id' => $device->id,
+            'agent_id' => $device->agent_id,
+            'network_id' => $network->id,
+            'transaction_id' => $txn->id,
+            'sender' => 'MPESA',
+            'message_body' => 'Transaction of TZS 50000.',
+            'received_at' => now(),
+            'sms_hash' => hash('sha256', 'dev-txn-tab'),
+            'transaction_reference' => 'DEV-TXN-'.$device->id,
+            'processing_status' => 'processed',
+            'server_received_at' => now(),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.show', ['device' => $device, 'tab' => 'transactions']))
+            ->assertOk()
+            ->assertSee('DEV-TXN-'.$device->id)
+            ->assertSee('Neema Petro');
+    }
+
+    public function test_admin_can_add_and_remove_sim_lines(): void
+    {
+        $device = $this->makeDevice();
+        $tigo = Network::where('code', 'TIGOPESA')->firstOrFail();
+
+        $this->actingAs($this->admin())
+            ->post(route('devices.lines.store', $device), [
+                'sim_slot' => 1,
+                'network_id' => $tigo->id,
+                'phone_number' => '0755123456',
+                'subscription_id' => '10',
+            ])
+            ->assertRedirect();
+
+        $line = DeviceLine::where('device_id', $device->id)->firstOrFail();
+        $this->assertSame(1, $line->sim_slot);
+        $this->assertSame($tigo->id, $line->network_id);
+        $this->assertSame('10', $line->subscription_id);
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.show', $device))
+            ->assertOk()
+            ->assertSee('SIM 1')
+            ->assertSee('Tigo Pesa');
+
+        $this->actingAs($this->admin())
+            ->delete(route('devices.lines.destroy', [$device, $line]))
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('device_lines', ['id' => $line->id]);
+    }
+
+    public function test_cashiers_cannot_manage_sim_lines(): void
+    {
+        $device = $this->makeDevice();
+        $network = Network::firstOrFail();
+
+        $this->actingAs($this->cashier())
+            ->post(route('devices.lines.store', $device), ['sim_slot' => 1, 'network_id' => $network->id])
+            ->assertForbidden();
+    }
+
+    public function test_sim_lines_are_listed_on_the_device_show_page_and_index(): void
+    {
+        $network = Network::where('code', 'VODACOM')->firstOrFail();
+        $device = $this->makeDevice();
+        $device->lines()->create([
+            'sim_slot' => 2,
+            'network_id' => $network->id,
+            'phone_number' => '0766112233',
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.show', $device))
+            ->assertOk()
+            ->assertSee('SIM 2')
+            ->assertSee('Vodacom M-Pesa');
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.index'))
+            ->assertOk()
+            ->assertSee('SIM 2');
     }
 }

@@ -132,6 +132,58 @@ class SmsApiTest extends TestCase
         $this->assertSame(500, $response->json('ingest.max_batch'));
     }
 
+    public function test_senders_endpoint_exposes_device_lines(): void
+    {
+        $device = $this->makeDevice();
+        $tigo = Network::where('code', 'TIGOPESA')->firstOrFail();
+
+        $device->lines()->create([
+            'sim_slot' => 1,
+            'network_id' => $tigo->id,
+            'phone_number' => '0755123456',
+        ]);
+
+        $response = $this->withHeaders($this->deviceHeaders($device))
+            ->getJson('/api/v1/sms/senders')
+            ->assertOk();
+
+        $this->assertSame(1, count($response->json('lines')));
+        $this->assertSame(1, $response->json('lines.0.sim_slot'));
+        $this->assertSame('TIGOPESA', $response->json('lines.0.network'));
+        $this->assertSame('0755123456', $response->json('lines.0.phone_number'));
+    }
+
+    public function test_ingest_attributes_sms_to_the_sim_line_matching_the_slot(): void
+    {
+        $device = $this->makeDevice('active', Network::where('code', 'VODACOM')->first());
+        $tigo = Network::where('code', 'TIGOPESA')->firstOrFail();
+
+        $line = $device->lines()->create([
+            'sim_slot' => 1,
+            'network_id' => $tigo->id,
+            'phone_number' => '0755123456',
+        ]);
+
+        $response = $this->withHeaders($this->deviceHeaders($device))
+            ->postJson('/api/v1/sms/ingest', [
+                'sms' => [[
+                    'sender' => 'TIGO PESA',
+                    'sim_slot' => 1,
+                    'message' => 'TIGO0001 confirmed. You have received TZS 5,000.00 from TANA OMARI 0722333444.',
+                ]],
+            ])
+            ->assertOk();
+
+        $this->assertSame(1, $response->json('summary.processed'));
+        $this->assertSame('TIGOPESA', $response->json('results.0.network'));
+        $this->assertSame(1, $response->json('results.0.sim_slot'));
+
+        $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
+        $this->assertSame($line->id, $sms->device_line_id);
+        $this->assertSame(1, $sms->sim_slot);
+        $this->assertSame($tigo->id, $sms->network_id);
+    }
+
     public function test_senders_endpoint_filters_to_device_networks_only(): void
     {
         $device = $this->makeDevice();

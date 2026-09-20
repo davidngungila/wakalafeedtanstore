@@ -66,13 +66,22 @@
 
     <form method="GET" action="{{ route('sms.index') }}" id="smsFilterForm">
         <div class="table-card">
-            <div class="table-toolbar">
-                <div class="chip-filters">
-                    @foreach (['all', 'processed', 'received', 'failed', 'duplicate'] as $st)
-                        <button type="button" class="chip {{ ($filters['status'] ?? 'all') === $st ? 'active' : '' }}" onclick="setFilter('status','{{ $st }}')">{{ ucfirst($st) }}</button>
+            <div class="table-toolbar" style="border:none;">
+                <div class="tabs" style="margin:0;border:none;background:transparent;padding:0;box-shadow:none;" role="tablist">
+                    @foreach ([
+                        'all' => 'All',
+                        'processed' => 'Processed',
+                        'pending' => 'Pending',
+                        'stored' => 'Stored',
+                        'failed' => 'Failed',
+                        'duplicate' => 'Duplicates',
+                    ] as $st => $label)
+                        <button type="button" class="tab-btn {{ ($filters['status'] ?? 'all') === $st ? 'active' : '' }}" onclick="setFilter('status','{{ $st }}')">{{ $label }} <span class="tab-count">{{ $counts[$st] }}</span></button>
                     @endforeach
                 </div>
-                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            </div>
+            <div class="table-toolbar" style="border-bottom:none;padding-top:6px;">
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;width:100%;">
                     <select name="device" onchange="this.form.submit()" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13px;font-weight:600;background:var(--white);color:var(--coffee-700);">
                         <option value="all">All devices</option>
                         @foreach ($devices as $device)
@@ -101,6 +110,7 @@
                     <tr>
                         <th>Time</th>
                         <th>Device</th>
+                        <th>Line</th>
                         <th>Sender</th>
                         <th>Network</th>
                         <th>Type</th>
@@ -117,6 +127,13 @@
                             <td class="cell-sub">{{ $message->server_received_at->format('H:i:s') }}</td>
                             <td>
                                 <a href="{{ route('devices.show', $message->device_id) }}" class="cell-title" onclick="event.stopPropagation()">{{ $message->device?->name ?? '—' }}</a>
+                            </td>
+                            <td>
+                                @if ($message->deviceLine)
+                                    <div class="cell-sub">{{ $message->deviceLine->displayName() }} · {{ $message->deviceLine->network?->name ?? '—' }}</div>
+                                @else
+                                    <span class="cell-sub">—</span>
+                                @endif
                             </td>
                             <td>{{ $message->sender }}</td>
                             <td>{!! $message->network
@@ -144,7 +161,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr id="smsEmptyRow"><td colspan="10" class="empty-state"><h4>No SMS captured yet</h4><p>Messages from connected devices appear here in real time.</p></td></tr>
+                        <tr id="smsEmptyRow"><td colspan="11" class="empty-state"><h4>No SMS captured yet</h4><p>Messages from connected devices appear here in real time.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -182,6 +199,7 @@
                     'datetime' => $message->server_received_at->format('D, j M Y · H:i:s'),
                     'device' => $message->device?->name,
                     'device_id' => $message->device_id,
+                    'line' => $message->deviceLine?->displayName(),
                     'sender' => $message->sender,
                     'network' => $message->network?->name,
                     'network_color' => $message->network?->color,
@@ -232,6 +250,7 @@
             const entries = [
                 ['Time (EAT)', row.datetime],
                 ['Sender', row.sender],
+                ['Line', row.line || '—'],
                 ['Network', row.network && row.network !== '—' ? {__html: '<span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:' + row.network_color + ';display:inline-block;"></span>' + row.network + '</span>'} : '—'],
                 ['Type', row.type],
                 ['Amount', row.amount],

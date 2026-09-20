@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\CommissionRate;
+use App\Models\Device;
 use App\Models\Network;
 use App\Models\NetworkBalance;
+use App\Models\SmsMessage;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -48,6 +50,14 @@ class NetworkController extends Controller
 
     public function show(Request $request, Network $network): View
     {
+        $manageable = is_role('supervisor', 'admin');
+        $activeTab = $request->input('tab', 'transactions');
+        $activeTab = in_array($activeTab, ['transactions', 'messages', 'devices'], true) ? $activeTab : 'transactions';
+
+        if ($activeTab === 'devices' && ! $manageable) {
+            $activeTab = 'transactions';
+        }
+
         $query = Transaction::with(['agent', 'operator'])
             ->where('network_id', $network->id);
 
@@ -91,6 +101,26 @@ class NetworkController extends Controller
             'failed' => (int) $network->transactions()->whereIn('status', ['failed', 'reversed'])->count(),
         ];
 
+        $messages = collect();
+        if ($manageable && in_array($activeTab, ['messages', 'transactions'], true)) {
+            $messages = SmsMessage::with(['device', 'transaction'])
+                ->where('network_id', $network->id)
+                ->latest('server_received_at')
+                ->limit(200)
+                ->get();
+        }
+
+        $devices = collect();
+        if ($manageable && in_array($activeTab, ['devices', 'transactions'], true)) {
+            $devices = Device::with(['agent', 'networks', 'lines.network'])
+                ->where(function ($q) use ($network) {
+                    $q->whereHas('networks', fn ($w) => $w->whereKey($network->id))
+                        ->orWhere('network_id', $network->id);
+                })
+                ->orderBy('name')
+                ->get();
+        }
+
         $types = ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank'];
 
         return view('networks.show', [
@@ -99,6 +129,10 @@ class NetworkController extends Controller
             'stats' => $stats,
             'types' => $types,
             'filters' => $request->only(['status', 'type', 'from', 'to', 'q']),
+            'messages' => $messages,
+            'devices' => $devices,
+            'activeTab' => $activeTab,
+            'manageable' => $manageable,
         ]);
     }
 

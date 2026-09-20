@@ -86,6 +86,40 @@ class Device extends Model
     }
 
     /**
+     * Physical SIM lines (chips) installed in the handset. Each line maps a
+     * SIM slot to a network and carries its own phone number.
+     *
+     * @return HasMany<DeviceLine, $this>
+     */
+    public function lines(): HasMany
+    {
+        return $this->hasMany(DeviceLine::class)->orderBy('sim_slot');
+    }
+
+    /**
+     * Resolve the line a message arrived on, by Android subscription id first,
+     * then by the reported SIM slot.
+     */
+    public function lineFor(?string $subscriptionId, $simSlot): ?DeviceLine
+    {
+        $line = $this->lines()->get();
+
+        if ($subscriptionId !== null && $subscriptionId !== '') {
+            $match = $line->firstWhere('subscription_id', $subscriptionId);
+
+            if ($match !== null) {
+                return $match;
+            }
+        }
+
+        if ($simSlot !== null && $simSlot !== '') {
+            return $line->firstWhere('sim_slot', (int) $simSlot);
+        }
+
+        return null;
+    }
+
+    /**
      * Generate a unique 6-character device code using an unambiguous alphabet
      * (no O/0, I/1, l).
      */

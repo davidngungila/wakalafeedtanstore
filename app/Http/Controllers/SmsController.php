@@ -13,11 +13,10 @@ class SmsController extends Controller
 {
     public function index(Request $request): View
     {
-        $query = SmsMessage::with(['device', 'network', 'transaction']);
+        $query = SmsMessage::with(['device', 'network', 'transaction', 'deviceLine.network']);
 
-        if ($request->filled('status') && $request->input('status') !== 'all') {
-            $query->where('processing_status', $request->input('status'));
-        }
+        $status = $request->input('status', 'all');
+        $this->applyStatusFilter($query, $status);
 
         if ($request->filled('network') && $request->input('network') !== 'all') {
             $query->where('network_id', $request->input('network'));
@@ -53,13 +52,58 @@ class SmsController extends Controller
             'duplicates' => (clone $todayBase)->where('is_duplicate', true)->count(),
         ];
 
+        $counts = [
+            'all' => SmsMessage::count(),
+            'processed' => SmsMessage::where('processing_status', 'processed')->count(),
+            'pending' => SmsMessage::whereIn('processing_status', ['received', 'identified', 'parsed'])->count(),
+            'stored' => SmsMessage::where('processing_status', 'failed')->where('processing_error', 'like', '%financial template%')->count(),
+            'failed' => SmsMessage::where('processing_status', 'failed')->where(function ($q) {
+                $q->whereNull('processing_error')
+                    ->orWhere('processing_error', 'not like', '%financial template%');
+            })->count(),
+            'duplicate' => SmsMessage::where('is_duplicate', true)->count(),
+        ];
+
         return view('sms.index', [
             'messages' => $messages,
             'today' => $today,
+            'counts' => $counts,
             'devices' => Device::orderBy('name')->get(['id', 'name']),
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
             'filters' => $request->only(['status', 'network', 'device', 'q']),
         ]);
+    }
+
+    /**
+     * Apply a tab status filter to the SMS query. Tabs use display labels
+     * (pending, stored, duplicate) instead of raw processing_status values.
+     */
+    private function applyStatusFilter($query, string $status): void
+    {
+        switch ($status) {
+            case 'processed':
+                $query->where('processing_status', 'processed');
+                break;
+            case 'pending':
+                $query->whereIn('processing_status', ['received', 'identified', 'parsed']);
+                break;
+            case 'stored':
+                $query->where('processing_status', 'failed')
+                    ->where('processing_error', 'like', '%financial template%');
+                break;
+            case 'failed':
+                $query->where('processing_status', 'failed')
+                    ->where(function ($q) {
+                        $q->whereNull('processing_error')
+                            ->orWhere('processing_error', 'not like', '%financial template%');
+                    });
+                break;
+            case 'duplicate':
+                $query->where('is_duplicate', true);
+                break;
+            default:
+                break;
+        }
     }
 
     /**

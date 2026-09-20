@@ -25,13 +25,17 @@ This document covers:
 
 A phone runs the **MobiControl** app. The app:
 
-- registers to **receive every incoming SMS** (via a native `BroadcastReceiver`),
+- registers to **receive every incoming SMS** on **every SIM line** (via a
+  native `BroadcastReceiver`; Android exposes each message's `subscriptionId`
+  so a dual-SIM phone can say which physical line it came on),
 - forwards **every** SMS — the capture contract (`GET /api/v1/sms/senders`)
   sets `capture_all`, so there is no sender filtering on the phone,
+- attaches the SIM slot / subscription id to each message so the server can
+  attribute it to the correct **device line** and its network,
 - queues the captured SMS locally (offline-safe),
 - uploads them in batches of ≤ 500 to `POST /api/v1/sms/ingest`,
 - parses the server response, keeps anything that failed for retry, and
-  drops the rest,
+- drops the rest,
 - reports liveness with `POST /heartbeat` (the web dashboard marks a device
   **offline** when there is no heartbeat for **10 minutes**), and
 - pairs/refreshes its identity with `POST /devices/bootstrap` and
@@ -72,6 +76,21 @@ device**, which makes "upload again later" safe.
 
 Every phone is a **Device** managed by an administrator on the web dashboard. The
 only credential is the **device code**.
+
+A device belongs to one physical handset and its **SIM lines**. Each line maps a
+SIM slot (1, 2, 3, 4) to a network chip and optionally a phone number and the
+Android **subscription id**. A typical agent phone is **2 SIM lines per handset**,
+each serving a different network:
+
+```
+Phone (Device "Samsung A15", code F7KQ2M)
+├── SIM line 1  → SIM slot 1 · VODACOM · 0754…
+└── SIM line 2  → SIM slot 2 · TIGOPESA · 0755…
+```
+
+The admin configures lines in the device page. The app reads them from
+`GET /sms/senders` (`lines[]`) and tags every captured SMS with its slot /
+subscription id; the server then attributes the SMS to the right line and network.
 
 | Stage            | Meaning                                                                    | Behaviour on the API                                      |
 | ---------------- | -------------------------------------------------------------------------- | --------------------------------------------------------- |
@@ -216,6 +235,20 @@ Response `200`:
     "network": "VODACOM",
     "networks": ["VODACOM", "AIRTEL"]
   },
+  "lines": [
+    {
+      "sim_slot": 1,
+      "subscription_id": "10",
+      "phone_number": "0754123456",
+      "network": "VODACOM"
+    },
+    {
+      "sim_slot": 2,
+      "subscription_id": "12",
+      "phone_number": "0755123456",
+      "network": "TIGOPESA"
+    }
+  ],
   "capture_all": true,
   "senders": [
     { "keyword": "MPESA",     "network": "VODACOM" },
@@ -228,8 +261,21 @@ Response `200`:
 }
 ```
 
+| Field                  | Type   | Meaning                                                    |
+| ---------------------- | ------ | ---------------------------------------------------------- |
+| `lines[].sim_slot`     | int    | SIM slot of the line (1-based)                             |
+| `lines[].subscription_id` | string/null | Android subscription id for this SIM (may be empty)  |
+| `lines[].phone_number` | string/null | Phone number of that line                                   |
+| `lines[].network`      | string | Network code this line's SIM serves (`VODACOM`, `TIGOPESA`, …) |
+
 The app caches this contract and re-fetches it periodically (e.g. after every
 successful heartbeat) so admin changes propagate.
+
+> **SIM-line mapping rule:** the app should use `lines[].subscription_id` to map
+> an SMS to a line when available (Android 5.1+/DSDS provides `getSubscriptionId()`
+> on the raw SMS). If the app cannot read a subscription id, it should fall back
+> to the physical slot it already asked the operator to assign in its SIM settings.
+> The server accepts **either** field (see §4.4).
 
 > **Capture rule:** `capture_all: true` (the current server contract) tells the
 > phone to forward **every** SMS regardless of sender. The `senders` list is
@@ -251,17 +297,26 @@ Request body:
     {
       "sender": "MPESA",
       "message": "P98765 confirmed. You have received TZS 100,000.00 from JUMA ATHUMANI 0712345678 on 14/9/2026 at 10:30.",
-      "received_at": "2026-09-14 10:30:00"
+      "received_at": "2026-09-14 10:30:00",
+      "sim_slot": 1,
+      "subscription_id": "10"
     }
   ]
 }
 ```
 
-| Field          | Type   | Rule                                   |
-| -------------- | ------ | -------------------------------------- |
-| `sender`       | string | required, max 30                       |
-| `message`      | string | required, the raw SMS body             |
-| `received_at`  | string | optional ISO-style / `Y-m-d H:i:s` date |
+| Field            | Type   | Rule                                   |
+| ---------------- | ------ | -------------------------------------- |
+| `sender`         | string | required, max 30                       |
+| `message`        | string | required, the raw SMS body             |
+| `received_at`    | string | optional ISO-style / `Y-m-d H:i:s` date |
+| `sim_slot`       | int    | optional, 1–4 — SIM slot the SMS arrived on |
+| `subscription_id`| string | optional, max 30 — Android subscription id for the SIM |
+
+> On a **dual-SIM phone**, include the slot (or subscription id) on every SMS so
+> the server attributes it to the right network. The server resolves the line by
+> `subscription_id` first, then by `sim_slot`. When the line is found, its network
+> is used as the attribution fallback (even for senders the parser doesn't know).
 
 Response `200`:
 
@@ -283,6 +338,8 @@ Response `200`:
       "type": "deposit",
       "amount": 100000.0,
       "network": "VODACOM",
+      "sim_slot": 1,
+      "line": "SIM 1",
       "transaction_reference": "TXN-2026-09-14-0001"
     },
     {
@@ -328,9 +385,10 @@ Response `200`:
 - Requests are capped at `max_batch` (500) — chunk larger queues.
 
 **Server-side processing** (what happens per accepted SMS): the server computes
-`sha256(message_body)`, checks the per-device duplicate index, identifies the
-network from the sender — falling back to the device's first assigned network
-when the sender is not a known keyword — parses the SMS template, creates a `Transaction`
+`sha256(message_body)`, checks the per-device duplicate index, resolves the SIM
+line from `subscription_id` / `sim_slot`, identifies the network from the sender —
+falling back to the matching line's network, then to the device's first assigned
+network, when the sender is not a known keyword — parses the SMS template, creates a `Transaction`
 (status `completed`), adjusts float/cash balances, links the SMS to the
 transaction, and returns the `transaction_reference`. All inside a transaction.
 
@@ -456,8 +514,16 @@ class SmsReceiver : BroadcastReceiver() {
             val receivedAt = Date(message.timestampMillis).run {
                 SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(this)
             }
+            // Android applies the message to its own subscription. On a
+            // dual-SIM phone this is the ONLY reliable way to know which SIM
+            // line the SMS arrived on, so the server attributes it correctly.
+            val subscriptionId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                message.subscriptionId?.toString()
+            } else {
+                subIdFor(subscription, message)
+            }
             // Hand to Flutter (EventChannel) and/or persist to the local queue.
-            SmsBridge.sink.add(SmsItem(sender, body, receivedAt))
+            SmsBridge.sink.add(SmsItem(sender, body, receivedAt, subscriptionId))
         }
         // Trigger an immediate flush attempt.
         SmsServiceKick.request(context)
@@ -614,6 +680,10 @@ Android minimum config:
   `max_batch` (500), call `SmsApi.ingest`, and remove only `ok:true` /
   `duplicate:true` items. Failed items stay queued (with an attempt counter and
   exponential backoff).
+- **SIM line tagging:** `SmsItem` carries the subscription id / slot from the
+  native receiver; the flush maps subscription id → slot using the cached
+  `lines[]` contract and sends both (`sim_slot` + `subscription_id`) on every
+  item so a dual-SIM phone attributes each message to the correct network.
 
 ### 6.4 Capture + dedupe discipline
 
@@ -716,7 +786,10 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 - [ ] Revoke device → next API call returns 403 → code cleared, pairing screen shown.
 - [ ] Battery saver / Doze after 30 min idle → device still heartbeat within 10 min of going offline? (Use the visual **offline** check.) Then run the OEM auto-start fix.
 - [ ] A device serving 2 networks (VODACOM + AIRTEL) captures MPESA **and** AIRTEL senders and creates transactions on both networks.
+- [ ] **Dual-SIM:** a phone with SIM1 = Vodacom and SIM2 = Tigo captures a Vodacom SMS (slot 1) and a Tigo SMS (slot 2) in the same batch → both appear on the dashboard attributed to `SIM 1 · Vodacom` and `SIM 2 · Tigo Pesa` respectively, on the correct networks.
+- [ ] Server resolves a message with only `subscription_id` (no `sim_slot`) and one with only `sim_slot` — both attribute to the right line.
 - [ ] `GET /sms/senders` returns `capture_all: true` → app shows the "Capturing all senders" banner and forwards every SMS, even from senders not in the reference list.
+- [ ] New admin edits a device's lines (add/remove line) → next `senders` poll shows the updated `lines[]`; messages from a removed line still ingest (attributed via fallback) but show no line.
 
 ---
 
@@ -727,6 +800,7 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 | Device shows **offline**         | No heartbeat for > 10 min (Doze, OEM kill, no network)  | Battery exemption + Auto-start; enable notifications; re-verify in app self-test |
 | SMS captured but never uploaded  | Queue stuck / no connectivity                     | Check Ingest log & error; connectivity |
 | "Device has no network assigned." in ingest results | Device has no networks assigned | Assign at least one network in the admin screens |
+| Dual-SIM SMS attributed to the **wrong** network | App sent no `sim_slot`/`subscription_id`, or the server's line map doesn't match the phone | Send the subscription id with each SMS; verify the device's SIM lines config matches the phone's actual slots |
 | Unknown sender stored, no transaction | Sender not a known keyword and message not a financial template | Expected with `capture_all`; extend `config('sms.templates')` if it should parse |
 | App dead after reboot            | Auto-start disabled on OEM ROM                          | Enable manufacturer auto-start; confirm `BootReceiver` registered |
 | Duplicate transactions           | Items re-sent after a successful upload but before removal | Check the queue removes on `ok:true`; server dedupe is authoritative and hash-based |
@@ -744,3 +818,8 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
   pivot). A device with **no** assigned network cannot process SMS — every
   message returns `Device has no network assigned.` Assign networks in the
   Devices admin screen.
+- Device ↔ SIM lines is a **one-to-many** relationship (`device_lines`):
+  `sim_slot`, `network_id`, `phone_number`, `subscription_id`. SMS ingest
+  stores `device_line_id` + `sim_slot`; messages show the line everywhere it is
+  listed. The line's network is used as the attribution fallback ahead of the
+  device's assigned networks.

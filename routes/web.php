@@ -120,6 +120,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/devices', [DeviceController::class, 'store'])->name('devices.store');
         Route::put('/devices/{device}', [DeviceController::class, 'update'])->name('devices.update');
         Route::post('/devices/{device}/code', [DeviceController::class, 'regenerateCode'])->name('devices.code');
+        Route::post('/devices/{device}/lines', [DeviceController::class, 'storeLine'])->name('devices.lines.store');
+        Route::delete('/devices/{device}/lines/{line}', [DeviceController::class, 'destroyLine'])->name('devices.lines.destroy');
         Route::delete('/devices/{device}', [DeviceController::class, 'destroy'])->name('devices.destroy');
 
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');

@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Device;
+use App\Models\DeviceLine;
 use App\Models\Network;
 use App\Models\SmsMessage;
+use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +17,7 @@ class DeviceController extends Controller
 {
     public function index(Request $request): View
     {
-        $query = Device::with(['agent', 'network', 'networks']);
+        $query = Device::with(['agent', 'network', 'networks', 'lines.network']);
 
         if ($request->filled('status') && $request->input('status') !== 'all') {
             $query->where('status', $request->input('status'));
@@ -57,7 +59,10 @@ class DeviceController extends Controller
 
     public function show(Request $request, Device $device): View
     {
-        $device->load(['agent', 'network', 'networks']);
+        $device->load(['agent', 'network', 'networks', 'lines.network']);
+
+        $activeTab = $request->input('tab', 'messages');
+        $activeTab = in_array($activeTab, ['messages', 'transactions'], true) ? $activeTab : 'messages';
 
         $sms = SmsMessage::with(['transaction'])
             ->where('device_id', $device->id)
@@ -65,11 +70,19 @@ class DeviceController extends Controller
             ->paginate(50)
             ->withQueryString();
 
+        $transactions = Transaction::with(['network', 'operator'])
+            ->whereHas('smsMessages', fn ($q) => $q->where('device_id', $device->id))
+            ->latest()
+            ->limit(200)
+            ->get();
+
         return view('devices.show', [
             'device' => $device,
             'sms' => $sms,
+            'transactions' => $transactions,
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
             'credentialsFlash' => session()->pull('credentials_flash'),
+            'activeTab' => $activeTab,
         ]);
     }
 
@@ -195,6 +208,52 @@ class DeviceController extends Controller
         }
 
         return array_unique($ids);
+    }
+
+    public function storeLine(Request $request, Device $device): JsonResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'sim_slot' => ['required', 'integer', 'between:1,4'],
+            'network_id' => ['required', 'exists:networks,id'],
+            'phone_number' => ['nullable', 'string', 'max:30'],
+            'subscription_id' => ['nullable', 'string', 'max:30'],
+        ]);
+
+        $line = $device->lines()->updateOrCreate(
+            ['sim_slot' => $validated['sim_slot']],
+            [
+                'network_id' => $validated['network_id'],
+                'phone_number' => $validated['phone_number'] ?? null,
+                'subscription_id' => $validated['subscription_id'] ?? null,
+            ],
+        );
+
+        $this->recordAudit('Device line saved', 'Device', $device->id, [
+            'device_line_id' => $line->id,
+            'sim_slot' => $line->sim_slot,
+            'network_id' => $line->network_id,
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'SIM line saved.']);
+        }
+
+        return back()->with('status', 'SIM line saved.');
+    }
+
+    public function destroyLine(Request $request, Device $device, DeviceLine $line): JsonResponse|RedirectResponse
+    {
+        abort_unless($line->device_id === $device->id, 403, 'Line does not belong to this device.');
+
+        $line->delete();
+
+        $this->recordAudit('Device line removed', 'Device', $device->id, ['sim_slot' => $line->sim_slot]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'SIM line removed.']);
+        }
+
+        return back()->with('status', 'SIM line removed.');
     }
 
     public function approve(Request $request, Device $device): JsonResponse|RedirectResponse

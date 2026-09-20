@@ -98,4 +98,57 @@ class SmsMonitorTest extends TestCase
         // Exactly one genuine failure + one stored message.
         $response->assertSee('Stored · no transaction');
     }
+
+    public function test_status_tabs_filter_stored_and_duplicate_messages(): void
+    {
+        $this->makeMessage(); // stored (template mismatch)
+
+        $this->makeMessage([
+            'processing_status' => 'failed',
+            'processing_error' => 'Device has no network assigned.',
+            'is_duplicate' => false,
+            'message_body' => 'Genuine failure body',
+            'sms_hash' => hash('sha256', 'genuine-failure'),
+        ]);
+
+        $this->makeMessage([
+            'processing_status' => 'processed',
+            'is_duplicate' => true,
+            'message_body' => 'Duplicate body',
+            'sms_hash' => hash('sha256', 'duplicate-body'),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get(route('sms.index', ['status' => 'stored']))
+            ->assertOk()
+            ->assertSee('Stored')
+            ->assertDontSee('Genuine failure body')
+            ->assertDontSee('Duplicate body');
+
+        $this->actingAs($this->admin())
+            ->get(route('sms.index', ['status' => 'duplicate']))
+            ->assertOk()
+            ->assertSee('Duplicate body')
+            ->assertDontSee('Genuine failure body');
+
+        $this->actingAs($this->admin())
+            ->get(route('sms.index', ['status' => 'failed']))
+            ->assertOk()
+            ->assertSee('Genuine failure body')
+            ->assertDontSee('Duplicate body');
+    }
+
+    public function test_status_tabs_render_count_badges(): void
+    {
+        $this->makeMessage();
+
+        $this->actingAs($this->admin())
+            ->get(route('sms.index'))
+            ->assertOk()
+            ->assertSee('Processed')
+            ->assertSee('Pending')
+            ->assertSee('Stored')
+            ->assertSee('Failed')
+            ->assertSee('Duplicates');
+    }
 }

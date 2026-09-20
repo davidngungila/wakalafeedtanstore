@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'device_id',
+    'device_line_id',
+    'sim_slot',
     'agent_id',
     'network_id',
     'transaction_id',
@@ -31,6 +33,7 @@ class SmsMessage extends Model
     protected function casts(): array
     {
         return [
+            'sim_slot' => 'integer',
             'amount' => 'decimal:2',
             'balance' => 'decimal:2',
             'received_at' => 'datetime',
@@ -45,6 +48,14 @@ class SmsMessage extends Model
     public function device(): BelongsTo
     {
         return $this->belongsTo(Device::class);
+    }
+
+    /**
+     * @return BelongsTo<DeviceLine, $this>
+     */
+    public function deviceLine(): BelongsTo
+    {
+        return $this->belongsTo(DeviceLine::class);
     }
 
     /**
