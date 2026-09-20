@@ -39,7 +39,8 @@ A phone runs the **MobiControl** app. The app:
 - reports liveness with `POST /heartbeat` (the web dashboard marks a device
   **offline** when there is no heartbeat for **10 minutes**), and
 - pairs/refreshes its identity with `POST /devices/bootstrap` and
-  `GET /devices/me`.
+  `GET /devices/me`. Each device code tracks every handset that connects (§4.6)
+  and shows a live connection LED on the device page.
 
 ```
   Mobile Network ──SMS──▶ SIM / Telephony Stack
@@ -176,6 +177,10 @@ Request body:
 | Field             | Type   | Rule                      |
 | ----------------- | ------ | ------------------------- |
 | `device_uid`      | string | required, max 80          |
+
+`device_uid` (plus `model`/`android_version`/`app_version`) also creates the
+first **handset session** in the Connected phones panel (see §4.6). Subsequent
+bootstrap/heartbeat calls with the same `device_uid` refresh it.
 | `model`           | string | optional, max 120         |
 | `android_version` | string | optional, max 30          |
 | `app_version`     | string | optional, max 30          |
@@ -427,6 +432,37 @@ Response `200`:
 The server stamps `last_heartbeat_at`, `last_sync_at` and `last_ip`, and adopts
 any changed handset metadata. A gap of more than **`sms.offline_after_minutes`
 (= 10)** marks the device **offline** on the dashboard.
+
+When `device_uid` is sent, the server also records a **handset session** for the
+pair `(device, device_uid)` — see §4.6. Sending it on every heartbeat keeps the
+handset's live status fresh.
+
+---
+
+### 4.6 Connected handsets & live status (LED)
+
+Both `bootstrap` (§4.1) and `heartbeat` (§4.5) register or refresh a handset
+session whenever `device_uid` is supplied. Each unique phone that pairs with a
+device code appears in the **Connected phones** panel on the device page:
+
+| Session rules                                |                                                                          |
+| -------------------------------------------- | ------------------------------------------------------------------------ |
+| Key                                          | `device_uid` per device code (one device can pair several handsets)      |
+| First contact                                | Creates the session (`first_seen_at`)                                    |
+| Every bootstrap/heartbeat with `device_uid`  | Updates `model`, `android_version`, `app_version`, `ip`, `last_seen_at`  |
+| Online window                                | `last_seen_at` within `sms.offline_after_minutes` (= 10)                 |
+| Repeated `device_uid` beats                  | Update the **same** row — one session per handset                        |
+
+The **LED** (#C0) next to each phone pulses **green** while the handset is
+online and turns **grey** when it goes stale; the panel and LEDs refresh every
+15 seconds with no page reload. A device ported to a new physical phone (new
+`device_uid`) shows **both** handsets, so admins can see the old pairing age
+out.
+
+> For the app: always echo the *actual* Android provisioning ID (e.g.
+> `Settings.Secure.ANDROID_ID`) as `device_uid`. Two devices sharing the same
+> device code will show as two separate rows; reusing the same `device_uid`
+> across phones collapses them into one and is incorrect.
 
 ---
 
@@ -802,6 +838,7 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 - [ ] Server resolves a message with only `subscription_id` (no `sim_slot`) and one with only `sim_slot` — both attribute to the right line.
 - [ ] `GET /sms/senders` returns `capture_all: true` → app shows the "Capturing all senders" banner and forwards every SMS, even from senders not in the reference list.
 - [ ] New admin edits a device's lines (add/remove line) → next `senders` poll shows the updated `lines[]`; messages from a removed line still ingest (attributed via fallback) but show no line.
+- [ ] **Connected phones / LED:** pair one phone → device page **Connected phones** shows it with a pulsing green LED within 15 s. Swap the SIM into another phone (new `device_uid`) → a second row appears. Force-stop the app ≥ 10 min → that row's LED turns grey and its "Last seen" freezes, while the other handset stays green.
 
 ---
 
@@ -810,6 +847,7 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 | Symptom                          | Likely cause                                            | Fix                                                              |
 | -------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------- |
 | Device shows **offline**         | No heartbeat for > 10 min (Doze, OEM kill, no network)  | Battery exemption + Auto-start; enable notifications; re-verify in app self-test |
+| A handset's **LED** is grey but the device is **online** | That handset stopped sending `device_uid` (or was replaced by another phone under the same code) | Keep sending the real Android ID in bootstrap/heartbeat; each phone gets its own row (§4.6) |
 | SMS captured but never uploaded  | Queue stuck / no connectivity                     | Check Ingest log & error; connectivity |
 | "Device has no network assigned." in ingest results | Device has no networks assigned | Assign at least one network in the admin screens |
 | Dual-SIM SMS attributed to the **wrong** network | App sent no `sim_slot`/`subscription_id`, or the server's line map doesn't match the phone | Send the subscription id with each SMS; verify the device's SIM lines config matches the phone's actual slots |
@@ -835,3 +873,8 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
   stores `device_line_id` + `sim_slot`; messages show the line everywhere it is
   listed. The line's network is used as the attribution fallback ahead of the
   device's assigned networks.
+- Device ↔ handsets is a **one-to-many** relationship (`device_phones`): keyed
+  on `(device_id, device_uid)` with `model`, `android_version`, `app_version`,
+  `ip`, `first_seen_at`, `last_seen_at`. The device page reads from here for the
+  **Connected phones** panel and LEDs; `GET /devices/{device}/phones/status`
+  feeds the 15-second live refresh.
