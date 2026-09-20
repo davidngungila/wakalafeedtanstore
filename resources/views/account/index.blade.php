@@ -1,5 +1,9 @@
 @extends('layouts.app')
 
+@php
+    use App\Support\TwoFactor;
+@endphp
+
 @section('title', 'Account & Security')
 
 @section('content')
