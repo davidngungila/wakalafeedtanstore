@@ -54,7 +54,7 @@
                             data-lastlogin="{{ $user->last_login_at?->format('d M Y H:i') ?? '' }}">
                             <td>
                                 <div class="cell-main">
-                                    <div class="avatar {{ $user->role === 'admin' ? 'gold' : ($user->role === 'supervisor' ? 'acacia' : '') }}">@if ($user->profile_photo_path)<img src="{{ $user->avatarUrl() }}" alt="">@else{{ strtoupper(substr($user->name, 0, 2)) }}@endif</div>
+                                    <div class="avatar {{ $user->role === 'admin' ? 'gold' : ($user->role === 'supervisor' ? 'acacia' : '') }}">@if ($user->avatarUrl())<img src="{{ $user->avatarUrl() }}" alt="">@else{{ strtoupper(substr($user->name, 0, 2)) }}@endif</div>
                                     <div>
                                         <div class="cell-title">{{ $user->name }}</div>
                                         <div class="cell-sub">{{ $user->email }}</div>

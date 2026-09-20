@@ -52,10 +52,14 @@ class User extends Authenticatable
 
         $path = ltrim($this->profile_photo_path, '/');
 
-        if (Storage::disk('public')->exists($path)) {
-            return Storage::disk('public')->url($path);
+        if (! str_starts_with($path, 'avatars/')) {
+            return '';
         }
 
-        return '';
+        if (! Storage::disk('public')->exists($path)) {
+            return '';
+        }
+
+        return route('avatar.show', substr($path, strlen('avatars/')));
     }
 }
