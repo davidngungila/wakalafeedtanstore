@@ -42,12 +42,15 @@
                             <b>Cash in Hand</b>
                             <div class="activity-time">
                                 Opening: <strong>@money($todayStats['cash_opening'])</strong> ·
-                                Current: <strong style="color:var(--coffee-900);">@money($todayStats['cash_current'])</strong> ·
-                                Expected: <strong style="color:var(--acacia-600);">@money($todayStats['cash_opening'] + $todayStats['commission'])</strong>
+                                Deposits: <strong>@money($todayStats['today_deposits'])</strong> ·
+                                Withdrawals: <strong>@money($todayStats['today_withdrawals'])</strong> ·
+                                Commission: <strong>@money($todayStats['commission'])</strong> ·
+                                Expected: <strong style="color:var(--acacia-600);">@money($todayStats['expected_closing_cash'])</strong> ·
+                                Current: <strong style="color:var(--coffee-900);">@money($todayStats['cash_current'])</strong>
                             </div>
                         </div>
-                        <div style="font-weight:600;color:{{ $todayStats['cash_current'] >= $todayStats['cash_opening'] + $todayStats['commission'] ? 'var(--acacia-600)' : 'var(--danger)' }};">
-                            @money($todayStats['cash_current'] - $todayStats['cash_opening'] - $todayStats['commission'])
+                        <div style="font-weight:600;color:{{ ($todayStats['cash_current'] - $todayStats['expected_closing_cash']) >= 0 ? 'var(--acacia-600)' : 'var(--danger)' }};">
+                            @money($todayStats['cash_current'] - $todayStats['expected_closing_cash'])
                         </div>
                     </div>
                     @foreach ($agent->balances as $balance)
@@ -247,6 +250,7 @@
             </form>
         </div>
     </div>
+    @endif
 @endsection
 
 @section('scripts')

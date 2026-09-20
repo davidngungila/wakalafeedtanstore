@@ -48,15 +48,38 @@ class CashPointController extends Controller
                 ->where('status', 'completed')
                 ->get();
 
+            $cashInTypes = ['deposit', 'bank_to_wallet'];
+            $cashOutTypes = ['withdrawal', 'wallet_to_bank', 'send_money', 'bill_payment', 'airtime', 'data'];
+            $todayDeposits = (float) $todayTxns->whereIn('type', $cashInTypes)->sum('amount');
+            $todayWithdrawals = (float) $todayTxns->whereIn('type', $cashOutTypes)->sum('amount');
+
+            $storedVolume = (float) $todayOpening->total_volume;
+            $storedCommission = (float) $todayOpening->total_commission;
+            $storedCount = (int) $todayOpening->total_transactions;
+            if ($storedCount > 0 || $storedVolume > 0) {
+                $todayVolume = $storedVolume;
+                $todayCommission = $storedCommission;
+                $todayCount = $storedCount;
+            } else {
+                $todayVolume = (float) $todayTxns->sum('amount');
+                $todayCommission = (float) $todayTxns->sum('commission');
+                $todayCount = $todayTxns->count();
+            }
+
+            $expectedClosingCash = ((float) $todayOpening->cash_opening) + $todayDeposits - $todayWithdrawals + $todayCommission;
+
             $todayStats = [
-                'volume' => (float) $todayTxns->sum('amount'),
-                'commission' => (float) $todayTxns->sum('commission'),
-                'count' => $todayTxns->count(),
+                'volume' => $todayVolume,
+                'commission' => $todayCommission,
+                'count' => $todayCount,
                 'cash_opening' => (float) $todayOpening->cash_opening,
                 'float_opening' => (float) array_sum($todayOpening->float_openings ?? []),
                 'cash_current' => (float) $agent->cash_balance,
                 'float_current' => agent_total_float($agent),
                 'is_closed' => $todayOpening->is_closed,
+                'today_deposits' => $todayDeposits,
+                'today_withdrawals' => $todayWithdrawals,
+                'expected_closing_cash' => $expectedClosingCash,
             ];
         }
 
