@@ -51,7 +51,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::get('/daily-opening/create', [DailyOpeningController::class, 'create'])->name('daily-opening.create');
     Route::post('/daily-opening', [DailyOpeningController::class, 'store'])->name('daily-opening.store');
     Route::get('/daily-opening/{dailyOpening}', [DailyOpeningController::class, 'show'])->name('daily-opening.show');
-    Route::post('/daily-opening/{dailyOpening}/close', [DailyOpeningController::class, 'close'])->name('daily-opening.close');
+    Route::put('/daily-opening/{dailyOpening}/close', [DailyOpeningController::class, 'close'])->name('daily-opening.close');
 
     Route::get('/account', [AccountController::class, 'index'])->name('account.index');
     Route::put('/account/password', [AccountController::class, 'updatePassword'])->name('account.password');
