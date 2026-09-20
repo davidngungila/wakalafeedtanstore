@@ -610,7 +610,7 @@
                 </div>
             </div>
             <nav class="sb-nav">
-                <div class="sb-section-label">Overview</div>
+              
                 <a href="{{ route('dashboard') }}" class="sb-item {{ $routeName === 'dashboard' ? 'active' : '' }}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>
                     <span>Dashboard</span>
@@ -640,7 +640,7 @@
                     </a>
                 @endif
 
-                <div class="sb-section-label">Oversight</div>
+               
                 <a href="{{ route('reconciliation.index') }}" class="sb-item {{ $isReconArea ? 'active' : '' }}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="m9 14 2 2 4-4"></path></svg>
                     <span>Reconciliation</span>
