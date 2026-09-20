@@ -126,4 +126,30 @@ class DailyOpening extends Model
     {
         return $query->where('opening_date', today());
     }
+
+    public function getRouteKey(): string
+    {
+        return $this->opening_date instanceof Carbon
+            ? $this->opening_date->format('Y-m-d')
+            : (string) $this->opening_date;
+    }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field !== null) {
+            return parent::resolveRouteBinding($value, $field);
+        }
+
+        $date = rescue(static fn () => Carbon::createFromFormat('Y-m-d', $time = is_string($value) ? $value : '')->format('Y-m-d') === $time ? Carbon::parse($value)->startOfDay() : null, null, false);
+
+        if ($date !== null) {
+            $agent = cash_point();
+            if ($agent !== null) {
+                return static::forAgentAndDate($agent->id, $date)->first()
+                    ?? parent::resolveRouteBinding($value, $field);
+            }
+        }
+
+        return parent::resolveRouteBinding($value, $field);
+    }
 }

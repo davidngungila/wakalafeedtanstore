@@ -40,13 +40,13 @@
                         </div>
                         <div class="activity-text">
                             <b>Cash in Hand</b>
-                            <div class="activity-time">
-                                Opening: <strong>@money($todayStats['cash_opening'])</strong> ·
-                                Deposits: <strong>@money($todayStats['today_deposits'])</strong> ·
-                                Withdrawals: <strong>@money($todayStats['today_withdrawals'])</strong> ·
-                                Commission: <strong>@money($todayStats['commission'])</strong> ·
-                                Expected: <strong style="color:var(--acacia-600);">@money($todayStats['expected_closing_cash'])</strong> ·
-                                Current: <strong style="color:var(--coffee-900);">@money($todayStats['cash_current'])</strong>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--ink-soft);line-height:1.7;margin-top:4px;">
+                                <span>Opening: <strong style="color:var(--ink);">@money($todayStats['cash_opening'])</strong></span>
+                                <span>Deposits: <strong style="color:var(--ink);">@money($todayStats['today_deposits'])</strong></span>
+                                <span>Withdrawals: <strong style="color:var(--ink);">@money($todayStats['today_withdrawals'])</strong></span>
+                                <span>Commission: <strong style="color:var(--ink);">@money($todayStats['commission'])</strong></span>
+                                <span>Expected: <strong style="color:var(--acacia-600);">@money($todayStats['expected_closing_cash'])</strong></span>
+                                <span>Current: <strong style="color:var(--coffee-900);">@money($todayStats['cash_current'])</strong></span>
                             </div>
                         </div>
                         <div style="font-weight:600;color:{{ ($todayStats['cash_current'] - $todayStats['expected_closing_cash']) >= 0 ? 'var(--acacia-600)' : 'var(--danger)' }};">
