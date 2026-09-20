@@ -256,8 +256,7 @@
 
 
         /* Stats */
-        .stat-grid{display:flex;flex-wrap:nowrap;gap:18px;margin-bottom:24px;overflow-x:auto;}
-.stat-card{flex:0 0 auto;min-width:160px;}
+        .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:18px;margin-bottom:24px;}
         .stat-card{
             background:var(--white);border:1px solid var(--line);border-radius:var(--radius-md);
             padding:20px 20px 18px;box-shadow:var(--shadow-sm);position:relative;overflow:hidden;
