@@ -7,6 +7,7 @@ use App\Models\Network;
 use App\Models\SmsMessage;
 use Illuminate\Http\Request;
 use Illuminate\Http\StreamedResponse;
+use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
 class SmsController extends Controller
@@ -109,45 +110,57 @@ class SmsController extends Controller
     }
 
     /**
-     * Server-Sent Events feed: pushes newly ingested SMS to the monitor page
-     * so the dashboard updates without manual refresh.
+     * Server-Sent Events feed for every page that listens to SMS:
+     *
+     *   ?since=<max sms id the client has>&updated=<last update watermark>
+     *
+     * Emits both freshly ingested messages (id > since) and messages whose
+     * processing state changed since the watermark (e.g. RECEIVED -> RECORDED
+     * after parsing). Clients upsert by id, so replayed rows are harmless.
      */
     public function stream(Request $request): StreamedResponse
     {
         $since = $request->integer('since', 0);
 
-        return response()->stream(function () use ($since) {
+        $updated = $request->input('updated');
+        $updated = is_string($updated) && $updated !== '' && strtotime($updated) !== false
+            ? Carbon::parse($updated)->subSecond()
+            : now()->subMinutes(2);
+
+        return response()->stream(function () use ($since, $updated) {
             $lastId = $since;
+            $lastUpdated = $updated;
+
+            $with = ['device', 'network', 'transaction', 'deviceLine.network'];
 
             while (true) {
-                $rows = SmsMessage::with(['device', 'network'])
+                $newRows = SmsMessage::with($with)
                     ->where('id', '>', $lastId)
                     ->orderBy('id')
                     ->take(50)
                     ->get();
 
-                foreach ($rows as $row) {
-                    echo 'id: '.$row->id."\n";
-                    echo 'data: '.json_encode([
-                        'sms_id' => $row->id,
-                        'sender' => $row->sender,
-                        'network' => $row->network?->name,
-                        'network_color' => $row->network?->color,
-                        'device' => $row->device?->name,
-                        'device_id' => $row->device_id,
-                        'status' => sms_status_label($row->processing_status, $row->is_duplicate, $row->processing_error),
-                        'error' => $row->processing_error,
-                        'reference' => $row->transaction_reference,
-                        'type' => $row->transaction_type ? txn_type_label($row->transaction_type) : null,
-                        'amount' => $row->amount ? money($row->amount) : null,
-                        'customer' => $row->customer_name,
-                        'customer_phone' => $row->customer_phone,
-                        'body' => $row->message_body,
-                        'datetime' => $row->server_received_at->format('D, j M Y · H:i:s'),
-                        'server_received_at' => $row->server_received_at->toIso8601String(),
-                    ], JSON_UNESCAPED_SLASHES)."\n\n";
+                $updatedRows = SmsMessage::with($with)
+                    ->where('id', '<=', $lastId)
+                    ->where('updated_at', '>', $lastUpdated)
+                    ->orderBy('id')
+                    ->take(100)
+                    ->get();
 
-                    $lastId = $row->id;
+                $rows = $newRows->concat($updatedRows)->keyBy('id');
+
+                foreach ($rows as $row) {
+                    $payload = $this->streamPayload($row);
+
+                    echo 'id: '.$row->id."\n";
+                    echo 'data: '.json_encode($payload, JSON_UNESCAPED_SLASHES)."\n\n";
+
+                    $lastId = max($lastId, (int) $row->id);
+
+                    $rowUpdated = $row->updated_at?->toIso8601String();
+                    if ($rowUpdated !== null && $rowUpdated > $lastUpdated) {
+                        $lastUpdated = $rowUpdated;
+                    }
                 }
 
                 echo ": ping\n\n";
@@ -165,5 +178,43 @@ class SmsController extends Controller
             'Cache-Control' => 'no-cache',
             'X-Accel-Buffering' => 'no',
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function streamPayload(SmsMessage $row): array
+    {
+        $label = sms_status_label($row->processing_status, $row->is_duplicate, $row->processing_error);
+
+        return [
+            'sms_id' => $row->id,
+            'device_id' => $row->device_id,
+            'device_route' => $row->device ? $row->device->getRouteKey() : null,
+            'device' => $row->device?->name,
+            'line' => $row->deviceLine?->displayName(),
+            'sim_slot' => $row->sim_slot,
+            'network_id' => $row->network_id,
+            'network' => $row->network?->name,
+            'network_color' => $row->network?->color,
+            'sender' => $row->sender,
+            'type' => $row->transaction_type ? txn_type_label($row->transaction_type) : null,
+            'amount' => $row->amount ? money($row->amount) : null,
+            'customer' => $row->customer_name,
+            'customer_phone' => $row->customer_phone,
+            'reference' => $row->transaction_reference,
+            'txn_reference' => $row->transaction?->reference,
+            'status' => strtolower($label),
+            'status_key' => $label,
+            'badge' => sms_status_badge($row->processing_status, $row->is_duplicate, $row->processing_error),
+            'error' => $row->processing_error,
+            'body' => $row->message_body,
+            'time' => $row->server_received_at->format('H:i:s'),
+            'datetime' => $row->server_received_at->format('D, j M Y · H:i:s'),
+            'fulltime' => $row->server_received_at->format('H:i:s · d M Y'),
+            'server_received_at' => $row->server_received_at->toIso8601String(),
+            'is_today' => $row->server_received_at->isToday(),
+            'updated_at' => $row->updated_at?->toIso8601String(),
+        ];
     }
 }

@@ -318,9 +318,9 @@
                             <th></th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="deviceMsgBody">
                         @forelse ($sms as $message)
-                            <tr>
+                            <tr data-sms-id="{{ $message->id }}">
                                 <td class="cell-sub">
                                     {{ $message->server_received_at->format('H:i:s') }}
                                     @if ($message->sim_slot)
@@ -475,6 +475,7 @@
 @endsection
 
 @section('scripts')
+    @include('partials._live-sms')
     <script>
         const TYPE_LABEL = {
             deposit: 'Customer Deposit', withdrawal: 'Customer Withdrawal', send_money: 'Send Money',
@@ -574,5 +575,28 @@
                 ['Operator', t.operator || '—'],
             ];
         }, 'Transaction details');
+
+        if (document.getElementById('deviceMsgBody')) {
+            smsLiveStart({
+                stream: '{{ route('sms.stream') }}',
+                since: {{ $sms->first()?->id ?? 0 }},
+                updated: '{{ now()->subMinutes(2)->toIso8601String() }}',
+                body: '#deviceMsgBody',
+                maxRows: 120,
+                filter: (data) => Number(data.device_id) === Number({{ $device->id }}),
+                openBody: (data) => openMessage(data.body),
+                cells: (data) => [
+                    smsTd(smsEsc(data.time) + (data.sim_slot ? '<div style="margin-top:3px;">SIM ' + smsEsc(data.sim_slot) + '</div>' : ''), 'cell-sub'),
+                    smsTd(smsEsc(data.sender)),
+                    smsNetworkCell(data),
+                    smsTd(smsEsc(data.type || '—')),
+                    smsTd(smsEsc(data.amount || '—')),
+                    smsCustomerCell(data),
+                    smsRefCell(data),
+                    smsStatusCell(data),
+                    smsViewCell(),
+                ],
+            });
+        }
     </script>
 @endsection

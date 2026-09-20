@@ -143,9 +143,9 @@
                                 <th></th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="networkMsgBody">
                             @forelse ($messages as $message)
-                                <tr>
+                                <tr data-sms-id="{{ $message->id }}">
                                     <td class="cell-sub">{{ $message->server_received_at->format('H:i:s · d M Y') }}</td>
                                     <td>
                                         <a href="{{ route('devices.show', $message->device) }}" class="cell-title">{{ $message->device?->name ?? '—' }}</a>
@@ -261,6 +261,7 @@
 @endsection
 
 @section('scripts')
+    @include('partials._live-sms')
     <script>
         const TYPE_LABEL = {
             deposit: 'Customer Deposit', withdrawal: 'Customer Withdrawal', send_money: 'Send Money',
@@ -337,5 +338,28 @@
                 ['Operator', t.operator || '—'],
             ];
         }, 'Transaction details');
+
+        if (document.getElementById('networkMsgBody')) {
+            smsLiveStart({
+                stream: '{{ route('sms.stream') }}',
+                since: {{ $messages->first()?->id ?? 0 }},
+                updated: '{{ now()->subMinutes(2)->toIso8601String() }}',
+                body: '#networkMsgBody',
+                maxRows: 200,
+                filter: (data) => Number(data.network_id) === Number({{ $network->id }}),
+                openBody: (data) => openNetworkMessage(data.body),
+                cells: (data) => [
+                    smsTd(smsEsc(data.fulltime || data.time), 'cell-sub'),
+                    smsDeviceCell(data),
+                    smsTd(smsEsc(data.sender)),
+                    smsTd(smsEsc(data.type || '—')),
+                    smsTd(smsEsc(data.amount || '—')),
+                    smsCustomerCell(data),
+                    smsRefCell(data),
+                    smsStatusCell(data),
+                    smsViewCell(),
+                ],
+            });
+        }
     </script>
 @endsection

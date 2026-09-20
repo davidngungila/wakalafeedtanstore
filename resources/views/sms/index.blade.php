@@ -24,42 +24,42 @@
             <div class="stat-top"><div class="stat-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="10" x2="17" y2="10"></line></svg>
             </div></div>
-            <div class="stat-value">{{ $today['received'] }}</div>
+            <div class="stat-value" data-stat-key="received">{{ $today['received'] }}</div>
             <div class="stat-label">Received today</div>
         </div>
         <div class="stat-card" style="--stat-tint:var(--gold-100);--stat-fg:#8a6418;">
             <div class="stat-top"><div class="stat-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 12 2 2 4-4"></path><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             </div></div>
-            <div class="stat-value">{{ $today['processed'] }}</div>
+            <div class="stat-value" data-stat-key="processed">{{ $today['processed'] }}</div>
             <div class="stat-label">Processed to transactions</div>
         </div>
         <div class="stat-card" style="--stat-tint:var(--gold-100);--stat-fg:#8a6418;">
             <div class="stat-top"><div class="stat-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             </div></div>
-            <div class="stat-value">{{ $today['pending'] }}</div>
+            <div class="stat-value" data-stat-key="pending">{{ $today['pending'] }}</div>
             <div class="stat-label">Pending processing</div>
         </div>
         <div class="stat-card" style="--stat-tint:var(--terracotta-100);--stat-fg:var(--terracotta-600);">
             <div class="stat-top"><div class="stat-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>
             </div></div>
-            <div class="stat-value">{{ $today['stored'] }}</div>
+            <div class="stat-value" data-stat-key="stored">{{ $today['stored'] }}</div>
             <div class="stat-label">Stored · no transaction</div>
         </div>
         <div class="stat-card" style="--stat-tint:var(--danger-100);--stat-fg:var(--danger);">
             <div class="stat-top"><div class="stat-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
             </div></div>
-            <div class="stat-value">{{ $today['failed'] }}</div>
+            <div class="stat-value" data-stat-key="failed">{{ $today['failed'] }}</div>
             <div class="stat-label">Failed processing</div>
         </div>
         <div class="stat-card" style="--stat-tint:var(--terracotta-100);--stat-fg:var(--terracotta-600);">
             <div class="stat-top"><div class="stat-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 12H2"></path><path d="M14 8s2 4 4 4-4 4-4 4"></path><path d="M6 6a10 10 0 1 1 0 12"></path></svg>
             </div></div>
-            <div class="stat-value">{{ $today['duplicates'] }}</div>
+            <div class="stat-value" data-stat-key="duplicates">{{ $today['duplicates'] }}</div>
             <div class="stat-label">Duplicates skipped</div>
         </div>
     </div>
@@ -76,7 +76,7 @@
                         'failed' => 'Failed',
                         'duplicate' => 'Duplicates',
                     ] as $st => $label)
-                        <button type="button" class="tab-btn {{ ($filters['status'] ?? 'all') === $st ? 'active' : '' }}" onclick="setFilter('status','{{ $st }}')">{{ $label }} <span class="tab-count">{{ $counts[$st] }}</span></button>
+                        <button type="button" class="tab-btn {{ ($filters['status'] ?? 'all') === $st ? 'active' : '' }}" onclick="setFilter('status','{{ $st }}')">{{ $label }} <span class="tab-count" data-count-key="{{ $st }}">{{ $counts[$st] }}</span></button>
                     @endforeach
                 </div>
             </div>
@@ -123,7 +123,7 @@
                 </thead>
                 <tbody id="smsBody">
                     @forelse ($messages as $message)
-                        <tr data-id="{{ $message->id }}" class="row-click" onclick="openMessage({{ $message->id }})">
+                        <tr data-id="{{ $message->id }}" data-sms-id="{{ $message->id }}" class="row-click" onclick="openMessage({{ $message->id }})">
                             <td class="cell-sub">{{ $message->server_received_at->format('H:i:s') }}</td>
                             <td>
                                 <a href="{{ route('devices.show', $message->device) }}" class="cell-title" onclick="event.stopPropagation()">{{ $message->device?->name ?? '—' }}</a>
@@ -188,8 +188,9 @@
 @endsection
 
 @section('scripts')
+    @include('partials._live-sms')
     <script>
-        const smsRowCache = new Map();
+        const smsRowCache = window.smsCache;
         @foreach ($messages as $message)
             @php
                 $label = sms_status_label($message->processing_status, $message->is_duplicate, $message->processing_error);
@@ -210,6 +211,9 @@
                     'reference' => $message->transaction_reference ?? '—',
                     'txn_reference' => $message->transaction?->reference,
                     'label' => ucfirst($label),
+                    'status' => $label,
+                    'status_key' => $label,
+                    'is_today' => $message->server_received_at->isToday(),
                     'badge' => sms_status_badge($message->processing_status, $message->is_duplicate, $message->processing_error),
                     'error' => $message->processing_error,
                     'body' => $message->message_body,
@@ -226,13 +230,6 @@
             input.value = value;
             form.appendChild(input);
             form.submit();
-        }
-
-        function smsStatusBadge(label) {
-            return label === 'processed' ? 'tag-green'
-                : (label === 'pending' ? 'tag-gold'
-                : (label === 'stored' || label === 'duplicate' ? 'tag-terracotta'
-                : 'tag-red'));
         }
 
         function openMessage(id) {
@@ -282,57 +279,85 @@
             openModal('smsDetailsDrawer');
         }
 
-        function prependRow(data) {
-            const empty = document.getElementById('smsEmptyRow');
-            if (empty) empty.remove();
-            const body = document.getElementById('smsBody');
-            const tr = document.createElement('tr');
-            tr.dataset.id = data.sms_id;
-            tr.className = 'row-click';
-            tr.onclick = () => openMessage(Number(data.sms_id));
-            const label = data.status;
-            const badge = smsStatusBadge(label);
-            const deviceLink = data.device_id
-                ? '<a href="/devices/' + data.device_id + '" class="cell-title" onclick="event.stopPropagation()">' + (data.device || '—') + '</a>'
-                : '<span class="cell-title">' + (data.device || '—') + '</span>';
-            tr.innerHTML = [
-                '<td class="cell-sub">' + data.time + '</td>',
-                '<td>' + deviceLink + '</td>',
-                '<td>' + data.sender + '</td>',
-                '<td>' + (data.network ? '<span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:' + data.network_color + ';display:inline-block;"></span>' + data.network + '</span>' : '—') + '</td>',
-                '<td>' + (data.type || '—') + '</td>',
-                '<td>' + (data.amount || '—') + '</td>',
-                '<td><div class="cell-title">' + (data.customer || '—') + '</div><div class="cell-sub">' + (data.customer_phone || '') + '</div></td>',
-                '<td><span class="cell-title">' + (data.reference || '—') + '</span></td>',
-                '<td><span class="tag ' + badge + '">' + label.charAt(0).toUpperCase() + label.slice(1) + '</span></td>',
-                '<td><button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="event.stopPropagation();openMessage(' + data.sms_id + ')">View</button></td>',
-            ].join('');
-            body.prepend(tr);
+        const totalCounts = @json($counts);
+        const todayCounts = @json($today);
+        const todayKeyMap = { processed: 'processed', pending: 'pending', stored: 'stored', failed: 'failed', duplicate: 'duplicates' };
+
+        const liveStatus = {{ json_encode($filters['status'] ?? 'all') }};
+        const liveDevice = {{ json_encode($filters['device'] ?? '') }};
+        const liveNetwork = {{ json_encode($filters['network'] ?? '') }};
+        const liveQ = {{ json_encode($filters['q'] ?? '') }};
+
+        function liveFilter(data) {
+            if (liveStatus !== 'all' && data.status_key !== liveStatus) return false;
+            if (liveDevice && Number(data.device_id) !== Number(liveDevice)) return false;
+            if (liveNetwork && Number(data.network_id) !== Number(liveNetwork)) return false;
+            if (liveQ) {
+                const needle = String(liveQ).toLowerCase();
+                const hay = [data.sender, data.reference, data.customer, data.customer_phone, data.body, data.device].join(' ').toLowerCase();
+                if (!hay.includes(needle)) return false;
+            }
+            return true;
         }
 
-        function connectStream(lastId) {
-            const source = new EventSource('{{ route('sms.stream') }}?since=' + lastId);
-            source.onmessage = (e) => {
-                if (e.data === 'ping') return;
-                const data = JSON.parse(e.data);
-                if (data.sms_id <= lastId) return;
-                lastId = data.sms_id;
-                smsRowCache.set(data.sms_id, {
-                    ...data,
-                    time: new Date(data.server_received_at).toLocaleTimeString('en-GB', { hour12: false }),
-                    device: data.device || '—',
-                    network: data.network || null,
-                    customer: data.customer || '—',
-                });
-                prependRow(smsRowCache.get(data.sms_id));
-            };
-            source.onerror = () => {
-                source.close();
-                setTimeout(() => connectStream(lastId), 5000);
-            };
+        function adjustCounts(data, prev) {
+            const newKey = data.status_key || 'other';
+            const oldKey = prev ? prev.status_key : null;
+
+            if (prev) {
+                if (oldKey !== newKey) {
+                    if (oldKey && totalCounts[oldKey] !== undefined) totalCounts[oldKey]--;
+                    if (totalCounts[newKey] !== undefined) totalCounts[newKey]++;
+                    if (prev.is_today && todayCounts[todayKeyMap[oldKey]] !== undefined) todayCounts[todayKeyMap[oldKey]]--;
+                    if (data.is_today && todayCounts[todayKeyMap[newKey]] !== undefined) todayCounts[todayKeyMap[newKey]]++;
+                }
+            } else {
+                totalCounts.all = (totalCounts.all || 0) + 1;
+                if (totalCounts[newKey] !== undefined) totalCounts[newKey]++;
+                if (data.is_today) {
+                    todayCounts.received++;
+                    if (todayCounts[todayKeyMap[newKey]] !== undefined) todayCounts[todayKeyMap[newKey]]++;
+                }
+            }
         }
 
-        const maxId = {{ $messages->first()?->id ?? 0 }};
-        connectStream(maxId);
+        function renderCounts() {
+            document.querySelectorAll('[data-count-key]').forEach(el => {
+                const k = el.dataset.countKey;
+                if (totalCounts[k] !== undefined) el.textContent = totalCounts[k];
+            });
+            document.querySelectorAll('[data-stat-key]').forEach(el => {
+                const k = el.dataset.statKey;
+                if (todayCounts[k] !== undefined) el.textContent = todayCounts[k];
+            });
+        }
+
+        smsLiveStart({
+            stream: '{{ route('sms.stream') }}',
+            since: {{ $messages->first()?->id ?? 0 }},
+            updated: '{{ now()->subMinutes(2)->toIso8601String() }}',
+            body: '#smsBody',
+            maxRows: 300,
+            rowClick: (data) => openMessage(data.sms_id),
+            openBody: (data) => openMessage(data.sms_id),
+            cells: (data) => [
+                smsTd(smsEsc(data.time), 'cell-sub'),
+                smsDeviceCell(data),
+                smsTd(smsEsc(data.line || '—'), 'cell-sub'),
+                smsTd(smsEsc(data.sender)),
+                smsNetworkCell(data),
+                smsTd(smsEsc(data.type || '—')),
+                smsTd(smsEsc(data.amount || '—')),
+                smsCustomerCell(data),
+                smsRefCell(data),
+                smsStatusCell(data),
+                smsViewCell(),
+            ],
+            onMessage: (data, prev) => {
+                adjustCounts(data, prev);
+                renderCounts();
+                return liveFilter(data);
+            },
+        });
     </script>
 @endsection
