@@ -97,6 +97,17 @@ class Device extends Model
     }
 
     /**
+     * Handsets that have paired with this device code (one code can be paired
+     * by several phones). Tracked for live connection status.
+     *
+     * @return HasMany<DevicePhone, $this>
+     */
+    public function phones(): HasMany
+    {
+        return $this->hasMany(DevicePhone::class)->orderByDesc('last_seen_at');
+    }
+
+    /**
      * Resolve the line a message arrived on, by Android subscription id first,
      * then by the reported SIM slot.
      */

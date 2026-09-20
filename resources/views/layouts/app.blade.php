@@ -325,6 +325,11 @@
         .tabs .tab-btn.active{background:var(--white);color:var(--coffee-900);box-shadow:0 1px 2px rgba(0,0,0,.08);}
         .tabs .tab-count{font-size:11px;font-weight:800;background:var(--terracotta-100);color:var(--terracotta-600);padding:1px 8px;border-radius:20px;}
         .tabs .tab-btn.active .tab-count{background:var(--terracotta-600);color:#fff;}
+
+        .led{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none;vertical-align:middle;}
+        .led-on{background:var(--acacia-600);box-shadow:0 0 0 0 rgba(31,157,85,.45);animation:ledPulse 1.6s infinite;}
+        .led-off{background:#c8c3b8;}
+        @keyframes ledPulse{0%{box-shadow:0 0 0 0 rgba(31,157,85,.45);}70%{box-shadow:0 0 0 9px rgba(31,157,85,0);}100%{box-shadow:0 0 0 0 rgba(31,157,85,0);}}
         .tab-panel.hidden{display:none;}
         .table-scroll{overflow-x:auto;}
         .table-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-top:1px solid var(--line);flex-wrap:wrap;}

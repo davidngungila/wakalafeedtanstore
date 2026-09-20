@@ -59,7 +59,7 @@ class DeviceController extends Controller
 
     public function show(Request $request, Device $device): View
     {
-        $device->load(['agent', 'network', 'networks', 'lines.network']);
+        $device->load(['agent', 'network', 'networks', 'lines.network', 'phones']);
 
         $activeTab = $request->input('tab', 'messages');
         $activeTab = in_array($activeTab, ['messages', 'transactions'], true) ? $activeTab : 'messages';
@@ -84,6 +84,26 @@ class DeviceController extends Controller
             'credentialsFlash' => session()->pull('credentials_flash'),
             'activeTab' => $activeTab,
         ]);
+    }
+
+    /**
+     * Live connection status for every handset paired with this device code.
+     * Polled by the device page to drive the online/offline LEDs.
+     */
+    public function phonesStatus(Request $request, Device $device): JsonResponse
+    {
+        $phones = $device->phones()
+            ->orderByDesc('last_seen_at')
+            ->get()
+            ->map(fn ($phone) => [
+                'id' => $phone->id,
+                'model' => $phone->model,
+                'online' => $phone->isOnline(),
+                'last_seen_at' => $phone->last_seen_at?->diffForHumans(),
+                'last_seen_raw' => $phone->last_seen_at?->toIso8601String(),
+            ]);
+
+        return response()->json(['phones' => $phones]);
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse

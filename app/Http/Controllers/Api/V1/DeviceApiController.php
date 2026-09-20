@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Device;
+use App\Models\DevicePhone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -32,6 +33,13 @@ class DeviceApiController extends Controller
             'android_version' => $validated['android_version'] ?? $device->android_version,
             'app_version' => $validated['app_version'] ?? $device->app_version,
             'last_ip' => $request->ip(),
+        ]);
+
+        DevicePhone::markSeen($device, $validated['device_uid'], [
+            'model' => $validated['model'] ?? null,
+            'android_version' => $validated['android_version'] ?? null,
+            'app_version' => $validated['app_version'] ?? null,
+            'ip' => $request->ip(),
         ]);
 
         return response()->json([

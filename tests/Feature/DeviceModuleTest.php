@@ -476,4 +476,42 @@ class DeviceModuleTest extends TestCase
             ->assertOk()
             ->assertSee('SIM 2');
     }
+
+    public function test_device_page_lists_connected_phones_with_leds(): void
+    {
+        $device = $this->makeDevice();
+
+        $device->phones()->create([
+            'device_uid' => 'UID-9XK2',
+            'model' => 'Samsung Galaxy A15',
+            'app_version' => '1.0.5',
+            'android_version' => '14',
+            'last_seen_at' => now(),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get(route('devices.show', $device))
+            ->assertOk()
+            ->assertSee('Connected phones')
+            ->assertSee('Samsung Galaxy A15')
+            ->assertSee('UID-9XK2')
+            ->assertSee('led led-on')
+            ->assertSee('1.0.5');
+    }
+
+    public function test_phones_status_endpoint_reports_online_and_offline_states(): void
+    {
+        $device = $this->makeDevice();
+
+        $online = $device->phones()->create(['device_uid' => 'ON-1', 'model' => 'Redmi', 'last_seen_at' => now()]);
+        $stale = $device->phones()->create(['device_uid' => 'OFF-1', 'model' => 'Old', 'last_seen_at' => now()->subMinutes(30)]);
+
+        $response = $this->actingAs($this->admin())
+            ->getJson(route('devices.phones.status', $device))
+            ->assertOk();
+
+        $phones = collect($response->json('phones'));
+        $this->assertTrue($phones->firstWhere('id', $online->id)['online']);
+        $this->assertFalse($phones->firstWhere('id', $stale->id)['online']);
+    }
 }

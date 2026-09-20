@@ -193,6 +193,52 @@
         @endif
     </div>
 
+    @if ($device->phones->isNotEmpty() || ($device->status === 'active' || $device->status === 'pending'))
+        <div class="table-card" style="margin-top:24px;">
+            <div class="table-toolbar" style="border:none;padding:14px 20px;">
+                <strong style="font-size:14px;">Connected phones</strong>
+                <div style="font-size:12.5px;color:var(--ink-soft);">Handsets paired with this device code. Green LED pulses while the phone is connected.</div>
+            </div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:60px;">Status</th>
+                            <th>Phone</th>
+                            <th>App</th>
+                            <th>Last seen</th>
+                            <th>IP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($device->phones as $phone)
+                            <tr>
+                                <td>
+                                    <span class="led {{ $phone->isOnline() ? 'led-on' : 'led-off' }}" data-phone-led="{{ $phone->id }}" title="{{ $phone->isOnline() ? 'Connected' : 'Offline' }}"></span>
+                                </td>
+                                <td>
+                                    <div class="cell-title">{{ $phone->model ?? 'Phone' }}</div>
+                                    <div class="cell-sub" style="font-family:monospace;font-size:11.5px;">{{ $phone->device_uid }}</div>
+                                </td>
+                                <td>
+                                    <div class="cell-title">{{ $phone->app_version ?? '—' }}</div>
+                                    <div class="cell-sub">Android {{ $phone->android_version ?? '—' }}</div>
+                                </td>
+                                <td>
+                                    <span class="cell-title" data-phone-seen="{{ $phone->id }}">{{ $phone->last_seen_at?->diffForHumans() ?? 'Never' }}</span>
+                                    <div class="cell-sub">{{ $phone->last_seen_at?->format('H:i:s · d M Y') ?? '' }}</div>
+                                </td>
+                                <td class="cell-sub">{{ $phone->ip ?? '—' }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="5" class="empty-state"><h4>No phone has connected yet</h4><p>Scan the QR above with the MobiControl app to pair this phone.</p></td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
+
     @if (is_admin() || is_supervisor())
         <div class="table-card" style="margin-top:24px;">
             <div class="table-toolbar" style="border:none;padding:14px 20px;">
@@ -468,6 +514,27 @@
             const url = new URL(window.location.href);
             url.searchParams.set('tab', tab);
             history.replaceState({}, '', url);
+        }
+        function updatePhoneLeds() {
+            fetch('{{ route('devices.phones.status', $device) }}', { headers: { 'Accept': 'application/json' } })
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (!data || !Array.isArray(data.phones)) return;
+                    data.phones.forEach(p => {
+                        const led = document.querySelector('[data-phone-led="' + p.id + '"]');
+                        if (led) {
+                            led.className = 'led ' + (p.online ? 'led-on' : 'led-off');
+                            led.title = p.online ? 'Connected' : 'Offline';
+                        }
+                        const seen = document.querySelector('[data-phone-seen="' + p.id + '"]');
+                        if (seen) seen.textContent = p.last_seen_at;
+                    });
+                })
+                .catch(() => {});
+        }
+        if (document.querySelector('[data-phone-led]')) {
+            updatePhoneLeds();
+            setInterval(updatePhoneLeds, 15000);
         }
         document.querySelectorAll('[data-edit-device-form]').forEach(form => {
             form.addEventListener('submit', (e) => {

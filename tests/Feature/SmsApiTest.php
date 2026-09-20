@@ -323,4 +323,46 @@ class SmsApiTest extends TestCase
             ->postJson('/api/v1/sms/ingest', ['sms' => []])
             ->assertUnauthorized();
     }
+
+    public function test_bootstrap_records_a_phone_session(): void
+    {
+        $device = $this->makeDevice();
+
+        $this->withHeaders($this->deviceHeaders($device))
+            ->postJson('/api/v1/devices/bootstrap', [
+                'device_uid' => 'UID-001',
+                'model' => 'Samsung A15',
+                'android_version' => '14',
+                'app_version' => '1.0.2',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('device_phones', [
+            'device_id' => $device->id,
+            'device_uid' => 'UID-001',
+            'model' => 'Samsung A15',
+            'app_version' => '1.0.2',
+        ]);
+    }
+
+    public function test_heartbeat_upserts_a_single_phone_session_per_handset(): void
+    {
+        $device = $this->makeDevice();
+
+        for ($i = 1; $i <= 3; $i++) {
+            $this->withHeaders($this->deviceHeaders($device))
+                ->postJson('/api/v1/heartbeat', [
+                    'device_uid' => 'UID-007',
+                    'model' => $i === 3 ? 'Xiaomi Redmi' : 'Old Model',
+                ])
+                ->assertOk();
+        }
+
+        $this->assertSame(1, $device->phones()->count());
+        $this->assertDatabaseHas('device_phones', [
+            'device_id' => $device->id,
+            'device_uid' => 'UID-007',
+            'model' => 'Xiaomi Redmi',
+        ]);
+    }
 }

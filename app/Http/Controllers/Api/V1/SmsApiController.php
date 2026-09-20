@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Device;
+use App\Models\DevicePhone;
 use App\Services\SmsProcessor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -124,6 +125,12 @@ class SmsApiController extends Controller
 
         if ($validated['device_uid'] ?? null) {
             $device->forceFill(['device_uid' => $validated['device_uid']])->save();
+            DevicePhone::markSeen($device, $validated['device_uid'], [
+                'model' => $validated['model'] ?? null,
+                'android_version' => $validated['android_version'] ?? null,
+                'app_version' => $validated['app_version'] ?? null,
+                'ip' => $request->ip(),
+            ]);
         }
         if ($validated['model'] ?? null) {
             $device->forceFill(['model' => $validated['model']])->save();

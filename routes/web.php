@@ -88,6 +88,7 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
         Route::get('/devices/{device}', [DeviceController::class, 'show'])->name('devices.show');
+        Route::get('/devices/{device}/phones/status', [DeviceController::class, 'phonesStatus'])->name('devices.phones.status');
         Route::post('/devices/{device}/approve', [DeviceController::class, 'approve'])->name('devices.approve');
         Route::post('/devices/{device}/suspend', [DeviceController::class, 'suspend'])->name('devices.suspend');
         Route::post('/devices/{device}/block', [DeviceController::class, 'block'])->name('devices.block');
