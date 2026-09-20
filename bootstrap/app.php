@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureDailyOpeningSet;
 use App\Http\Middleware\EnsureDeviceCode;
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\EnsureTwoFactorEnabled;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => EnsureRole::class,
             'device.code' => EnsureDeviceCode::class,
             'daily.opening' => EnsureDailyOpeningSet::class,
+            'two.factor' => EnsureTwoFactorEnabled::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

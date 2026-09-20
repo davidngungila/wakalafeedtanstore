@@ -11,7 +11,9 @@ use App\Models\Reconciliation;
 use App\Models\Setting;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Support\TwoFactor;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
@@ -102,6 +104,8 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($users as $user) {
+            $secret = TwoFactor::generateSecret();
+
             User::updateOrCreate(
                 ['email' => $user['email']],
                 [
@@ -111,8 +115,12 @@ class DatabaseSeeder extends Seeder
                     'agent_id' => $user['agent_id'],
                     'password' => Hash::make('password'),
                     'is_active' => true,
-                    'two_factor_secret' => null,
-                    'two_factor_enabled' => false,
+                    'two_factor_secret' => Crypt::encryptString($secret),
+                    'two_factor_enabled' => true,
+                    'two_factor_recovery_codes' => array_map(
+                        static fn (string $code): string => TwoFactor::hashRecoveryCode($code),
+                        TwoFactor::generateRecoveryCodes(),
+                    ),
                 ]
             );
         }

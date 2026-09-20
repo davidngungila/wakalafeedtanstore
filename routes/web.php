@@ -42,7 +42,7 @@ Route::middleware('guest')->group(function () {
     Route::post('/two-factor/cancel', [TwoFactorController::class, 'cancel'])->name('two-factor.cancel');
 });
 
-Route::middleware(['auth', 'daily.opening'])->group(function () {
+Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');

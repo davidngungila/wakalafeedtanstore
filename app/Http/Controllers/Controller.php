@@ -55,6 +55,11 @@ abstract class Controller
 
         $request->session()->regenerate();
 
+        if (! $user->two_factor_enabled) {
+            return redirect()->intended(route('account.index'))
+                ->with('status', 'Set up two-factor authentication before you continue.');
+        }
+
         if (in_array($user->role, ['cashier', 'supervisor', 'admin'], true)) {
             $agent = cash_point();
 
