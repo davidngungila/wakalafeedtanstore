@@ -95,7 +95,14 @@
                 </form>
             @elseif ($pane === 'cashpoint')
                 <h3>Cash Point</h3>
-                @if ($agent !== null && filled([$agent->code, $agent->name, $agent->phone]) && $agent->status === 'active')
+                @php
+                    $agentConfigured = $agent !== null
+                        && !empty($agent->code)
+                        && !empty($agent->name)
+                        && !empty($agent->phone)
+                        && $agent->status === 'active';
+                @endphp
+                @if ($agentConfigured)
                     <p style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">The cash point is configured as <strong>{{ $agent->name }}</strong> ({{ $agent->code }}). You can update its details below.</p>
                 @else
                     <p style="font-size:13px;color:var(--terracotta-600);margin-bottom:16px;">The cash point is not set up yet. Create it below to activate the system.</p>

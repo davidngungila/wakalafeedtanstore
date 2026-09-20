@@ -26,7 +26,7 @@
     </div>
     <div class="field">
         <label>Level</label>
-        <select name="agent_level">
+        <select name="agent_level" required>
             <option value="bronze" @selected(old('agent_level', $agent?->agent_level) === 'bronze')>Bronze</option>
             <option value="silver" @selected(old('agent_level', $agent?->agent_level) === 'silver')>Silver</option>
             <option value="gold" @selected(old('agent_level', $agent?->agent_level) === 'gold')>Gold</option>
@@ -51,7 +51,7 @@
     </div>
     <div class="field">
         <label>Status</label>
-        <select name="status">
+        <select name="status" required>
             <option value="active" @selected(old('status', $agent?->status) === 'active')>Active</option>
             <option value="suspended" @selected(old('status', $agent?->status) === 'suspended')>Suspended</option>
             <option value="inactive" @selected(old('status', $agent?->status) === 'inactive')>Inactive</option>
