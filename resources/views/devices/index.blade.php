@@ -48,15 +48,11 @@
                 <thead>
                     <tr>
                         <th>Device</th>
-                        <th>Code</th>
-                        <th>Agent</th>
-                        <th>Networks</th>
-                        <th>Phone / SIM</th>
                         <th>App</th>
                         <th>Today</th>
                         <th>Last heartbeat</th>
                         <th>Last SMS</th>
-                        <th>Status</th>
+                        <th>Action</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -99,43 +95,15 @@
                                 </div>
                             </td>
                             <td>
-                                <div style="display:inline-flex;align-items:center;gap:7px;">
-                                    <span style="font-family:monospace;font-size:13.5px;font-weight:700;letter-spacing:1.5px;color:var(--coffee-700);">{{ $device->device_code }}</span>
-                                    <button type="button" class="btn btn-ghost" style="padding:3px 7px;font-size:11px;" onclick="copyText('{{ $device->device_code }}', 'Device code copied.')" title="Copy device code">
-                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
-                                    </button>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="cell-title">{{ $device->agent?->name ?? '—' }}</div>
-                                <div class="cell-sub">{{ $device->branch ?? '' }}</div>
-                            </td>
-                            <td>
-                                @forelse ($deviceNetworks as $nw)
-                                    <span class="tag" style="background:{{ $nw->color }};color:#fff;margin:1px 2px 1px 0;">{{ $nw->name }}</span>
-                                @empty
-                                    <span class="cell-sub">—</span>
-                                @endforelse
-                                @if ($device->lines->isNotEmpty())
-                                    <div style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;font-weight:600;">
-                                        @foreach ($device->lines as $line)
-                                            <span style="margin-right:8px;">SIM {{ $line->sim_slot }}<span style="opacity:.6;"> · {{ $line->network?->name ?? '—' }}</span></span>
-                                        @endforeach
-                                    </div>
-                                @endif
-                            </td>
-                            <td>
-                                <div class="cell-title">{{ $device->phone_number ?? '—' }}</div>
-                                <div class="cell-sub">{{ $device->sim_number ?? '' }}</div>
-                            </td>
-                            <td>
                                 <div class="cell-title">{{ $device->app_version ?? '—' }}</div>
                                 <div class="cell-sub">Android {{ $device->android_version ?? '—' }}</div>
                             </td>
                             <td class="cell-sub">{{ $stats ? ($stats['processed'].' / '.$stats['received']) : '—' }}</td>
                             <td class="cell-sub">{{ $device->last_heartbeat_at?->diffForHumans() ?? 'Never' }}</td>
                             <td class="cell-sub">{{ $device->last_sms_at?->diffForHumans() ?? 'Never' }}</td>
-                            <td><span class="tag {{ $badge }}">{{ ucfirst($status) }}</span></td>
+                            <td>
+                                <a href="{{ route('devices.show', $device) }}" class="btn btn-primary btn-sm">View</a>
+                            </td>
                             <td>
                                 <div class="row-actions">
                                     <a href="{{ route('devices.show', $device) }}" title="Details">
@@ -151,7 +119,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="11" class="empty-state"><h4>No devices yet</h4><p>Register your first Android phone to start automatic SMS capture.</p></td></tr>
+                        <tr><td colspan="7" class="empty-state"><h4>No devices yet</h4><p>Register your first Android phone to start automatic SMS capture.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>

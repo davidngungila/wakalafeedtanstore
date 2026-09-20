@@ -474,7 +474,7 @@ class DeviceModuleTest extends TestCase
         $this->actingAs($this->admin())
             ->get(route('devices.index'))
             ->assertOk()
-            ->assertSee('SIM 2');
+            ->assertSee($device->name);
     }
 
     public function test_device_page_lists_connected_phones_with_leds(): void
