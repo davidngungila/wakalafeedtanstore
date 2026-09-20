@@ -183,7 +183,6 @@
             </div>
             <form id="closeDayForm" method="POST" action="{{ route('daily-opening.close', $dailyOpening) }}">
                 @csrf
-                <input type="hidden" name="_method" value="PUT">
                 <div class="modal-body">
                     <p style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px;">Enter the actual counted cash and float balances at end of day.</p>
 

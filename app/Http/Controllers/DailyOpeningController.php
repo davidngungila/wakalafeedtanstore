@@ -171,6 +171,12 @@ class DailyOpeningController extends Controller
             return back()->with('error', $message);
         }
 
+        \Log::info('Close day request data', [
+            'all' => $request->all(),
+            'content_type' => $request->header('Content-Type'),
+            'method' => $request->method(),
+        ]);
+
         $validated = $request->validate([
             'cash_closing' => ['required', 'numeric', 'min:0'],
             'float_closings' => ['required', 'array'],
