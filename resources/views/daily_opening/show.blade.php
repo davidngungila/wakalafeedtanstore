@@ -6,7 +6,7 @@
     <div class="view-head">
         <div>
             <h2>Daily Opening</h2>
-            <p class="sub">{{ $dailyOpening->opening_date->format('l, j F Y') }} · {{ $dailyOpening->is_closed ? '<span class="tag tag-grey">Closed</span>' : '<span class="tag tag-green">Open</span>' }}</p>
+            <p class="sub">{{ $dailyOpening->opening_date->format('l, j F Y') }} · {!! $dailyOpening->is_closed ? '<span class="tag tag-grey">Closed</span>' : '<span class="tag tag-green">Open</span>' !!}</p>
         </div>
         <div class="view-actions">
             @if (! $dailyOpening->is_closed)

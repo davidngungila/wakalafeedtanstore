@@ -8,9 +8,9 @@
             <h2>{{ $agent->name }}</h2>
             <p class="sub">
                 {{ $agent->code }} ·
-                <span class="tag {{ agent_level_badge($agent->agent_level) }}">{{ agent_level_label($agent->agent_level) }}</span>
-                <span class="tag {{ status_badge($agent->status) }}">{{ ucfirst($agent->status) }}</span>
-                · Single cash point — whole system manages this wakala only
+                {!! '<span class="tag '.agent_level_badge($agent->agent_level).'">'.agent_level_label($agent->agent_level).'</span>' !!}
+                {!! '<span class="tag '.status_badge($agent->status).'">'.ucfirst($agent->status).'</span>' !!}
+                <span style="white-space:nowrap;">&nbsp;· Single cash point — whole system manages this wakala only</span>
             </p>
         </div>
         <div class="view-actions">
@@ -29,16 +29,16 @@
     @else
         <div class="panel" style="margin-bottom:16px;">
             <div class="panel-head">
-                <h3>Today's Session {{ $todayStats['is_closed'] ? '<span class="tag tag-grey">Closed</span>' : '<span class="tag tag-green">Open</span>' }}</h3>
+                <h3>Today's Session {!! $todayStats['is_closed'] ? '<span class="tag tag-grey">Closed</span>' : '<span class="tag tag-green">Open</span>' !!}</h3>
                 <a href="{{ route('daily-opening.show', $todayOpening) }}" class="link">View details</a>
             </div>
             <div class="panel-body">
                 <div class="activity-list">
-                    <div class="activity-row">
+                    <div class="activity-row" style="flex-wrap:wrap;gap:8px 14px;">
                         <div class="activity-ico" style="background:var(--gold-100);color:var(--gold-600);">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2"></circle></svg>
                         </div>
-                        <div class="activity-text">
+                        <div class="activity-text" style="flex:1 1 320px;min-width:0;">
                             <b>Cash in Hand</b>
                             <div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--ink-soft);line-height:1.7;margin-top:4px;">
                                 <span>Opening: <strong style="color:var(--ink);">@money($todayStats['cash_opening'])</strong></span>
@@ -49,7 +49,7 @@
                                 <span>Current: <strong style="color:var(--coffee-900);">@money($todayStats['cash_current'])</strong></span>
                             </div>
                         </div>
-                        <div style="font-weight:600;color:{{ ($todayStats['cash_current'] - $todayStats['expected_closing_cash']) >= 0 ? 'var(--acacia-600)' : 'var(--danger)' }};">
+                        <div style="flex:0 0 auto;margin-left:auto;font-weight:600;color:{{ ($todayStats['cash_current'] - $todayStats['expected_closing_cash']) >= 0 ? 'var(--acacia-600)' : 'var(--danger)' }};">
                             @money($todayStats['cash_current'] - $todayStats['expected_closing_cash'])
                         </div>
                     </div>

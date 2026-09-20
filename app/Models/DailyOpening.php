@@ -127,6 +127,11 @@ class DailyOpening extends Model
         return $query->where('opening_date', today());
     }
 
+    public function getRouteKeyName(): string
+    {
+        return 'opening_date';
+    }
+
     public function getRouteKey(): string
     {
         return $this->opening_date instanceof Carbon
@@ -140,16 +145,28 @@ class DailyOpening extends Model
             return parent::resolveRouteBinding($value, $field);
         }
 
-        $date = rescue(static fn () => Carbon::createFromFormat('Y-m-d', $time = is_string($value) ? $value : '')->format('Y-m-d') === $time ? Carbon::parse($value)->startOfDay() : null, null, false);
+        $date = rescue(
+            static function () use ($value): ?Carbon {
+                $time = is_string($value) ? $value : '';
+                $parsed = Carbon::createFromFormat('Y-m-d', $time);
 
-        if ($date !== null) {
-            $agent = cash_point();
-            if ($agent !== null) {
-                return static::forAgentAndDate($agent->id, $date)->first()
-                    ?? parent::resolveRouteBinding($value, $field);
-            }
+                return $parsed && $parsed->format('Y-m-d') === $time
+                    ? $parsed->startOfDay()
+                    : null;
+            },
+            null,
+            false
+        );
+
+        if ($date === null) {
+            return null;
         }
 
-        return parent::resolveRouteBinding($value, $field);
+        $agent = cash_point();
+        if ($agent === null) {
+            return static::whereDate('opening_date', $date)->first();
+        }
+
+        return static::forAgentAndDate($agent->id, $date)->first();
     }
 }
