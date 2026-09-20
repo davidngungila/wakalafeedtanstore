@@ -35,6 +35,11 @@ class Device extends Model
 {
     public const MANAGED_STATUSES = ['pending', 'active', 'suspended', 'blocked', 'revoked'];
 
+    public function getRouteKeyName(): string
+    {
+        return 'device_code';
+    }
+
     private const DEVICE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
     protected function casts(): array

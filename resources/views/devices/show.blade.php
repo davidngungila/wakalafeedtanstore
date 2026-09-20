@@ -511,10 +511,14 @@
         function setDeviceTab(tab, btn) {
             document.querySelectorAll('.tabs .tab-btn').forEach(b => b.classList.toggle('active', b === btn));
             document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('hidden', p.id !== 'dpan-' + tab));
-            const url = new URL(window.location.href);
-            url.searchParams.set('tab', tab);
-            history.replaceState({}, '', url);
+            history.replaceState({}, '', window.location.href.split('?')[0].split('#')[0] + '#tab-' + tab);
         }
+        (function applyHashTab() {
+            const m = window.location.hash.match(/^#tab-(messages|transactions)$/);
+            if (!m) return;
+            const btn = document.querySelector('.tabs .tab-btn[data-tab="' + m[1] + '"]');
+            if (btn) setDeviceTab(m[1], btn);
+        })();
         function updatePhoneLeds() {
             fetch('{{ route('devices.phones.status', $device) }}', { headers: { 'Accept': 'application/json' } })
                 .then(r => r.ok ? r.json() : null)
