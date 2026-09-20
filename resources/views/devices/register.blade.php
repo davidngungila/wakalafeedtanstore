@@ -59,10 +59,6 @@
                 <div style="padding:18px 0 4px;">
                     <div class="form-row">
                         <div class="field">
-                            <label>Device name</label>
-                            <input type="text" name="name" placeholder="e.g. Samsung A15" required>
-                        </div>
-                        <div class="field">
                             <label>Networks (access)</label>
                             <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--white);">
                                 @foreach ($networks as $network)
@@ -73,6 +69,10 @@
                                     </label>
                                 @endforeach
                             </div>
+                        </div>
+                        <div class="field">
+                            <label>Device name</label>
+                            <input type="text" name="name" placeholder="e.g. Samsung A15" required>
                         </div>
                     </div>
                     <div class="form-row">

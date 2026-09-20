@@ -429,10 +429,6 @@
                     <div class="modal-body">
                         <div class="form-row">
                             <div class="field">
-                                <label>Device name</label>
-                                <input type="text" name="name" value="{{ $device->name }}" required>
-                            </div>
-                            <div class="field">
                                 <label>Networks (access)</label>
                                 <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--white);">
                                     @php $assignedIds = $device->networks->pluck('id')->toArray() ?: ($device->network_id ? [$device->network_id] : []); @endphp
@@ -444,6 +440,10 @@
                                         </label>
                                     @endforeach
                                 </div>
+                            </div>
+                            <div class="field">
+                                <label>Device name</label>
+                                <input type="text" name="name" value="{{ $device->name }}" required>
                             </div>
                         </div>
                         <div class="form-row">
