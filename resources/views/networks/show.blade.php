@@ -197,25 +197,14 @@
                         <thead>
                             <tr>
                                 <th>Device</th>
-                                <th>Code</th>
-                                <th>Agent</th>
                                 <th>Networks</th>
-                                <th>Phone / SIM</th>
                                 <th>Last heartbeat</th>
-                                <th>Status</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse ($devices as $device)
                                 @php
-                                    $dStatus = $device->displayedStatus();
-                                    $dBadge = match ($dStatus) {
-                                        'active' => 'tag-green',
-                                        'pending' => 'tag-gold',
-                                        'offline', 'revoked' => 'tag-grey',
-                                        default => 'tag-red',
-                                    };
                                     $deviceNetworks = $device->networks->isNotEmpty() ? $device->networks : collect([$device->network])->filter();
                                 @endphp
                                 <tr>
@@ -227,11 +216,6 @@
                                                 <div class="cell-sub">{{ $device->model ?? $device->device_uid ?? '—' }}</div>
                                             </div>
                                         </div>
-                                    </td>
-                                    <td><span style="font-family:monospace;font-size:13px;font-weight:700;letter-spacing:1px;color:var(--coffee-700);">{{ $device->device_code }}</span></td>
-                                    <td>
-                                        <div class="cell-title">{{ $device->agent?->name ?? '—' }}</div>
-                                        <div class="cell-sub">{{ $device->branch ?? '' }}</div>
                                     </td>
                                     <td>
                                         @forelse ($deviceNetworks as $nw)
@@ -247,18 +231,9 @@
                                             </div>
                                         @endif
                                     </td>
-                                    <td>
-                                        <div class="cell-title">{{ $device->phone_number ?? '—' }}</div>
-                                        <div class="cell-sub">{{ $device->sim_number ?? '' }}</div>
-                                    </td>
                                     <td class="cell-sub">{{ $device->last_heartbeat_at?->diffForHumans() ?? 'Never' }}</td>
-                                    <td><span class="tag {{ $dBadge }}">{{ ucfirst($dStatus) }}</span></td>
                                     <td>
-                                        <div class="row-actions">
-                                            <a href="{{ route('devices.show', $device) }}" title="Device details">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                            </a>
-                                        </div>
+                                        <a href="{{ route('devices.show', $device) }}" class="btn btn-ghost btn-sm">View</a>
                                     </td>
                                 </tr>
                             @empty
