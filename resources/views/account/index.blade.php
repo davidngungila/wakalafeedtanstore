@@ -151,6 +151,7 @@
         </div>
     </div>
 
+    @if ($pendingSecret)
     <div class="modal-backdrop" id="enableTwoFactorModal">
         <div class="modal" style="max-width:520px;">
             <div class="modal-head">
@@ -199,6 +200,7 @@
             </div>
         </div>
     </div>
+    @endif
 
     <script>
         const qrHost = document.getElementById('otpauthQr');
