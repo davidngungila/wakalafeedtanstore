@@ -141,7 +141,7 @@
                                     <a href="{{ route('devices.show', $device) }}" title="Details">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                     </a>
-                                    <button type="button" title="Connect phone (QR)" onclick="openConnectModal('{{ $device->device_code }}')">
+                                    <button type="button" title="Connect phone (QR)" onclick="openConnectModal('{{ $device->device_code }}', '{{ url('/') }}')">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
                                     </button>
                                     <button type="button" title="View all SMS" onclick="window.location='{{ route('sms.index', ['device' => $device->id]) }}'">

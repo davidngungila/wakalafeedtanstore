@@ -106,10 +106,20 @@ subscription id; the server then attributes the SMS to the right line and networ
 1. On the web app, an admin registers the phone and receives one credential
    (shown **once**, never retrievable again): the **device code** — short,
    human-friendly, 6 chars (e.g. `F7KQ2M`).
-2. On the phone, the operator enters the code.
-3. The app calls `POST /devices/bootstrap` to pair and report handset info.
-4. The admin approves the device on the dashboard → `active`.
-5. The app starts ingesting.
+2. On the phone, the operator **scans the QR code** shown under the device's
+   "Connect phone" button, or types the code manually.
+3. The QR encodes a deep link the app parses to get the device code **and** the
+   server host:
+
+   ```
+   mobicontrol://connect?code=F7KQ2M&host=https%3A%2F%2Fwakala.feedtanstore.com
+   ```
+
+   The app should register the `mobicontrol` URI scheme, read `code` and `host`,
+   store both (the code in secure storage, §8), and prefill the pairing screen.
+4. The app calls `POST /devices/bootstrap` to pair and report handset info.
+5. The admin approves the device on the dashboard → `active`.
+6. The app starts ingesting.
 
 The app must handle the `pending` state gracefully: poll `GET /devices/me`
 (and/or heartbeat) until `status == active`, and only then start sending SMS.
@@ -748,7 +758,8 @@ Android minimum config:
   unknown senders are attributed to the device's assigned network.
 - Validate lengths client-side (`sender ≤ 30`, etc.) to fail fast, but rely on
   the server for correctness.
-- Do not embed the code in the APK; always operator-entered.
+- Do not embed the code in the APK; always operator-entered (typed or
+  QR-scanned). The QR is a per-device deep link the operator scans at pair time.
 
 ---
 
@@ -776,6 +787,7 @@ Batch safety rule: **an item is removed only when the server acknowledges it**
 ## 10. Testing / QA checklist
 
 - [ ] Fresh install → pairing (code entry) → bootstrap shows `pending` → no upload until approved.
+- [ ] **QR pairing:** tap "Connect phone" on a device → scan the QR with the app's "Scan QR" → app captures the `code` and `host`, pre-fills pairing, bootstrap succeeds.
 - [ ] Approval on dashboard → app flips to `Active` (≤ next heartbeat) → first SMS uploads and appears on `/sms` and `/transactions`.
 - [ ] Send 600+ SMS in a burst → chunks of ≤ 500 are sent, all recorded, no loss.
 - [ ] Kill the app (swipe) → SMS still captured & uploaded via WorkManager watchdog.
