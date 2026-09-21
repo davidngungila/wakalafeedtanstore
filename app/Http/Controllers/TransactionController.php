@@ -64,7 +64,7 @@ class TransactionController extends Controller
     {
         $validated = $request->validate([
             'network_id' => ['required', 'exists:networks,id'],
-            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank'],
+            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup'],
             'customer_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['required', 'string', 'max:30'],
             'amount' => ['required', 'numeric', 'min:1'],
@@ -195,9 +195,9 @@ class TransactionController extends Controller
                 ->first();
 
             if ($balance) {
-                // Reverse is opposite of process(): deposit -amount -> reverse +amount, withdrawal +amount -> reverse -amount
+                // Reverse is opposite of process(): deposit/float_deposit -amount -> reverse +amount, withdrawal +amount -> reverse -amount
                 $delta = match ($transaction->type) {
-                    'deposit' => $amount,
+                    'deposit', 'float_deposit', 'float_topup', 'bank_to_wallet' => $amount,
                     'withdrawal' => -$amount,
                     default => $amount,
                 };
@@ -205,8 +205,11 @@ class TransactionController extends Controller
                 $balance->save();
             }
 
-            if (in_array($transaction->type, ['deposit', 'withdrawal'], true)) {
-                $direction = $transaction->type === 'deposit' ? -1 : 1;
+            if (in_array($transaction->type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'bank_to_wallet', 'wallet_to_bank'], true)) {
+                $direction = in_array($transaction->type, ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet'], true) ? -1 : 1;
+                if ($transaction->type === 'wallet_to_bank') {
+                    $direction = -1;
+                }
                 $agent = $transaction->agent;
                 $agent->cash_balance = ((float) $agent->cash_balance) + $direction * $amount;
                 $agent->save();
@@ -246,7 +249,7 @@ class TransactionController extends Controller
     {
         return [
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
-            'types' => ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank'],
+            'types' => ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank', 'float_deposit'],
         ];
     }
 }

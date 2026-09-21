@@ -30,7 +30,14 @@ class SmsController extends Controller
         }
 
         if ($request->filled('device') && $request->input('device') !== 'all') {
-            $query->where('device_id', $request->input('device'));
+            $deviceId = $request->input('device');
+            // Support both plain and encrypted device ids (e.g. /sms?device=5 vs /sms?device=eyJ...)
+            $resolved = (new Device)->resolveRouteBinding($deviceId) ?? Device::find((int) $deviceId);
+            if ($resolved) {
+                $query->where('device_id', $resolved->id);
+            } else {
+                $query->where('device_id', $deviceId);
+            }
         }
 
         if ($request->filled('q')) {
@@ -281,7 +288,7 @@ class SmsController extends Controller
 
         $validated = $request->validate([
             'network_id' => ['required', 'exists:networks,id'],
-            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank'],
+            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup'],
             'amount' => ['required', 'numeric', 'min:1'],
             'customer_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['required', 'string', 'max:30'],
