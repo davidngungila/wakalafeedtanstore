@@ -7,6 +7,7 @@ use App\Models\Device;
 use App\Models\Network;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
+use App\Services\Sms\SmsTransactionExtractor;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -25,6 +26,7 @@ class SmsProcessor
     public function __construct(
         private readonly SmsParser $parser,
         private readonly TransactionService $transactions,
+        private readonly SmsTransactionExtractor $extractor = new SmsTransactionExtractor,
     ) {}
 
     /**
@@ -109,20 +111,34 @@ class SmsProcessor
             'server_received_at' => now(),
         ]);
 
-        $parsed = $this->parser->parse($body, $provider);
+        // Strict template-based extraction — only approved financial patterns become transactions
+        $extracted = $this->extractor->extract($body, $provider, $sender, $network?->code);
+
+        // For SMS storage, also keep legacy parser result for backward compatibility (audit)
+        $legacyParsed = $this->parser->parse($body, $provider);
 
         $sms->update([
             'processing_status' => 'PARSED',
-            'transaction_reference' => $parsed['reference'] !== '' ? $parsed['reference'] : null,
-            'amount' => $parsed['amount'] > 0 ? $parsed['amount'] : null,
-            'transaction_type' => $parsed['type'] !== '' ? $parsed['type'] : null,
-            'customer_phone' => $parsed['customer_phone'] !== '' ? $parsed['customer_phone'] : null,
-            'customer_name' => $parsed['customer_name'] !== '' ? $parsed['customer_name'] : null,
-            'balance' => $parsed['balance'] > 0 ? $parsed['balance'] : null,
+            'transaction_reference' => $legacyParsed['reference'] !== '' ? $legacyParsed['reference'] : ($extracted['reference'] ?? null),
+            'amount' => $legacyParsed['amount'] > 0 ? $legacyParsed['amount'] : ($extracted['amount'] ?? null),
+            'transaction_type' => $legacyParsed['type'] !== '' ? $legacyParsed['type'] : ($extracted['type'] ?? null),
+            'customer_phone' => $legacyParsed['customer_phone'] !== '' ? $legacyParsed['customer_phone'] : ($extracted['customer_phone'] ?? null),
+            'customer_name' => $legacyParsed['customer_name'] !== '' ? $legacyParsed['customer_name'] : ($extracted['customer_name'] ?? null),
+            'balance' => $legacyParsed['balance'] > 0 ? $legacyParsed['balance'] : ($extracted['balance'] ?? null),
         ]);
 
-        // Allow recording even when network is unresolved — fallback to a configured network
-        // so we can still compute and persist the transaction (user requested: always record).
+        // Strict: if no approved template matched -> not a transaction (promo/OTP/balance-only/etc. -> NEEDS_REVIEW)
+        if ($extracted === null) {
+            $isPromo = $this->isPromoSms($body);
+            $sms->update([
+                'processing_status' => 'NEEDS_REVIEW',
+                'processing_error' => $isPromo ? 'Promo/marketing SMS ignored - not a financial transaction.' : 'SMS did not match any financial template.',
+            ]);
+
+            return ['ok' => false, 'ignored_sender' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
+        }
+
+        // Strict requires a supported network - fallback to active network only for approved financial SMS
         if ($network === null) {
             $network = Network::active()->first() ?? Network::first();
 
@@ -138,80 +154,22 @@ class SmsProcessor
             $sms->update(['network_id' => $network->id]);
         }
 
-        // Never create transactions from promo/marketing SMS (e.g. "Pata Dakika100 Mitandao Yote kwa Siku 7 kwa TSH1000...")
-        // Only financial messages like IMEFANIKIWA! / Tnx ... Umeweka ... Salio jipya ... Preview Commission should be recorded.
-        if ($this->isPromoSms($body)) {
-            $sms->update([
-                'processing_status' => 'NEEDS_REVIEW',
-                'processing_error' => 'Promo/marketing SMS ignored - not a financial transaction.',
-            ]);
-
-            return ['ok' => false, 'ignored_sender' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
+        // Use strict extracted fields (guaranteed to have reference, amount, type, date/time etc.)
+        $parsed = $extracted;
+        // Ensure phone placeholder for strict (should always have phone, but fallback to UNKNOWN if missing)
+        if (($parsed['customer_phone'] ?? '') === '') {
+            $parsed['customer_phone'] = 'UNKNOWN';
         }
-
-        // Allow recording even when template did not match — compute fallback amount/type/reference
-        // and continue to transaction creation instead of stopping at NEEDS_REVIEW.
-        // If no computable amount exists even after fallback extraction, keep NEEDS_REVIEW.
-        if ($parsed['reference'] === '' || $parsed['amount'] <= 0) {
-            $fallbackReference = $parsed['reference'] !== '' ? $parsed['reference'] : $this->fallbackReference($body, $hash);
-            $fallbackAmount = $parsed['amount'] > 0 ? $parsed['amount'] : $this->fallbackAmount($body);
-            $fallbackType = $parsed['type'] !== '' ? $parsed['type'] : $this->fallbackType($body);
-            $fallbackPhone = $parsed['customer_phone'] !== '' ? $parsed['customer_phone'] : ($this->fallbackPhone($body) ?? '');
-            $fallbackCommission = ($parsed['commission'] ?? 0) > 0 ? $parsed['commission'] : $this->fallbackCommission($body);
-
-            // If we still cannot compute a positive amount, keep the original NEEDS_REVIEW behaviour
-            // — truly non-financial messages (OTP, promo) should not create 0-amount transactions.
-            if ($fallbackAmount <= 0 && $parsed['amount'] <= 0) {
-                $sms->update([
-                    'processing_status' => 'NEEDS_REVIEW',
-                    'processing_error' => 'SMS did not match any financial template.',
-                ]);
-
-                return ['ok' => false, 'ignored_sender' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
-            }
-
-            $parsed['reference'] = $fallbackReference;
-            $parsed['type'] = $fallbackType;
-
-            if ($fallbackAmount > 0) {
-                $parsed['amount'] = $fallbackAmount;
-            }
-
-            if ($fallbackPhone !== '') {
-                $parsed['customer_phone'] = $fallbackPhone;
-            }
-
-            if ($fallbackCommission > 0) {
-                $parsed['commission'] = $fallbackCommission;
-            }
-
-            // Ensure we have at least a placeholder phone — Transaction requires a string,
-            // and Agent totalFloat/cash logic works even with a generic marker.
-            if ($parsed['customer_phone'] === '') {
-                $parsed['customer_phone'] = 'UNKNOWN';
-            }
-
-            // Persist computed fallback to SMS for audit trail; clear the template error
-            // so the row is not stuck in NEEDS_REVIEW.
-            $sms->update([
-                'transaction_reference' => $parsed['reference'],
-                'amount' => $parsed['amount'] > 0 ? $parsed['amount'] : null,
-                'transaction_type' => $parsed['type'],
-                'customer_phone' => $parsed['customer_phone'] !== '' ? $parsed['customer_phone'] : null,
-                'customer_name' => $parsed['customer_name'] !== '' ? $parsed['customer_name'] : null,
-                'processing_error' => null,
-            ]);
-
-            // Do not return — fall through to duplicate check + TransactionService::process()
-        }
-
-        // Even when template matched, capture Preview Commission if present and not already parsed
-        if (($parsed['commission'] ?? 0) <= 0) {
-            $maybeCommission = $this->fallbackCommission($body);
-            if ($maybeCommission > 0) {
-                $parsed['commission'] = $maybeCommission;
-            }
-        }
+        // Persist strict extracted values to SMS for audit (overwrite legacy if needed)
+        $sms->update([
+            'transaction_reference' => $parsed['reference'],
+            'amount' => $parsed['amount'],
+            'transaction_type' => $parsed['type'],
+            'customer_phone' => $parsed['customer_phone'] ?? null,
+            'customer_name' => $parsed['customer_name'] ?? null,
+            'balance' => $parsed['balance'] ?? null,
+            'processing_error' => null,
+        ]);
 
         $alreadyRecorded = Transaction::query()
             ->where('network_id', $network->id)
