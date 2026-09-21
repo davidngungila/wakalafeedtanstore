@@ -76,11 +76,15 @@ abstract class AbstractSmsParser implements SmsParserContract
         return [
             'deposit' => [
                 'type' => 'deposit',
-                'pattern' => '/^(?P<ref>[A-Z0-9]{5,12})[:\s]+.*?(?:received|deposited|credite?d).+?TZS\s+(?P<amount>[\d,]+(?:\.\d+)?).+?from\s+(?P<customer>.+?)\s+(?P<phone>0\d{8,9})\b.*?(?:on\s+(?P<date>\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}))?\s*(?:at\s+(?P<time>\d{1,2}:\d{2}(?::\d{2})?))?.*?(?:balance is\s+TZS\s+(?P<balance>[\d,]+(?:\.\d+)?))?/is',
+                'pattern' => '/^(?P<ref>[A-Z0-9]{5,12})[:\s]+.*?(?:deposited|credite?d).+?TZS\s+(?P<amount>[\d,]+(?:\.\d+)?).+?from\s+(?P<customer>.+?)\s+(?P<phone>0\d{8,9})\b.*?(?:on\s+(?P<date>\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}))?\s*(?:at\s+(?P<time>\d{1,2}:\d{2}(?::\d{2})?))?.*?(?:balance is\s+TZS\s+(?P<balance>[\d,]+(?:\.\d+)?))?/is',
+            ],
+            'received' => [
+                'type' => 'withdrawal',
+                'pattern' => '/^(?P<ref>[A-Z0-9]{5,12})[:\s]+.*?received.*?TZS\s+(?P<amount>[\d,]+(?:\.\d+)?).*?from\s+(?P<customer>.+?)\s+(?P<phone>0\d{9,10})\b.*?(?:on\s+(?P<date>\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}))?\s*(?:at\s+(?P<time>\d{1,2}:\d{2}(?::\d{2})?))?.*?(?:balance is\s+TZS\s+(?P<balance>[\d,]+(?:\.\d+)?))?/is',
             ],
             'withdrawal' => [
                 'type' => 'withdrawal',
-                'pattern' => '/^(?P<ref>[A-Z0-9]{5,12})[:\s]+.*?(?:withdrawn|cash out|cashout).+?TZS\s+(?P<amount>[\d,]+(?:\.\d+)?).+?from\s+(?P<customer>.+?)\s+(?P<phone>0\d{8,9})\b.*?(?:on\s+(?P<date>\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}))?\s*(?:at\s+(?P<time>\d{1,2}:\d{2}(?::\d{2})?))?.*?(?:balance is\s+TZS\s+(?P<balance>[\d,]+(?:\.\d+)?))?/is',
+                'pattern' => '/^(?P<ref>[A-Z0-9]{5,12})[:\s]+.*?(?:withdrawn|cash out|cashout).+?TZS\s+(?P<amount>[\d,]+(?:\.\d+)?).+?from\s+(?P<customer>.+?)\s+(?P<phone>0\d{8,9})\b.*?(?:on\s+(?P<date>\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}))?\s*(?:at\s+(?P<time>\d{1,2}:\d{2}(?::\d{2})?))?.*?(?:balance is\s+TZS\s+(?P<balance>[\d,]+(?:\.\d+)?))?/is',
             ],
             'send_money' => [
                 'type' => 'send_money',

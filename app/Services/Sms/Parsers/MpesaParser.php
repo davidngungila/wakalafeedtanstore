@@ -12,12 +12,13 @@ class MpesaParser
     public function templates(): array
     {
         return [
-            'mpesa_deposit' => [
-                'type' => 'deposit',
+            // You have received = agent received float from customer (nimepokea) -> cash -, float + => withdrawal per user spec
+            'mpesa_received' => [
+                'type' => 'withdrawal',
                 'pattern' => '/^(?P<ref>[A-Z0-9]{5,12})[\s:]+.*?(?:IMEFANIKIWA|Confirmed|confirmed).*?(?:received|deposited|credited).*?TZS\s+(?P<amount>[\d,]+(?:\.\d+)?).*?from\s+(?P<customer>.+?)\s+(?P<phone>0\d{9,10})\b(?:.*?on\s+(?P<date>\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})\s+at\s+(?P<time>\d{1,2}:\d{2}(?::\d{2})?))?.*?(?:(?:balance is|New balance is|Saldo|Salio)\s*(?:is|:)?\s*TZS\s+(?P<balance>[\d,]+(?:\.\d+)?))?/is',
             ],
-            'mpesa_deposit_simple' => [
-                'type' => 'deposit',
+            'mpesa_received_simple' => [
+                'type' => 'withdrawal',
                 'pattern' => '/^(?P<ref>[A-Z0-9]{5,12})[\s:.\-]+.*?You have received\s+TZS\s+(?P<amount>[\d,]+(?:\.\d+)?)\s+from\s+(?P<customer>.+?)\s+(?P<phone>0\d{9,10})\b/is',
             ],
             'mpesa_deposit_sw' => [

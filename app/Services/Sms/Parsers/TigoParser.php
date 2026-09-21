@@ -7,8 +7,9 @@ class TigoParser
     public function templates(): array
     {
         return [
-            'tigo_deposit_sw' => [
-                'type' => 'deposit',
+            // Umepokea = you have received -> agent receives float, gives cash (withdrawal perspective per user spec: nimepokea cash-, float+)
+            'tigo_received' => [
+                'type' => 'withdrawal',
                 'pattern' => '/Tigo[^\n]*?:?\s*Umepokea\s+TZS\s+(?P<amount>[\d,]+(?:\.\d+)?)\s+kutoka\s+kwa\s+(?P<customer>.+?)\s+(?P<phone>0\d{9,10})\b.*?Transaction\s+ID\s*[:\-]\s*(?P<ref>[A-Z0-9]{5,20})\.?\s*(?:Salio\s+lako\s+ni\s+TZS\s+(?P<balance>[\d,]+(?:\.\d+)?))?/is',
             ],
             'tigo_deposit_en' => [

@@ -283,7 +283,7 @@ class SmsApiTest extends TestCase
 
         $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
         $this->assertSame('RECORDED', $sms->processing_status);
-        $this->assertSame('deposit', $sms->transaction_type);
+        $this->assertSame('withdrawal', $sms->transaction_type);
         $this->assertSame(100_000.0, (float) $sms->amount);
         $this->assertSame('JUMA ATHUMANI', $sms->customer_name);
         $this->assertSame('0712345678', $sms->customer_phone);
@@ -331,7 +331,7 @@ class SmsApiTest extends TestCase
         $this->assertSame('tigo', $sms->provider);
         $this->assertSame('TIGOPESA', $sms->network?->code);
         $this->assertSame('RECORDED', $sms->processing_status);
-        $this->assertSame('deposit', $sms->transaction_type);
+        $this->assertSame('withdrawal', $sms->transaction_type);
         $this->assertSame('MP250920ABC123', $sms->transaction_reference);
         $this->assertSame(50_000.0, (float) $sms->amount);
         $this->assertSame('JOHN DOE', $sms->customer_name);
