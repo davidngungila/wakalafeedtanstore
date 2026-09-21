@@ -61,6 +61,8 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::delete('/account/sessions/{session}', [AccountController::class, 'revokeSession'])->name('account.sessions.destroy');
 
     Route::get('/cash-point', [CashPointController::class, 'index'])->name('cash-point.index');
+    Route::get('/cash-point/{cashPoint}', [CashPointController::class, 'show'])->name('cash-point.show');
+    Route::get('/cash-point/{cashPoint}/edit', [CashPointController::class, 'edit'])->name('cash-point.edit');
 
     Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
     Route::get('/transactions/{transaction}/receipt', [TransactionController::class, 'receipt'])->name('transactions.receipt');
@@ -91,6 +93,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::get('/finance/statements/balance', [FinancialStatementController::class, 'balance'])->name('finance.statements.balance');
         Route::get('/audit', AuditLogController::class)->name('audit.index');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
+        Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
 
         Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
         Route::get('/devices/register', [DeviceController::class, 'register'])->name('devices.register');
@@ -107,6 +110,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
 
     Route::middleware('role:admin')->group(function () {
         Route::put('/cash-point', [CashPointController::class, 'update'])->name('cash-point.update');
+        Route::put('/cash-point/{cashPoint}', [CashPointController::class, 'update'])->name('cash-point.update.id');
 
         Route::post('/finance/chart-of-accounts', [ChartOfAccountsController::class, 'store'])->name('finance.accounts.store');
         Route::put('/finance/chart-of-accounts/{account}', [ChartOfAccountsController::class, 'update'])->name('finance.accounts.update');
@@ -121,6 +125,8 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::delete('/networks/{network}', [NetworkController::class, 'destroy'])->name('networks.destroy');
         Route::post('/networks/rates', [NetworkController::class, 'updateRates'])->name('networks.updateRates');
 
+        Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
+        Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');

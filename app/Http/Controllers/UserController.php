@@ -88,6 +88,21 @@ class UserController extends Controller
         return back()->with('status', 'User account updated successfully.');
     }
 
+    public function show(User $user): View
+    {
+        $user->load('agent');
+
+        return view('users.show', compact('user'));
+    }
+
+    public function edit(User $user): View
+    {
+        $user->load('agent');
+        $agents = Agent::where('status', 'active')->orderBy('name')->get(['id', 'name', 'code']);
+
+        return view('users.edit', compact('user', 'agents'));
+    }
+
     public function destroy(Request $request, User $user): JsonResponse|RedirectResponse
     {
         if ($user->id === auth()->id()) {

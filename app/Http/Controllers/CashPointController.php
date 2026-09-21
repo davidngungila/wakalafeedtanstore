@@ -86,9 +86,22 @@ class CashPointController extends Controller
         return view('cash_point.index', compact('agent', 'recentTransactions', 'summary', 'todayOpening', 'isOpeningDone', 'todayStats'));
     }
 
-    public function update(Request $request): JsonResponse|RedirectResponse
+    public function show(Agent $cashPoint): View
     {
-        $agent = cash_point();
+        $cashPoint->load('balances.network', 'users');
+        $recentTransactions = $cashPoint->transactions()->with(['network', 'operator'])->latest()->limit(12)->get();
+
+        return view('cash_point.show', compact('cashPoint'));
+    }
+
+    public function edit(Agent $cashPoint): View
+    {
+        return view('cash_point.edit', compact('cashPoint'));
+    }
+
+    public function update(Request $request, ?Agent $cashPoint = null): JsonResponse|RedirectResponse
+    {
+        $agent = $cashPoint ?? cash_point();
 
         $validated = $request->validate([
             'code' => ['required', 'string', 'max:20', 'unique:agents,code'.($agent?->id ? ','.$agent->id : '')],
