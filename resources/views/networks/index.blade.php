@@ -157,19 +157,24 @@
         </form>
     @endif
 
-    <!-- Delete confirmation modal -->
+    <!-- Delete confirmation modal - POP UP MODAL for MIX BY YAS AND MPESA -->
     <div class="modal-backdrop" id="confirmNetworkDelete">
-        <div class="modal" style="max-width:400px;">
+        <div class="popup" style="max-width:480px; margin:auto;">
             <div class="modal-head">
                 <h3>Delete network?</h3>
                 <button class="modal-close" onclick="closeModal('confirmNetworkDelete')">✕</button>
             </div>
-            <div class="modal-body">
-                <p style="font-size:14px;color:var(--ink-soft);line-height:1.6;" id="confirmNetworkText">This network will be permanently deleted.</p>
+            <div class="modal-body" style="text-align:center; padding:24px;">
+                <div style="width:56px;height:56px;border-radius:50%;background:var(--danger-100);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px;color:var(--danger);"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </div>
+                <p style="font-size:15px;color:var(--coffee-900);line-height:1.6; font-weight:700;" id="confirmNetworkTitle">Delete this network?</p>
+                <p style="font-size:14px;color:var(--ink-soft);line-height:1.6; margin-top:8px;" id="confirmNetworkText">This network will be permanently deleted.</p>
+                <p style="font-size:12px;color:var(--danger);line-height:1.5; margin-top:12px; background:var(--danger-100); padding:10px 12px; border-radius:8px; font-weight:600;">⚠️ This cannot be undone. All SMS records for this network will be permanently deleted.</p>
             </div>
-            <div class="modal-foot">
+            <div class="modal-foot" style="justify-content:center; gap:12px;">
                 <button class="btn btn-ghost" onclick="closeModal('confirmNetworkDelete')">Cancel</button>
-                <button class="btn btn-danger" onclick="executeNetworkDelete()">Delete</button>
+                <button class="btn btn-danger" onclick="executeNetworkDelete()" style="background:var(--danger); color:#fff;">Delete MIX BY YAS AND MPESA</button>
             </div>
         </div>
     </div>
@@ -278,16 +283,28 @@
         });
 
         let pendingNetworkDeleteRoute = null;
+        let pendingNetworkName = null;
         function confirmDeleteNetwork(routeKey, name) {
-            document.getElementById('confirmNetworkText').textContent = 'Delete \"' + name + '\"? This will permanently remove the network. Transactions or float history will block deletion — suspend instead.';
+            pendingNetworkName = name;
+            const isMixMpesa = name.toUpperCase().includes('MIX') && name.toUpperCase().includes('MPESA') || name.toUpperCase() === 'MIX BY YAS AND MPESA' || name === 'Mixx by Yas (HaloPesa)' || name === 'Vodacom M-Pesa' || name.toUpperCase().includes('MIX BY YAS');
+            document.getElementById('confirmNetworkTitle').textContent = isMixMpesa ? 'Delete "' + name + '" and all its SMS records?' : 'Delete "' + name + '"?';
+            if (isMixMpesa || name.toUpperCase().includes('MIX BY YAS')) {
+                document.getElementById('confirmNetworkText').innerHTML = 'Delete \"<b>' + name + '</b>\" and <b>all its SMS records</b>?<br><br><span style="color:var(--danger); font-weight:700;">This cannot be undone.</span><br><span style="font-size:12px;">All SMS, transactions and float history for this network will be permanently deleted.</span>';
+                document.querySelector('#confirmNetworkDelete .btn-danger').textContent = 'Delete ' + name;
+            } else {
+                document.getElementById('confirmNetworkText').textContent = 'Delete \"' + name + '\"? This will permanently remove the network. Transactions or float history will block deletion — suspend instead.';
+                document.querySelector('#confirmNetworkDelete .btn-danger').textContent = 'Delete';
+            }
             pendingNetworkDeleteRoute = '/networks/' + routeKey;
             openModal('confirmNetworkDelete');
         }
         async function executeNetworkDelete() {
             if (!pendingNetworkDeleteRoute) return;
+            const isMixMpesa = pendingNetworkName && (pendingNetworkName.toUpperCase().includes('MIX') && pendingNetworkName.toUpperCase().includes('MPESA') || pendingNetworkName.toUpperCase() === 'MIX BY YAS AND MPESA' || pendingNetworkName.toUpperCase().includes('MIX BY YAS'));
+            const url = isMixMpesa ? pendingNetworkDeleteRoute + '?force_delete_sms=1' : pendingNetworkDeleteRoute;
             closeModal('confirmNetworkDelete');
             try {
-                const response = await fetch(pendingNetworkDeleteRoute, {
+                const response = await fetch(url, {
                     method: 'DELETE',
                     headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF_TOKEN, 'Accept': 'application/json' },
                 });

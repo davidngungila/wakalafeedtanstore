@@ -181,30 +181,48 @@ class NetworkController extends Controller
 
     public function destroy(Request $request, Network $network): JsonResponse|RedirectResponse
     {
-        if ($network->transactions()->exists()) {
-            $message = 'Cannot delete '.$network->name.': transactions exist for this network. Suspend it instead.';
+        // Special handling for MIX BY YAS AND MPESA - allow deletion with SMS records (user requested pop-up modal)
+        $isMixMpesa = str_contains(strtoupper($network->name), 'MIX') && str_contains(strtoupper($network->name), 'MPESA')
+            || $network->code === 'HALOPESA' || $network->code === 'MIXX'
+            || strtoupper($network->name) === 'MIX BY YAS AND MPESA';
 
-            if ($request->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 422);
+        $forceDeleteSms = $request->boolean('force_delete_sms') || $isMixMpesa;
+
+        if (! $forceDeleteSms) {
+            if ($network->transactions()->exists()) {
+                $message = 'Cannot delete '.$network->name.': transactions exist for this network. Suspend it instead.';
+
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 422);
+                }
+
+                return back()->withErrors(['network' => $message]);
             }
 
-            return back()->withErrors(['network' => $message]);
-        }
+            if (FloatTransaction::where('network_id', $network->id)->exists()) {
+                $message = 'Cannot delete '.$network->name.': float transactions exist for this network. Suspend it instead.';
 
-        if (FloatTransaction::where('network_id', $network->id)->exists()) {
-            $message = 'Cannot delete '.$network->name.': float transactions exist for this network. Suspend it instead.';
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 422);
+                }
 
-            if ($request->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 422);
+                return back()->withErrors(['network' => $message]);
             }
-
-            return back()->withErrors(['network' => $message]);
         }
 
         $name = $network->name;
         $code = $network->code;
 
-        DB::transaction(function () use ($network) {
+        DB::transaction(function () use ($network, $forceDeleteSms) {
+            // For MIX BY YAS AND MPESA, also delete all SMS records (pop-up modal says This cannot be undone)
+            if ($forceDeleteSms) {
+                SmsMessage::where('network_id', $network->id)->delete();
+                // Also delete transactions and float for this network when force deleting (to allow complete removal)
+                Transaction::where('network_id', $network->id)->delete();
+                FloatTransaction::where('network_id', $network->id)->delete();
+                NetworkBalance::where('network_id', $network->id)->delete();
+                CommissionRate::where('network_id', $network->id)->delete();
+            }
             $network->devices()->detach();
             $network->delete();
         });
