@@ -113,8 +113,6 @@
                         <th>Type</th>
                         <th>Network</th>
                         <th>Amount</th>
-                        <th>Commission</th>
-                        <th>Running Cash</th>
                         <th>Running Float</th>
                         <th>Status</th>
                         <th></th>
@@ -140,8 +138,6 @@
                                 {{ $txn->network?->name }}
                             </td>
                             <td class="cell-title">@money($txn->amount)</td>
-                            <td>@money($txn->commission)</td>
-                            <td style="font-weight:600;">{{ $txn->running_cash_balance !== null ? money($txn->running_cash_balance) : '—' }}</td>
                             <td style="font-weight:600;">{{ $txn->running_float_balance !== null ? money($txn->running_float_balance) : '—' }}</td>
                             <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
                             <td>
@@ -158,7 +154,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="empty-state"><h4>No transactions found</h4><p>Try a different filter or process a new transaction.</p></td></tr>
+                        <tr><td colspan="8" class="empty-state"><h4>No transactions found</h4><p>Try a different filter or process a new transaction.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>
