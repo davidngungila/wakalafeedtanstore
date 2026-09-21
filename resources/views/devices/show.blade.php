@@ -320,7 +320,7 @@
                     </thead>
                     <tbody id="deviceMsgBody">
                         @forelse ($sms as $message)
-                            <tr data-sms-id="{{ $message->id }}">
+                            <tr data-sms-id="{{ $message->id }}" class="row-click" onclick="window.location='{{ route('sms.show', $message) }}'" style="cursor:pointer;">
                                 <td class="cell-sub">
                                     {{ $message->server_received_at->format('H:i:s') }}
                                     @if ($message->sim_slot)
@@ -340,15 +340,15 @@
                                 <td>
                                     <span class="cell-title">{{ $message->transaction_reference ?? '—' }}</span>
                                     @if ($message->transaction)
-                                        <div class="cell-sub">→ <a href="{{ route('transactions.index', ['q' => $message->transaction->reference]) }}">{{ $message->transaction->reference }}</a></div>
+                                        <div class="cell-sub">→ <a href="{{ route('transactions.index', ['q' => $message->transaction->reference]) }}" onclick="event.stopPropagation()">{{ $message->transaction->reference }}</a></div>
                                     @endif
                                 </td>
                                 <td><span class="tag {{ status_badge($message->processing_status === 'RECORDED' ? 'completed' : strtolower($message->processing_status)) }}">{{ ucfirst(strtolower($message->processing_status)) }}</span></td>
                                 <td>
                                     <div class="row-actions">
-                                        <button type="button" title="View full SMS" onclick="openMessage(@js($message->message_body))">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                        </button>
+                                        <a href="{{ route('sms.show', $message) }}" title="View full SMS" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);" onclick="event.stopPropagation()">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        </a>
                                     </div>
                                 </td>
                             </tr>
