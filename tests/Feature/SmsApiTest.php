@@ -409,6 +409,7 @@ class SmsApiTest extends TestCase
         $txn = Transaction::firstOrFail();
         $this->assertSame('deposit', $txn->type);
         $this->assertSame(5_000.0, (float) $txn->amount);
+        $this->assertSame(99.0, (float) $txn->commission);
         $this->assertSame('26363415048141', $txn->provider_reference);
         $this->assertSame('HALMA RASHIDI', $txn->customer_name);
         $this->assertSame('255676885670', $txn->customer_phone);
