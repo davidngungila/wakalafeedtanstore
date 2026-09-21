@@ -138,6 +138,17 @@ class SmsProcessor
             $sms->update(['network_id' => $network->id]);
         }
 
+        // Never create transactions from promo/marketing SMS (e.g. "Pata Dakika100 Mitandao Yote kwa Siku 7 kwa TSH1000...")
+        // Only financial messages like IMEFANIKIWA! / Tnx ... Umeweka ... Salio jipya ... Preview Commission should be recorded.
+        if ($this->isPromoSms($body)) {
+            $sms->update([
+                'processing_status' => 'NEEDS_REVIEW',
+                'processing_error' => 'Promo/marketing SMS ignored - not a financial transaction.',
+            ]);
+
+            return ['ok' => false, 'ignored_sender' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
+        }
+
         // Allow recording even when template did not match — compute fallback amount/type/reference
         // and continue to transaction creation instead of stopping at NEEDS_REVIEW.
         // If no computable amount exists even after fallback extraction, keep NEEDS_REVIEW.
@@ -376,5 +387,42 @@ class SmsProcessor
         }
 
         return null;
+    }
+
+    private function isPromoSms(string $body): bool
+    {
+        $lower = strtolower($body);
+
+        // Explicit promo markers - if any of these appear, it's not a financial transaction
+        $promoMarkers = [
+            'pata dakika',
+            'mitandao yote',
+            'bofya',
+            'tinyurl',
+            'piga *',
+            'chagua',
+            ' uni ofa',
+            'kwa siku 7',
+            'kwa siku',
+            'siku 7',
+            'pata ofa',
+        ];
+
+        foreach ($promoMarkers as $marker) {
+            if (str_contains($lower, $marker)) {
+                return true;
+            }
+        }
+
+        // If it contains TSH without proper financial context (IMEFANIKIWA/Tnx/Salio), treat as promo
+        // Financial SMS always contains IMEFANIKIWA or Tnx + Umeweka/Umetoa + Salio jipya
+        $hasFinancialMarkers = str_contains($lower, 'imefanikiwa') || str_contains($lower, 'tnx') || str_contains($lower, 'salio jipya') || str_contains($lower, 'umeweka') || str_contains($lower, 'umetoa');
+        $hasPromoStructure = str_contains($lower, 'pata') && str_contains($lower, 'kwa tsh');
+
+        if ($hasPromoStructure && ! $hasFinancialMarkers) {
+            return true;
+        }
+
+        return false;
     }
 }
