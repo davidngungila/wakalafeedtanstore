@@ -37,9 +37,11 @@
         <div>
             <h2>Transaction Receipt</h2>
             <p class="sub">{{ $transaction->reference }} · {{ $transaction->created_at->format('d M Y H:i') }}</p>
+            <p class="sub" style="font-size:11px; word-break:break-all; color:var(--ink-soft);">Encrypted ID: {{ $transaction->encryptedId }} · <a href="{{ route('transactions.receipt', $transaction) }}" style="color:var(--terracotta-600);">{{ route('transactions.receipt', $transaction) }}</a></p>
         </div>
         <div class="view-actions">
             <a href="{{ route('transactions.index') }}" class="btn btn-ghost">← Back to transactions</a>
+            <a href="{{ route('transactions.receipt.pdf', $transaction) }}" class="btn btn-ghost">Download PDF</a>
             <button class="btn btn-primary" onclick="window.print()">Print receipt</button>
         </div>
     </div>
@@ -47,41 +49,67 @@
     <div class="rc-receipt" id="receiptCard">
         <div class="rc-brand">
             <strong>Wakala Feedtan Store</strong>
-            <span>Mobile Money Services</span>
+            <span>Mobile Money Services · Kiborilon Moshi Kilimanjaro</span>
+            <span style="font-size:9px; margin-top:3px;">wakala@feedtanstore.com · Encrypted: {{ Str::limit($transaction->encryptedId, 28, '…') }}</span>
         </div>
         <div class="rc-rule"></div>
         <div class="rc-title">Transaction Receipt</div>
-        <div class="rc-subtitle">{{ txn_type_label($transaction->type) }}</div>
+        <div class="rc-subtitle">{{ txn_type_label($transaction->type) }} · {{ $transaction->reference }}</div>
         <div class="rc-rule"></div>
-        <div class="rc-row"><span>Reference</span><b>{{ $transaction->reference }}</b></div>
+
+        <div style="font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--terracotta-600); margin:10px 0 6px; border-bottom:1px solid var(--line); padding-bottom:4px;">Transaction Details</div>
+        <div class="rc-row"><span>Reference (internal)</span><b>{{ $transaction->reference }}</b></div>
         <div class="rc-row"><span>Provider ref</span><b>{{ $transaction->provider_reference ?? '—' }}</b></div>
-        <div class="rc-row"><span>Date</span><b>{{ $transaction->created_at->format('d M Y H:i') }}</b></div>
-        <div class="rc-row"><span>Network</span><b><span class="net-dot" style="background:{{ $transaction->network?->color ?? '#999' }};"></span>&nbsp;{{ $transaction->network?->name ?? '—' }}</b></div>
-        <div class="rc-row"><span>Customer</span><b>{{ $transaction->customer_name ?? '—' }}</b></div>
+        <div class="rc-row"><span>Encrypted ID</span><b style="font-size:10px; word-break:break-all;">{{ Str::limit($transaction->encryptedId, 32, '…') }}</b></div>
+        <div class="rc-row"><span>Date & Time</span><b>{{ $transaction->created_at->format('d M Y H:i:s') }}</b></div>
+        <div class="rc-row"><span>Status</span><b>{{ strtoupper($transaction->status) }}</b></div>
+        <div class="rc-row"><span>Type</span><b>{{ txn_type_label($transaction->type) }} ({{ $transaction->type }})</b></div>
+        <div class="rc-row"><span>Network</span><b><span class="net-dot" style="background:{{ $transaction->network?->color ?? '#999' }};"></span>&nbsp;{{ $transaction->network?->name ?? '—' }} ({{ $transaction->network?->code ?? '—' }})</b></div>
+        <div class="rc-row"><span>Agent / Cash Point</span><b>{{ $transaction->agent?->name ?? '—' }} · {{ $transaction->agent?->code ?? '' }}</b></div>
+        @if($transaction->dailyOpening)
+            <div class="rc-row"><span>Daily Opening</span><b>{{ $transaction->dailyOpening->opening_date->format('Y-m-d') }} · Cash {{ money($transaction->dailyOpening->cash_opening) }} · Float {{ money($transaction->dailyOpening->totalFloatOpening()) }}</b></div>
+        @endif
+
+        <div style="font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--terracotta-600); margin:12px 0 6px; border-bottom:1px solid var(--line); padding-bottom:4px;">Customer</div>
+        <div class="rc-row"><span>Customer Name</span><b>{{ $transaction->customer_name ?? '—' }}</b></div>
         <div class="rc-row"><span>Phone</span><b>{{ $transaction->customer_phone }}</b></div>
-        <div class="rc-rule"></div>
+
         <div class="rc-amount"><span>Amount</span><b>@money($transaction->amount)</b></div>
         <div class="rc-row"><span>Fee</span><b>@money($transaction->fee)</b></div>
-        <div class="rc-row"><span>Commission</span><b>@money($transaction->commission)</b></div>
-        <div class="rc-row"><span>Running Cash</span><b>{{ $transaction->running_cash_balance !== null ? money($transaction->running_cash_balance) : '—' }}</b></div>
-        <div class="rc-row"><span>Running Float</span><b>{{ $transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—' }}</b></div>
-        <div class="rc-row"><span>Status</span><b>{{ strtoupper($transaction->status) }}</b></div>
-        @if($transaction->reversal_reason)
-            <div class="rc-row"><span>Reason</span><b>{{ $transaction->reversal_reason }}</b></div>
-        @endif
+        <div class="rc-row"><span>Commission (agent)</span><b>@money($transaction->commission)</b></div>
+        <div class="rc-row"><span>Running Cash Balance</span><b>{{ $transaction->running_cash_balance !== null ? money($transaction->running_cash_balance) : '—' }}</b></div>
+        <div class="rc-row"><span>Running Float Balance</span><b>{{ $transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—' }}</b></div>
+
+        <div style="font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--terracotta-600); margin:12px 0 6px; border-bottom:1px solid var(--line); padding-bottom:4px;">Operator & Audit</div>
+        <div class="rc-row"><span>Operator</span><b>{{ $transaction->operator?->name ?? '—' }} @if($transaction->operator?->email) ({{ $transaction->operator->email }}) @endif</b></div>
+        <div class="rc-row"><span>Performed at</span><b>{{ $transaction->created_at->format('d M Y H:i:s') }}</b></div>
         @if($transaction->notes)
             <div class="rc-row"><span>Notes</span><b>{{ $transaction->notes }}</b></div>
         @endif
-        <div class="rc-rule"></div>
-        <div class="rc-row"><span>Operator</span><b>{{ $transaction->operator?->name ?? auth()->user()->name }}</b></div>
-        @if($transaction->reverser)
-            <div class="rc-row"><span>Reversed by</span><b>{{ $transaction->reverser->name }} · {{ $transaction->reversed_at?->format('d M Y H:i') }}</b></div>
+        @if($transaction->status === 'reversed')
+            <div class="rc-row"><span>Reversed by</span><b>{{ $transaction->reverser?->name ?? '—' }} at {{ $transaction->reversed_at?->format('d M Y H:i') }}</b></div>
+            <div class="rc-row"><span>Reversal reason</span><b>{{ $transaction->reversal_reason ?? '—' }}</b></div>
         @endif
+        <div class="rc-row"><span>Agent Cash Point</span><b>{{ $transaction->agent?->name ?? '—' }} · Phone {{ $transaction->agent?->phone ?? '—' }}</b></div>
+
+        @if($transaction->smsMessages->isNotEmpty())
+            <div style="font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--terracotta-600); margin:12px 0 6px; border-bottom:1px solid var(--line); padding-bottom:4px;">Source SMS (full detailed)</div>
+            @foreach($transaction->smsMessages as $sms)
+                <div class="rc-row"><span>Sender / Provider</span><b>{{ $sms->sender }} ({{ $sms->provider ?? '—' }})</b></div>
+                <div class="rc-row"><span>Device</span><b>{{ $sms->device?->name ?? '—' }} · Slot {{ $sms->sim_slot ?? '—' }}</b></div>
+                <div class="rc-row"><span>Received</span><b>{{ $sms->server_received_at?->format('d M Y H:i:s') ?? $sms->created_at->format('d M Y H:i:s') }}</b></div>
+                <div style="background:var(--sand-100); border:1px solid var(--line); border-radius:6px; padding:10px; font-size:11.5px; white-space:pre-wrap; word-break:break-word; margin:6px 0; font-family:ui-monospace,monospace;">{{ $sms->message_body }}</div>
+                <div class="rc-row"><span>SMS Status</span><b>{{ $sms->processing_status }} @if($sms->is_duplicate) · Duplicate @endif</b></div>
+            @endforeach
+        @endif
+
         <div class="rc-rule"></div>
-        <div class="rc-foot">Thank you for using Wakala Feedtan Store</div>
+        <div class="rc-foot">Thank you for using Wakala Feedtan Store<br><span style="font-size:8px;">Computer generated receipt · Reference: {{ $transaction->reference }} · Encrypted: {{ Str::limit($transaction->encryptedId, 24, '…') }} · {{ route('transactions.receipt', $transaction) }}</span></div>
     </div>
 
-    <div class="no-print" style="text-align:center; margin-top:18px;">
+    <div class="no-print" style="text-align:center; margin-top:18px; display:flex; gap:10px; justify-content:center;">
         <a href="{{ route('transactions.index') }}" class="btn btn-ghost">Back</a>
+        <a href="{{ route('transactions.receipt.pdf', $transaction) }}" class="btn btn-primary">Download PDF</a>
+        <button class="btn btn-ghost" onclick="window.print()">Print</button>
     </div>
 @endsection

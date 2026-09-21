@@ -134,9 +134,21 @@ class TransactionController extends Controller
 
     public function receipt(Transaction $transaction): View
     {
-        $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening']);
+        $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening', 'smsMessages.device']);
 
         return view('transactions.receipt', compact('transaction'));
+    }
+
+    public function receiptPdf(Transaction $transaction)
+    {
+        $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening', 'smsMessages.device']);
+
+        $pdf = app('dompdf.wrapper');
+        $pdf->loadView('transactions.receipt-pdf', compact('transaction'));
+        $pdf->setPaper('a4', 'portrait');
+        $pdf->setOptions(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true]);
+
+        return $pdf->download('receipt-'.$transaction->reference.'.pdf');
     }
 
     public function reverse(Request $request, Transaction $transaction): JsonResponse|RedirectResponse

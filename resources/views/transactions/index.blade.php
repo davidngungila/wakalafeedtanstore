@@ -150,7 +150,7 @@
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"></path></svg>
                                     </a>
                                     @if (! is_cashier())
-                                        <button type="button" class="warn js-reverse-txn" data-id="{{ $txn->id }}" data-ref="{{ $txn->reference }}" title="Reverse">
+                                        <button type="button" class="warn js-reverse-txn" data-id="{{ $txn->getRouteKey() }}" data-ref="{{ $txn->reference }}" title="Reverse">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>
                                         </button>
                                     @endif
@@ -408,7 +408,7 @@
             const reason = document.getElementById('reverseReason').value;
             try {
                 const body = new URLSearchParams('_token=' + CSRF_TOKEN + '&reason=' + encodeURIComponent(reason));
-                const response = await fetch(`/transactions/${reverseTarget}/reverse`, {
+                const response = await fetch(`/transactions/${encodeURIComponent(reverseTarget)}/reverse`, {
                     method: 'PUT',
                     headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
                     body,
@@ -427,11 +427,11 @@
             });
         });
 
-        // Delegated handler for reverse buttons
+        // Delegated handler for reverse buttons (id is encrypted string)
         document.querySelectorAll('.js-reverse-txn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                openReverseModal(Number(btn.dataset.id), btn.dataset.ref);
+                openReverseModal(btn.dataset.id, btn.dataset.ref);
             });
         });
 

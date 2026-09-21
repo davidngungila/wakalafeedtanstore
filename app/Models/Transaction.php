@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Crypt;
 
 #[Fillable([
     'daily_opening_id',
@@ -91,5 +92,38 @@ class Transaction extends Model
     public function smsMessages(): HasMany
     {
         return $this->hasMany(SmsMessage::class);
+    }
+
+    /**
+     * Use encrypted id in URLs (e.g. /transactions/{encrypted}/receipt) to hide raw integer.
+     */
+    public function getRouteKey(): string
+    {
+        return Crypt::encryptString((string) $this->getKey());
+    }
+
+    public function resolveRouteBinding($value, $field = null): ?self
+    {
+        if ($field !== null) {
+            return parent::resolveRouteBinding($value, $field);
+        }
+
+        try {
+            $id = (int) Crypt::decryptString((string) $value);
+        } catch (\Throwable) {
+            // Fallback to plain id for backward compatibility (e.g. /transactions/41/receipt)
+            if (is_numeric($value)) {
+                return static::find((int) $value);
+            }
+
+            return null;
+        }
+
+        return static::find($id);
+    }
+
+    public function getEncryptedIdAttribute(): string
+    {
+        return $this->getRouteKey();
     }
 }
