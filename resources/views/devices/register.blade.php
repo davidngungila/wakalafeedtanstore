@@ -398,11 +398,11 @@
                 if (textEl) textEl.textContent = 'Successfully authorized! ✓';
                 setTimeout(() => {
                     closeModal('authorizeSimulationModal');
-                    toast('Device authorized and activated.', 'success');
-                    document.getElementById('authorizeBtn').hidden = true;
-                    document.getElementById('goDeviceBtn').href = device.devicePageUrl;
-                    document.getElementById('goDeviceBtn').hidden = false;
-                    document.getElementById('goDeviceBtn').textContent = 'Go to device';
+                    toast('Device authorized and activated. Redirecting to device page...', 'success');
+                    // Auto-direct to device page as requested: AFTER AUTHORIZE MUST DIRECT TO DEVICE PAGE
+                    setTimeout(() => {
+                        window.location.href = device.devicePageUrl;
+                    }, 700);
                 }, 600);
             } else {
                 if (textEl) textEl.textContent = 'Authorization failed.';
