@@ -6,7 +6,7 @@
     <div class="view-head">
         <div>
             <h2>Transaction Receipt</h2>
-            <p class="sub">{{ $transaction->reference }} · {{ $transaction->created_at->format('d M Y H:i') }} · <span style="font-size:11px; word-break:break-all;">Encrypted: {{ Str::limit($transaction->encryptedId, 28, '…') }}</span></p>
+            <p class="sub">{{ $transaction->reference }} · {{ $transaction->created_at->format('d M Y H:i') }}</p>
         </div>
         <div class="view-actions">
             <a href="{{ route('transactions.index') }}" class="btn btn-ghost">← Back</a>
@@ -25,8 +25,6 @@
                 <div class="detail-grid">
                     <div class="detail-item"><div class="dk">Reference (internal)</div><div class="dv">{{ $transaction->reference }}</div></div>
                     <div class="detail-item"><div class="dk">Provider reference</div><div class="dv">{{ $transaction->provider_reference ?? '—' }}</div></div>
-                    <div class="detail-item"><div class="dk">Encrypted ID</div><div class="dv" style="word-break:break-all; font-size:12px;">{{ $transaction->encryptedId }}</div></div>
-                    <div class="detail-item"><div class="dk">Receipt URL</div><div class="dv" style="word-break:break-all; font-size:11px;"><a href="{{ route('transactions.receipt', $transaction) }}" style="color:var(--terracotta-600);">{{ route('transactions.receipt', $transaction) }}</a></div></div>
                     <div class="detail-item"><div class="dk">Date & Time</div><div class="dv">{{ $transaction->created_at->format('d M Y H:i:s') }}</div></div>
                     <div class="detail-item"><div class="dk">Type</div><div class="dv">{{ txn_type_label($transaction->type) }} ({{ $transaction->type }})</div></div>
                     <div class="detail-item"><div class="dk">Network</div><div class="dv"><span class="net-dot" style="background:{{ $transaction->network?->color ?? '#999' }};"></span> {{ $transaction->network?->name ?? '—' }} ({{ $transaction->network?->code ?? '—' }})</div></div>
@@ -113,7 +111,6 @@
                 <div style="text-align:center;">
                     <strong style="display:block; font-size:16px; color:var(--coffee-900);">Wakala Feedtan Store</strong>
                     <span style="display:block; font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-soft);">Mobile Money Services</span>
-                    <span style="font-size:8px; color:var(--ink-soft);">Encrypted: {{ Str::limit($transaction->encryptedId, 24, '…') }}</span>
                 </div>
                 <div style="border-top:1px dashed #cdbfa8; margin:13px 0;"></div>
                 <div style="text-align:center; font-size:10.5px; font-weight:700; letter-spacing:.28em; text-transform:uppercase; color:var(--coffee-700);">Transaction Receipt</div>

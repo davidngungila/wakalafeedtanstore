@@ -33,7 +33,6 @@
     </div>
     <div class="title">Transaction Receipt</div>
     <div class="subtitle">{{ txn_type_label($transaction->type) }} · {{ $transaction->reference }}</div>
-    <div class="meta">Encrypted ID: {{ $transaction->encryptedId }} · URL: {{ route('transactions.receipt', $transaction) }}</div>
     <div class="rule"></div>
 
     <div class="section">Transaction Details</div>
@@ -80,7 +79,7 @@
 
     <div class="footer">
         Thank you for using Wakala Feedtan Store<br>
-        <span style="font-size:8px;">This is a computer generated receipt. Reference: {{ $transaction->reference }} · Encrypted: {{ Str::limit($transaction->encryptedId, 24, '…') }}</span>
+        <span style="font-size:8px;">This is a computer generated receipt. Reference: {{ $transaction->reference }} · {{ $transaction->created_at->format('d M Y H:i:s') }}</span>
     </div>
 </body>
 </html>

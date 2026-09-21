@@ -7,6 +7,8 @@ use App\Models\Network;
 use App\Models\NetworkBalance;
 use App\Models\Transaction;
 use App\Services\TransactionService;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Dompdf\Dompdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -155,12 +157,25 @@ class TransactionController extends Controller
 
         $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening', 'smsMessages.device']);
 
-        $pdf = app('dompdf.wrapper');
-        $pdf->loadView('transactions.receipt-pdf', compact('transaction'));
-        $pdf->setPaper('a4', 'portrait');
-        $pdf->setOptions(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true]);
+        try {
+            $pdf = Pdf::loadView('transactions.receipt-pdf', compact('transaction'));
+            $pdf->setPaper('a4', 'portrait');
+            $pdf->setOptions(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true]);
 
-        return $pdf->download('receipt-'.$transaction->reference.'.pdf');
+            return $pdf->download('receipt-'.$transaction->reference.'.pdf');
+        } catch (\Throwable $e) {
+            // Fallback to direct Dompdf if wrapper not available (e.g. production cache issue)
+            $html = view('transactions.receipt-pdf', compact('transaction'))->render();
+            $dompdf = new Dompdf(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true]);
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
+
+            return response($dompdf->output(), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="receipt-'.$transaction->reference.'.pdf"',
+            ]);
+        }
     }
 
     public function reverse(Request $request, Transaction $transaction): JsonResponse|RedirectResponse
