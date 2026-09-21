@@ -65,6 +65,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::get('/cash-point/{cashPoint}/edit', [CashPointController::class, 'edit'])->name('cash-point.edit');
 
     Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
+    Route::get('/transactions/create', [TransactionController::class, 'create'])->name('transactions.create');
     Route::get('/transactions/{transaction}/receipt', [TransactionController::class, 'receipt'])->name('transactions.receipt');
     Route::get('/transactions/{transaction}/receipt/pdf', [TransactionController::class, 'receiptPdf'])->name('transactions.receipt.pdf');
     Route::post('/transactions', [TransactionController::class, 'store'])->name('transactions.store');

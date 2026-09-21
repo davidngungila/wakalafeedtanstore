@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DailyOpening;
 use App\Models\Network;
 use App\Models\NetworkBalance;
+use App\Models\SmsMessage;
 use App\Models\Transaction;
 use App\Services\TransactionService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -60,6 +61,19 @@ class TransactionController extends Controller
         return view('transactions.index', compact('transactions', 'todayTotals', 'combos') + ['filters' => $request->only(['status', 'type', 'network', 'q'])]);
     }
 
+    public function create(Request $request): View
+    {
+        $combos = $this->combos();
+        $smsMessages = SmsMessage::with(['device', 'network'])
+            ->whereNull('transaction_id')
+            ->whereIn('processing_status', ['NEEDS_REVIEW', 'FAILED', 'PARSED'])
+            ->latest('server_received_at')
+            ->limit(50)
+            ->get();
+
+        return view('transactions.create', compact('combos', 'smsMessages') + ['selectedSms' => $request->input('sms')]);
+    }
+
     public function store(Request $request): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
@@ -68,6 +82,8 @@ class TransactionController extends Controller
             'customer_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['required', 'string', 'max:30'],
             'amount' => ['required', 'numeric', 'min:1'],
+            'provider_reference' => ['nullable', 'string', 'max:60'],
+            'sms_id' => ['nullable', 'exists:sms_messages,id'],
         ]);
 
         $agent = cash_point();
@@ -114,6 +130,8 @@ class TransactionController extends Controller
             ],
             $agent,
             auth()->id(),
+            'Processed via manual form'.(isset($validated['sms_id']) ? ' (SMS #'.$validated['sms_id'].')' : ''),
+            $validated['provider_reference'] ?? null,
         );
 
         // Associate with today's daily opening (if exists, e.g. for cashiers)
@@ -121,17 +139,45 @@ class TransactionController extends Controller
             $transaction->update(['daily_opening_id' => $todayOpening->id]);
         }
 
+        // Link to SMS if provided (reference connect to the message as well)
+        if (! empty($validated['sms_id'])) {
+            $sms = SmsMessage::find($validated['sms_id']);
+            if ($sms) {
+                $sms->update([
+                    'processing_status' => 'RECORDED',
+                    'processing_error' => null,
+                    'transaction_id' => $transaction->id,
+                    'transaction_reference' => $transaction->provider_reference,
+                    'amount' => $transaction->amount,
+                    'transaction_type' => $transaction->type,
+                    'customer_name' => $transaction->customer_name,
+                    'customer_phone' => $transaction->customer_phone,
+                    'network_id' => $transaction->network_id,
+                ]);
+            }
+        } elseif (! empty($validated['provider_reference'])) {
+            // Also link any existing SMS with same provider_reference if not yet linked
+            SmsMessage::where('transaction_reference', $validated['provider_reference'])
+                ->whereNull('transaction_id')
+                ->update([
+                    'processing_status' => 'RECORDED',
+                    'transaction_id' => $transaction->id,
+                ]);
+        }
+
         $this->recordAudit('Transaction processed', 'Transaction', $transaction->id, [
             'reference' => $transaction->reference,
             'type' => $validated['type'],
             'amount' => $validated['amount'],
+            'provider_reference' => $validated['provider_reference'] ?? null,
+            'sms_id' => $validated['sms_id'] ?? null,
         ]);
 
         if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => 'Transaction processed successfully.']);
+            return response()->json(['success' => true, 'message' => 'Transaction processed successfully.', 'transaction_id' => $transaction->id, 'reference' => $transaction->reference]);
         }
 
-        return back()->with('status', 'Transaction processed successfully.');
+        return redirect()->route('transactions.receipt', $transaction)->with('status', 'Transaction '.$transaction->reference.' created and linked'.(! empty($validated['sms_id']) ? ' to SMS #'.$validated['sms_id'] : '').'.');
     }
 
     public function receipt(Request $request, Transaction $transaction): View|RedirectResponse

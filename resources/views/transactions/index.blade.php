@@ -42,7 +42,7 @@
             <p class="sub">Deposits, withdrawals, send money, bills, airtime and bank transfers across all networks.</p>
         </div>
         <div class="view-actions">
-            <!-- Process transaction button removed as requested -->
+            <a href="{{ route('transactions.create') }}" class="btn btn-primary">+ Record transaction</a>
         </div>
     </div>
 
