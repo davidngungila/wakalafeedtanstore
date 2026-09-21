@@ -123,7 +123,7 @@
                 </thead>
                 <tbody id="smsBody">
                     @forelse ($messages as $message)
-                        <tr data-id="{{ $message->id }}" data-sms-id="{{ $message->id }}" class="row-click" onclick="openMessage({{ $message->id }})">
+                        <tr data-id="{{ $message->id }}" data-sms-id="{{ $message->id }}" class="row-click" onclick="window.location='{{ route('sms.show', $message) }}'">
                             <td class="cell-sub">{{ $message->server_received_at->format('H:i:s') }}</td>
                             <td>
                                 <a href="{{ route('devices.show', $message->device) }}" class="cell-title" onclick="event.stopPropagation()">{{ $message->device?->name ?? '—' }}</a>
@@ -157,7 +157,12 @@
                                 </span>
                             </td>
                             <td>
-                                <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="event.stopPropagation();openMessage({{ $message->id }})">View</button>
+                                <div style="display:flex; gap:6px;">
+                                    <a href="{{ route('sms.show', $message) }}" class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="event.stopPropagation()">View</a>
+                                    @if(!$message->transaction_id)
+                                        <a href="{{ route('sms.show', $message) }}" class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="event.stopPropagation()" title="Force compute">Force</a>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @empty

@@ -186,6 +186,69 @@ class SmsController extends Controller
         ]);
     }
 
+    public function show(SmsMessage $smsMessage): View
+    {
+        $smsMessage->load(['device', 'network', 'transaction', 'deviceLine.network', 'agent']);
+
+        return view('sms.show', compact('smsMessage'));
+    }
+
+    public function forceProcess(Request $request, SmsMessage $smsMessage): JsonResponse|RedirectResponse
+    {
+        // Force compute even if promo/OTP - bypass isRejected, try strict extraction with fallback
+        $extractor = new SmsTransactionExtractor;
+        $provider = (new SmsParser)->identifyProvider($smsMessage->sender);
+        $network = $smsMessage->network ?? $smsMessage->device?->assignedNetworks()->first() ?? Network::first();
+
+        if ($network === null) {
+            $message = 'No network available to process this SMS.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['sms' => $message]);
+        }
+
+        $extracted = $extractor->extract($smsMessage->message_body, $provider, $smsMessage->sender, $network->code);
+        // Fallback to legacy parser + generic extraction if strict failed (force mode)
+        if ($extracted === null) {
+            $parsed = (new SmsParser)->parse($smsMessage->message_body, $provider);
+            if ($parsed['reference'] === '' || $parsed['amount'] <= 0) {
+                // try generic amount extraction
+                if (preg_match('/([\d,]+(?:\.\d+)?)\s*Tsh/i', $smsMessage->message_body, $m)) {
+                    $parsed['amount'] = (float) str_replace(',', '', $m[1]);
+                }
+                if ($parsed['reference'] === '' && preg_match('/\bTnx\s*([A-Z0-9]{8,20})/i', $smsMessage->message_body, $m)) {
+                    $parsed['reference'] = strtoupper($m[1]);
+                } elseif ($parsed['reference'] === '' && preg_match('/TxnID:\s*([A-Z0-9]+)/i', $smsMessage->message_body, $m)) {
+                    $parsed['reference'] = strtoupper($m[1]);
+                }
+                if ($parsed['reference'] === '') {
+                    $parsed['reference'] = 'GEN-'.strtoupper(substr($smsMessage->sms_hash, 0, 8));
+                }
+                if ($parsed['type'] === '') {
+                    $parsed['type'] = 'deposit';
+                }
+                if ($parsed['customer_phone'] === '') {
+                    $parsed['customer_phone'] = 'UNKNOWN';
+                }
+            }
+            $extracted = $parsed;
+        }
+
+        // Now process via normal manual path with extracted data
+        $request->merge([
+            'network_id' => $network->id,
+            'type' => $extracted['type'] ?? 'deposit',
+            'amount' => $extracted['amount'],
+            'customer_name' => $extracted['customer_name'] ?? $smsMessage->customer_name,
+            'customer_phone' => $extracted['customer_phone'] ?? $smsMessage->customer_phone ?? 'UNKNOWN',
+            'reference' => $extracted['reference'],
+        ]);
+
+        return $this->process($request, $smsMessage);
+    }
+
     public function process(Request $request, SmsMessage $smsMessage): JsonResponse|RedirectResponse
     {
         if ($smsMessage->transaction_id) {
