@@ -20,6 +20,10 @@ class MixxSmsParser extends AbstractSmsParser
                 'type' => 'bank_to_wallet',
                 'pattern' => '/Umepokea\s+Pesa\s+kutoka\s+kwa:\s*Jina\s+la\s+Wakala:\s*(?P<customer>.+?)\s*,\s*Kiasi:\s*Tsh\s+(?P<amount>[\d,]+(?:\.\d+)?)\.\s*Salio\s+Jipya\s+ni\s+Tsh\s+(?P<balance>[\d,]+(?:\.\d+)?)\.\s*TxnID:\s*(?P<ref>[A-Z0-9]+)\.\s*(?P<date>\d{1,2}\/\d{1,2}\/\d{2})\s+(?P<time>\d{1,2}:\d{2})/is',
             ],
+            'mixx_customer' => [
+                'type' => 'deposit',
+                'pattern' => '/MIXX BY YAS\s*Zoezi\s+la\s+kuweka\s+fedha\s+kwa\s+(?P<customer>.+?)\s*,\s*(?P<phone>\d{9,15})\s+limefanikiwa\.\s*Kiasi\s+Tsh\s+(?P<amount>[\d,]+(?:\.\d+)?)\.\s*Mrejaa\s+Tsh\s+(?P<fee>[\d,]+(?:\.\d+)?)\.\s*Salio\s+Jipya\s+ni\s+Tsh\s+(?P<balance>[\d,]+(?:\.\d+)?)\.\s*Kumbukumbu\s+No:\s*(?P<ref>[A-Z0-9]+)\.\s*(?P<date>\d{1,2}\/\d{1,2}\/\d{2})\s+(?P<time>\d{1,2}:\d{2})/is',
+            ],
             'mixx_generic' => [
                 'type' => 'deposit',
                 'pattern' => '/Umeweka\s+(?P<amount>[\d,]+(?:\.\d+)?)\s*TZS\s+kwa\s+(?P<customer>.+?)\s+\((?P<phone>0\d{9,10})\).*?Tnx\s*(?P<ref>[A-Z0-9]{8,20})/is',
