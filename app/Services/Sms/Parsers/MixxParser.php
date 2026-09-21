@@ -21,7 +21,7 @@ class MixxParser
             ],
             'mixx_customer_deposit' => [
                 'type' => 'deposit',
-                'pattern' => '/MIXX BY YAS\s*Zoezi\s+la\s+kuweka\s+fedha\s+kwa\s+(?P<customer>.+?)\s*,\s*(?P<phone>\d{9,15})\s+limefanikiwa\.\s*Kiasi\s+Tsh\s+(?P<amount>[\d,]+(?:\.\d+)?)\.\s*Mrejaa\s+Tsh\s+(?P<fee>[\d,]+(?:\.\d+)?)\.\s*Salio\s+Jipya\s+ni\s+Tsh\s+(?P<balance>[\d,]+(?:\.\d+)?)\.\s*Kumbukumbu\s+No:\s*(?P<ref>[A-Z0-9]+)\.\s*(?P<date>\d{1,2}\/\d{1,2}\/\d{2})\s+(?P<time>\d{1,2}:\d{2})/is',
+                'pattern' => '/(?:MIXX BY YAS\s*)?Zoezi\s+la\s+kuweka\s+fedha\s+kwa\s+(?P<customer>.+?)\s*,\s*(?P<phone>\d{9,15})\s+limefanikiwa\.\s*Kiasi\s+Tsh\s+(?P<amount>[\d,]+(?:\.\d+)?)\.\s*Mrejaa\s+Tsh\s+(?P<fee>[\d,]+(?:\.\d+)?)\.\s*Salio\s+Jipya\s+ni\s+Tsh\s+(?P<balance>[\d,]+(?:\.\d+)?)\.\s*Kumbukumbu\s+No:\s*(?P<ref>[A-Z0-9]+)\.\s*(?P<date>\d{1,2}\/\d{1,2}\/\d{2})\s+(?P<time>\d{1,2}:\d{2})/is',
             ],
         ];
     }
