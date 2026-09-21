@@ -132,15 +132,27 @@ class TransactionController extends Controller
         return back()->with('status', 'Transaction processed successfully.');
     }
 
-    public function receipt(Transaction $transaction): View
+    public function receipt(Request $request, Transaction $transaction): View|RedirectResponse
     {
+        $raw = $request->route('transaction');
+        $enc = $transaction->getRouteKey();
+        if ($raw !== $enc) {
+            return redirect()->route('transactions.receipt', $transaction);
+        }
+
         $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening', 'smsMessages.device']);
 
         return view('transactions.receipt', compact('transaction'));
     }
 
-    public function receiptPdf(Transaction $transaction)
+    public function receiptPdf(Request $request, Transaction $transaction)
     {
+        $raw = $request->route('transaction');
+        $enc = $transaction->getRouteKey();
+        if ($raw !== $enc) {
+            return redirect()->route('transactions.receipt.pdf', $transaction);
+        }
+
         $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening', 'smsMessages.device']);
 
         $pdf = app('dompdf.wrapper');
