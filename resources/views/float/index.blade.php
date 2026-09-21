@@ -9,7 +9,7 @@
             <p class="sub">Manage mobile-money float on your networks and track cash moving in and out of the till.</p>
         </div>
         <div class="view-actions">
-            <button class="btn btn-primary" onclick="openModal('floatModal')">+ New float / cash entry</button>
+            <a href="{{ route('float.create') }}" class="btn btn-primary">+ New float / cash entry</a>
         </div>
     </div>
 
@@ -127,51 +127,6 @@
         </div>
     </div>
 
-    <!-- New float / cash entry modal -->
-    <div class="modal-backdrop" id="floatModal">
-        <div class="modal">
-            <div class="modal-head">
-                <h3>New float / cash entry</h3>
-                <button class="modal-close" onclick="closeModal('floatModal')">✕</button>
-            </div>
-            <form action="{{ route('float.store') }}" method="POST" data-float-form>
-                @csrf
-                <div class="modal-body">
-                    <div class="form-row">
-                        <div class="field">
-                            <label>Network</label>
-                            <select name="network_id" required>
-                                @foreach ($networks as $id => $name)
-                                    <option value="{{ $id }}">{{ $name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="field">
-                            <label>Type</label>
-                            <select name="type">
-                                <option value="float_topup">Float top-up (float in)</option>
-                                <option value="float_pull">Float pull (float out)</option>
-                                <option value="cash_in">Cash deposited to network</option>
-                                <option value="cash_out">Cash withdrawn from network</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="field">
-                        <label>Amount (TZS)</label>
-                        <input type="number" name="amount" min="1" step="any" placeholder="e.g. 500000" required>
-                    </div>
-                    <div class="field">
-                        <label>Notes</label>
-                        <textarea name="notes" rows="2" placeholder="Optional reference…"></textarea>
-                    </div>
-                </div>
-                <div class="modal-foot">
-                    <button type="button" class="btn btn-ghost" onclick="closeModal('floatModal')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save entry</button>
-                </div>
-            </form>
-        </div>
-    </div>
 @endsection
 
 @section('scripts')
@@ -212,12 +167,5 @@
                 ['Status', { __html: '<span class="tag tag-green">Completed</span>' }],
             ];
         }, 'Float transaction');
-
-        document.querySelectorAll('[data-float-form]').forEach(form => {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
-            });
-        });
     </script>
 @endsection

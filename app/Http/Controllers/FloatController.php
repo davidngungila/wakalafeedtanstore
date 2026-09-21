@@ -53,6 +53,29 @@ class FloatController extends Controller
         return view('float.index', compact('balances', 'floatTransactions', 'networks', 'summary', 'todayOpening'));
     }
 
+    public function create(): View|RedirectResponse
+    {
+        $cashPoint = cash_point();
+
+        if ($cashPoint === null) {
+            return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before managing float.');
+        }
+
+        $todayOpening = DailyOpening::forAgentAndDate($cashPoint->id, today())->first();
+
+        if (! $todayOpening) {
+            return redirect()->route('daily-opening.create')->with('error', 'Record daily opening first before managing float.');
+        }
+
+        if ($todayOpening->is_closed) {
+            return redirect()->route('daily-opening.show', $todayOpening)->with('error', 'Daily session is already closed. Cannot manage float.');
+        }
+
+        $networks = Network::active()->pluck('name', 'id');
+
+        return view('float.create', compact('networks'));
+    }
+
     public function store(Request $request): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([

@@ -74,6 +74,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::get('/networks/{network}', [NetworkController::class, 'show'])->name('networks.show');
 
     Route::get('/float', [FloatController::class, 'index'])->name('float.index');
+    Route::get('/float/create', [FloatController::class, 'create'])->name('float.create');
     Route::post('/float', [FloatController::class, 'store'])->name('float.store');
 
     Route::get('/reconciliation', [ReconciliationController::class, 'index'])->name('reconciliation.index');
