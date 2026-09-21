@@ -44,9 +44,14 @@
                 <div class="mc-top">
                     <div class="mc-name"><span class="net-dot" style="background:{{ $network['color'] }};"></span>{{ $network['name'] }}</div>
                     @if (is_admin())
-                        <button title="Edit network" onclick="editNetwork({{ $network['id'] }})" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"></path></svg>
-                        </button>
+                        <div style="display:flex;gap:6px;">
+                            <button title="Edit network" onclick="editNetwork({{ $network['id'] }})" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"></path></svg>
+                            </button>
+                            <button title="Delete network" onclick="confirmDeleteNetwork('{{ $network['route_key'] }}','{{ addslashes($network['name']) }}')" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--danger-200);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--danger);">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                        </div>
                     @endif
                 </div>
                 <div class="mc-big">@money($network['float'])</div>
@@ -152,6 +157,23 @@
         </form>
     @endif
 
+    <!-- Delete confirmation modal -->
+    <div class="modal-backdrop" id="confirmNetworkDelete">
+        <div class="modal" style="max-width:400px;">
+            <div class="modal-head">
+                <h3>Delete network?</h3>
+                <button class="modal-close" onclick="closeModal('confirmNetworkDelete')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:14px;color:var(--ink-soft);line-height:1.6;" id="confirmNetworkText">This network will be permanently deleted.</p>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="closeModal('confirmNetworkDelete')">Cancel</button>
+                <button class="btn btn-danger" onclick="executeNetworkDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add / edit network modal -->
     <div class="modal-backdrop" id="networkModal">
         <div class="modal" style="max-width:480px;">
@@ -254,6 +276,30 @@
                 submitForm(form, { method: 'POST', done: () => toast('Rates saved offline', 'success') });
             });
         });
+
+        let pendingNetworkDeleteRoute = null;
+        function confirmDeleteNetwork(routeKey, name) {
+            document.getElementById('confirmNetworkText').textContent = 'Delete \"' + name + '\"? This will permanently remove the network. Transactions or float history will block deletion — suspend instead.';
+            pendingNetworkDeleteRoute = '/networks/' + routeKey;
+            openModal('confirmNetworkDelete');
+        }
+        async function executeNetworkDelete() {
+            if (!pendingNetworkDeleteRoute) return;
+            closeModal('confirmNetworkDelete');
+            try {
+                const response = await fetch(pendingNetworkDeleteRoute, {
+                    method: 'DELETE',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF_TOKEN, 'Accept': 'application/json' },
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok && data.success) {
+                    toast(data.message || 'Network deleted.', 'success');
+                    setTimeout(() => location.reload(), 600);
+                } else {
+                    toast(data.message || (data.errors ? Object.values(data.errors).flat().join(', ') : 'Cannot delete network.'), 'error');
+                }
+            } catch (err) { console.error(err); toast('Something went wrong!', 'error'); }
+        }
 
         bindRowClick('#rateRows tr[data-rawtype]', tr => {
             return [

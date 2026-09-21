@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CommissionRate;
 use App\Models\Device;
+use App\Models\FloatTransaction;
 use App\Models\Network;
 use App\Models\NetworkBalance;
 use App\Models\SmsMessage;
@@ -11,6 +12,7 @@ use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class NetworkController extends Controller
@@ -175,6 +177,45 @@ class NetworkController extends Controller
         }
 
         return back()->with('status', 'Network updated successfully.');
+    }
+
+    public function destroy(Request $request, Network $network): JsonResponse|RedirectResponse
+    {
+        if ($network->transactions()->exists()) {
+            $message = 'Cannot delete '.$network->name.': transactions exist for this network. Suspend it instead.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['network' => $message]);
+        }
+
+        if (FloatTransaction::where('network_id', $network->id)->exists()) {
+            $message = 'Cannot delete '.$network->name.': float transactions exist for this network. Suspend it instead.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['network' => $message]);
+        }
+
+        $name = $network->name;
+        $code = $network->code;
+
+        DB::transaction(function () use ($network) {
+            $network->devices()->detach();
+            $network->delete();
+        });
+
+        $this->recordAudit('Network deleted', 'Network', null, ['name' => $name, 'code' => $code]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Network '.$name.' deleted.']);
+        }
+
+        return redirect()->route('networks.index')->with('status', 'Network '.$name.' deleted.');
     }
 
     public function updateRates(Request $request): JsonResponse|RedirectResponse

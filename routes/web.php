@@ -116,6 +116,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
 
         Route::post('/networks', [NetworkController::class, 'store'])->name('networks.store');
         Route::put('/networks/{network}', [NetworkController::class, 'update'])->name('networks.update');
+        Route::delete('/networks/{network}', [NetworkController::class, 'destroy'])->name('networks.destroy');
         Route::post('/networks/rates', [NetworkController::class, 'updateRates'])->name('networks.updateRates');
 
         Route::post('/users', [UserController::class, 'store'])->name('users.store');

@@ -11,6 +11,9 @@
         <div class="view-actions">
             <a href="{{ route('networks.index') }}" class="btn btn-ghost">← All networks</a>
             <a href="{{ route('transactions.index', ['network' => $network->id]) }}" class="btn btn-ghost">Open transactions page</a>
+            @if (is_admin())
+                <button class="btn btn-danger" onclick="confirmDeleteNetworkShow()">Delete network</button>
+            @endif
         </div>
     </div>
 
@@ -246,6 +249,23 @@
         </div>
     @endif
 
+    <!-- Delete confirmation modal -->
+    <div class="modal-backdrop" id="confirmNetworkDeleteShow">
+        <div class="modal" style="max-width:400px;">
+            <div class="modal-head">
+                <h3>Delete network?</h3>
+                <button class="modal-close" onclick="closeModal('confirmNetworkDeleteShow')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:14px;color:var(--ink-soft);line-height:1.6;">Delete "{{ $network->name }}"? This is permanent. Networks with transactions or float history cannot be deleted — suspend instead.</p>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="closeModal('confirmNetworkDeleteShow')">Cancel</button>
+                <button class="btn btn-danger" onclick="executeNetworkDeleteShow()">Delete</button>
+            </div>
+        </div>
+    </div>
+
     <!-- SMS body modal -->
     <div class="modal-backdrop" id="netSmsBodyModal">
         <div class="modal" style="max-width:560px;">
@@ -280,6 +300,24 @@
             const url = new URL(window.location.href);
             url.searchParams.set('tab', tab);
             history.replaceState({}, '', url);
+        }
+
+        function confirmDeleteNetworkShow() { openModal('confirmNetworkDeleteShow'); }
+        async function executeNetworkDeleteShow() {
+            closeModal('confirmNetworkDeleteShow');
+            try {
+                const response = await fetch('{{ route('networks.destroy', $network) }}', {
+                    method: 'DELETE',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF_TOKEN, 'Accept': 'application/json' },
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok && data.success) {
+                    toast(data.message || 'Network deleted.', 'success');
+                    setTimeout(() => window.location.href = '{{ route('networks.index') }}', 600);
+                } else {
+                    toast(data.message || (data.errors ? Object.values(data.errors).flat().join(', ') : 'Cannot delete network.'), 'error');
+                }
+            } catch (err) { console.error(err); toast('Something went wrong!', 'error'); }
         }
 
         function openNetworkMessage(body) {

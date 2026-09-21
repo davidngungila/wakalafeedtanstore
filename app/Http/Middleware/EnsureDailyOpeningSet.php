@@ -80,6 +80,7 @@ class EnsureDailyOpeningSet
             'networks.store',
             'networks.show',
             'networks.update',
+            'networks.destroy',
             'networks.updateRates',
         ];
 
