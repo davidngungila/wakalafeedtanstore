@@ -18,8 +18,20 @@ use Illuminate\View\View;
 
 class SmsController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
+        // Redirect plain device id to encrypted for consistent URLs (e.g. /sms?device=5 -> /sms?device=eyJ...)
+        if ($request->filled('device') && $request->input('device') !== 'all' && is_numeric($request->input('device'))) {
+            $deviceId = $request->input('device');
+            $resolved = Device::find((int) $deviceId);
+            if ($resolved && (string) $deviceId === (string) $resolved->id && $request->routeIs('sms.index') && $request->method() === 'GET' && ! $request->expectsJson()) {
+                $params = $request->only(['status', 'network', 'device', 'q']);
+                $params['device'] = $resolved->getRouteKey();
+
+                return redirect()->route('sms.index', $params);
+            }
+        }
+
         $query = SmsMessage::with(['device', 'network', 'transaction', 'deviceLine.network']);
 
         $status = $request->input('status', 'all');

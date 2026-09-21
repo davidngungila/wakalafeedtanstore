@@ -150,7 +150,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr id="smsEmptyRow"><td colspan="11" class="empty-state"><h4>No SMS captured yet</h4><p>Messages from connected devices appear here in real time.</p></td></tr>
+                        <tr id="smsEmptyRow"><td colspan="7" class="empty-state"><h4>No SMS captured yet</h4><p>Messages from connected devices appear here in real time.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>
