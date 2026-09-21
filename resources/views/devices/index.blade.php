@@ -47,6 +47,7 @@
             <table>
                 <thead>
                     <tr>
+                        <th>Live</th>
                         <th>Device</th>
                         <th>App</th>
                         <th>Today</th>
@@ -79,6 +80,7 @@
                             data-ip="{{ $device->last_ip ?? '—' }}" data-status="{{ ucfirst($status) }}"
                             data-nets="{{ $netsJson->toJson() }}"
                             data-heartbeat="{{ $device->last_heartbeat_at?->format('d M Y H:i') ?? 'Never' }}"
+                            data-lastHeartbeat="{{ $device->last_heartbeat_at?->toIso8601String() ?? '' }}"
                             data-lastsync="{{ $device->last_sync_at?->format('d M Y H:i') ?? 'Never' }}"
                             data-registered="{{ $device->created_at->format('d M Y H:i') }}"
                             data-today="{{ $stats ? ($stats['processed'].' processed · '.$stats['received'].' received') : 'No SMS today' }}"
@@ -88,6 +90,9 @@
                             @if (is_admin())
                                 data-delete-route="{{ route('devices.destroy', $device) }}"
                             @endif>
+                            <td style="text-align:center;">
+                                <span class="led {{ $device->isOffline() ? 'led-off' : 'led-on' }}" data-device-led="{{ $device->id }}" title="{{ $device->isOffline() ? 'Offline - no heartbeat >10 min' : 'Live - heartbeat OK' }}"></span>
+                            </td>
                             <td>
                                 <div class="cell-main">
                                     <div class="avatar" style="background:var(--terracotta-100);color:var(--terracotta-600);">{{ strtoupper(substr($device->name, 0, 2)) }}</div>
@@ -132,7 +137,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="empty-state"><h4>No devices yet</h4><p>Register your first Android phone to start automatic SMS capture.</p></td></tr>
+                        <tr><td colspan="8" class="empty-state"><h4>No devices yet</h4><p>Register your first Android phone to start automatic SMS capture.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -328,5 +333,65 @@
                 toast('Failed to remove device.', 'error');
             }
         }
+
+        // Live LED sync - checks connection every 15s without refresh (like device show page)
+        async function refreshDeviceLeds() {
+            const leds = document.querySelectorAll('[data-device-led]');
+            if (!leds.length) return;
+            const ids = Array.from(leds).map(el => el.dataset.deviceLed);
+            try {
+                // Use existing phonesStatus per device is heavy, so we use a lightweight check via the devices index data
+                // For now, poll via the same endpoint used for single device but for each device, or just reload last_heartbeat via API
+                // Simple: fetch each device's phones status and update LED
+                for (const el of leds) {
+                    const deviceId = el.dataset.deviceLed;
+                    const row = el.closest('tr');
+                    const deviceRoute = row ? row.dataset.heartbeatRoute : null;
+                    // Fallback: use the device's last_heartbeat from the page's initial data and just toggle based on time
+                    // Instead, we fetch the device's current status via a lightweight endpoint
+                    const res = await fetch(`/devices/${deviceId}/phones/status`, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+                    if (!res.ok) continue;
+                    const data = await res.json();
+                    // If any phone is online, device is considered live; else check last_heartbeat threshold client-side
+                    const anyOnline = data.phones && data.phones.some(p => p.online);
+                    // Also consider the device's own last_heartbeat - if no phones but device is active, check via isOffline logic server will handle
+                    // For now, just update LED based on whether any phone is online or device has recent heartbeat
+                    // We use a simple heuristic: if the API returns phones, use that; otherwise keep current
+                    if (data.phones && data.phones.length > 0) {
+                        el.className = anyOnline ? 'led led-on' : 'led led-off';
+                        el.title = anyOnline ? 'Live - phone connected' : 'Offline - no phone heartbeat';
+                    }
+                }
+            } catch (e) {
+                console.warn('LED refresh failed', e);
+            }
+        }
+
+        // Also add fallback: update LED based on last_heartbeat time elapsed (client-side)
+        function updateLedByTime() {
+            document.querySelectorAll('[data-device-led]').forEach(el => {
+                const row = el.closest('tr');
+                const lastHeartbeat = row ? row.dataset.lastHeartbeat : null;
+                if (!lastHeartbeat || lastHeartbeat === 'Never') return;
+                // Parse the heartbeat time and check if it's >10 min ago
+                const last = new Date(lastHeartbeat);
+                const now = new Date();
+                const diffMin = (now - last) / 60000;
+                if (diffMin > 10) {
+                    el.className = 'led led-off';
+                    el.title = 'Offline - no heartbeat >10 min';
+                } else {
+                    el.className = 'led led-on';
+                    el.title = 'Live - heartbeat OK';
+                }
+            });
+        }
+
+        // Initial time-based update and then 15s polling for live check
+        updateLedByTime();
+        setInterval(() => {
+            updateLedByTime();
+            refreshDeviceLeds();
+        }, 15000);
     </script>
 @endsection
