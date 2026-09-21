@@ -146,11 +146,11 @@
                             <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
                             <td>
                                 <div class="row-actions">
-                                    <button onclick="viewTxn({{ $txn->id }})" title="View receipt">
+                                    <button type="button" class="js-view-receipt" data-id="{{ $txn->id }}" title="View receipt">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"></path></svg>
                                     </button>
                                     @if (! is_cashier())
-                                        <button class="warn" onclick="openReverseModal({{ $txn->id }}, '{{ $txn->reference }}')" title="Reverse">
+                                        <button type="button" class="warn js-reverse-txn" data-id="{{ $txn->id }}" data-ref="{{ $txn->reference }}" title="Reverse">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>
                                         </button>
                                     @endif
@@ -315,10 +315,13 @@
 
         function viewTxn(id) {
             try {
-                const t = transactionsData.find(x => Number(x.id) === Number(id));
-                if (!t) { toast('Transaction not found in local data. Please reload.', 'error'); return; }
-                const safe = (v) => v === null || v === undefined ? '—' : v;
-                document.getElementById('receiptBody').innerHTML = `
+                console.log('viewTxn called', id, 'data len', transactionsData.length);
+                const t = transactionsData.find(x => String(x.id) === String(id));
+                if (!t) { console.warn('viewTxn not found', id, transactionsData); toast('Transaction not found in local data. Please reload.', 'error'); return; }
+                const safe = (v) => v === null || v === undefined || v === '' ? '—' : v;
+                const bodyEl = document.getElementById('receiptBody');
+                if (!bodyEl) { toast('Receipt container missing', 'error'); return; }
+                bodyEl.innerHTML = `
                     <div class="rc-receipt">
                         <div class="rc-brand">
                             <strong>Wakala Feedtan Store</strong>
@@ -329,10 +332,10 @@
                         <div class="rc-subtitle">${TYPE_LABEL[t.type] || t.type}</div>
                         <div class="rc-rule"></div>
                         <div class="rc-row"><span>Reference</span><b>${safe(t.reference)}</b></div>
-                        <div class="rc-row"><span>Provider ref</span><b>${safe(t.provider_reference) || '—'}</b></div>
+                        <div class="rc-row"><span>Provider ref</span><b>${safe(t.provider_reference)}</b></div>
                         <div class="rc-row"><span>Date</span><b>${safe(t.created_at)}</b></div>
-                        <div class="rc-row"><span>Network</span><b><span class="net-dot" style="background:${t.network_color || '#999'};"></span>&nbsp;${safe(t.network) || '—'}</b></div>
-                        <div class="rc-row"><span>Customer</span><b>${safe(t.customer_name) || '—'}</b></div>
+                        <div class="rc-row"><span>Network</span><b><span class="net-dot" style="background:${t.network_color || '#999'};"></span>&nbsp;${safe(t.network)}</b></div>
+                        <div class="rc-row"><span>Customer</span><b>${safe(t.customer_name)}</b></div>
                         <div class="rc-row"><span>Phone</span><b>${safe(t.customer_phone)}</b></div>
                         <div class="rc-rule"></div>
                         <div class="rc-amount"><span>Amount</span><b>${fmt(t.amount ?? 0)}</b></div>
@@ -340,7 +343,7 @@
                         <div class="rc-row"><span>Commission</span><b>${fmt(t.commission ?? 0)}</b></div>
                         <div class="rc-row"><span>Running Cash</span><b>${t.running_cash_balance === null || t.running_cash_balance === undefined ? '—' : fmt(t.running_cash_balance)}</b></div>
                         <div class="rc-row"><span>Running Float</span><b>${t.running_float_balance === null || t.running_float_balance === undefined ? '—' : fmt(t.running_float_balance)}</b></div>
-                        <div class="rc-row"><span>Status</span><b>${(t.status || 'unknown').toUpperCase()}</b></div>
+                        <div class="rc-row"><span>Status</span><b>${String(t.status || 'unknown').toUpperCase()}</b></div>
                         ${t.reversal_reason ? `<div class="rc-row"><span>Reason</span><b>${t.reversal_reason}</b></div>` : ''}
                         ${t.notes ? `<div class="rc-row"><span>Notes</span><b>${t.notes}</b></div>` : ''}
                         <div class="rc-rule"></div>
@@ -348,12 +351,16 @@
                         <div class="rc-rule"></div>
                         <div class="rc-foot">Thank you for using Wakala Feedtan Store</div>
                     </div>`;
+                console.log('receipt HTML built, opening modal');
                 openModal('receiptModal');
             } catch (e) {
                 console.error('viewTxn error', e);
                 toast('Failed to render receipt: ' + (e.message || 'unknown'), 'error');
             }
         }
+        // expose globally for inline handlers and ensure delegated listeners work
+        window.viewTxn = viewTxn;
+        window.openReverseModal = openReverseModal;
 
         function openReverseModal(id, reference) {
             reverseTarget = id;
@@ -382,6 +389,20 @@
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
                 submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
+            });
+        });
+
+        // Delegated handlers for receipt / reverse buttons (more reliable than inline onclick)
+        document.querySelectorAll('.js-view-receipt').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                viewTxn(btn.dataset.id);
+            });
+        });
+        document.querySelectorAll('.js-reverse-txn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openReverseModal(Number(btn.dataset.id), btn.dataset.ref);
             });
         });
 
