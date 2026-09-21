@@ -98,36 +98,4 @@
         </div>
     </div>
 
-    <div class="panel">
-        <div class="panel-head">
-            <h3>Receipt Preview</h3>
-            <div style="display:flex; gap:8px;">
-                <a href="{{ route('transactions.receipt.pdf', $transaction) }}" class="btn btn-ghost btn-sm">Download PDF</a>
-                <button class="btn btn-primary btn-sm" onclick="window.print()">Print</button>
-            </div>
-        </div>
-        <div class="panel-body" style="display:flex; justify-content:center; background:var(--sand-50); padding:24px;">
-            <div class="rc-receipt" style="background:var(--white); border:1px dashed var(--coffee-300); border-radius:8px; padding:24px 28px; font-family:'Courier New',ui-monospace,monospace; font-size:13px; line-height:1.6; color:#1a1a1a; box-shadow:var(--shadow-sm); max-width:480px; width:100%;">
-                <div style="text-align:center;">
-                    <strong style="display:block; font-size:16px; color:var(--coffee-900);">Wakala Feedtan Store</strong>
-                    <span style="display:block; font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-soft);">Mobile Money Services</span>
-                </div>
-                <div style="border-top:1px dashed #cdbfa8; margin:13px 0;"></div>
-                <div style="text-align:center; font-size:10.5px; font-weight:700; letter-spacing:.28em; text-transform:uppercase; color:var(--coffee-700);">Transaction Receipt</div>
-                <div style="text-align:center; font-size:12.5px;">{{ txn_type_label($transaction->type) }}</div>
-                <div style="border-top:1px dashed #cdbfa8; margin:13px 0;"></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--ink-soft);">Reference</span><b>{{ $transaction->reference }}</b></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--ink-soft);">Provider ref</span><b>{{ $transaction->provider_reference ?? '—' }}</b></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--ink-soft);">Date</span><b>{{ $transaction->created_at->format('d M Y H:i') }}</b></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--ink-soft);">Network</span><b><span class="net-dot" style="background:{{ $transaction->network?->color ?? '#999' }};"></span>&nbsp;{{ $transaction->network?->name ?? '—' }}</b></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--ink-soft);">Customer</span><b>{{ $transaction->customer_name ?? '—' }}</b></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--ink-soft);">Phone</span><b>{{ $transaction->customer_phone }}</b></div>
-                <div style="border-top:1px dashed #cdbfa8; margin:10px 0;"></div>
-                <div style="text-align:center;"><span style="font-size:10px; letter-spacing:.24em; text-transform:uppercase; color:var(--ink-soft);">Amount</span><b style="display:block; font-size:24px; color:var(--coffee-900);">@money($transaction->amount)</b></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--ink-soft);">Fee</span><b>@money($transaction->fee)</b></div>
-                <div style="display:flex; justify-content:space-between;"><span style="color:var(--ink-soft);">Commission</span><b>@money($transaction->commission)</b></div>
-                <div style="text-align:center; font-size:11px; color:var(--ink-soft); margin-top:10px;">Thank you for using Wakala Feedtan Store</div>
-            </div>
-        </div>
-    </div>
 @endsection
