@@ -1,5 +1,18 @@
-@extends('layouts.error')
+@php
+    $code = '429';
+    $title = 'Too many requests';
+    $tone = 'danger';
+@endphp
 
-@section('code', '429')
-@section('title', 'Too many requests')
-@section('message', 'You have made too many requests in a short time. Please wait a moment and try again.')
+@extends(auth()->check() ? 'layouts.app' : 'errors.standalone')
+
+@section('title', $code . ' — ' . $title)
+
+@section('content')
+    @include('errors.partials.plain', [
+        'code' => $code,
+        'title' => $title,
+        'message' => 'You have made too many requests in a short time. Please wait a moment and try again.',
+        'tone' => $tone,
+    ])
+@endsection

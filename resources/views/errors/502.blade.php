@@ -1,5 +1,18 @@
-@extends('layouts.error')
+@php
+    $code = '502';
+    $title = 'Bad gateway';
+    $tone = 'danger';
+@endphp
 
-@section('code', '502')
-@section('title', 'Bad gateway')
-@section('message', 'The server received an invalid response from an upstream server. Please try again.')
+@extends(auth()->check() ? 'layouts.app' : 'errors.standalone')
+
+@section('title', $code . ' — ' . $title)
+
+@section('content')
+    @include('errors.partials.plain', [
+        'code' => $code,
+        'title' => $title,
+        'message' => 'The server received an invalid response from an upstream server. Please try again.',
+        'tone' => $tone,
+    ])
+@endsection

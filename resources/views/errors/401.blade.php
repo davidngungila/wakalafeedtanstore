@@ -1,5 +1,18 @@
-@extends('layouts.error')
+@php
+    $code = '401';
+    $title = 'Unauthorised';
+    $tone = 'gold';
+@endphp
 
-@section('code', '401')
-@section('title', 'Unauthorised')
-@section('message', 'You are not authorised to view this page. Please sign in and try again.')
+@extends(auth()->check() ? 'layouts.app' : 'errors.standalone')
+
+@section('title', $code . ' — ' . $title)
+
+@section('content')
+    @include('errors.partials.plain', [
+        'code' => $code,
+        'title' => $title,
+        'message' => 'You are not authorised to view this page. Please sign in and try again.',
+        'tone' => $tone,
+    ])
+@endsection

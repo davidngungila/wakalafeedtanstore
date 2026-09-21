@@ -1,5 +1,18 @@
-@extends('layouts.error')
+@php
+    $code = '500';
+    $title = 'Something went wrong';
+    $tone = 'danger';
+@endphp
 
-@section('code', '500')
-@section('title', 'Something went wrong')
-@section('message', 'An unexpected error occurred on our servers. Please try again in a moment.')
+@extends(auth()->check() ? 'layouts.app' : 'errors.standalone')
+
+@section('title', $code . ' — ' . $title)
+
+@section('content')
+    @include('errors.partials.plain', [
+        'code' => $code,
+        'title' => $title,
+        'message' => 'An unexpected error occurred on our servers. Please try again in a moment.',
+        'tone' => $tone,
+    ])
+@endsection

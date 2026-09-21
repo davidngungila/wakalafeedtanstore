@@ -1,5 +1,18 @@
-@extends('layouts.error')
+@php
+    $code = '504';
+    $title = 'Gateway timeout';
+    $tone = 'danger';
+@endphp
 
-@section('code', '504')
-@section('title', 'Gateway timeout')
-@section('message', 'The server did not receive a timely response from an upstream server. Please try again.')
+@extends(auth()->check() ? 'layouts.app' : 'errors.standalone')
+
+@section('title', $code . ' — ' . $title)
+
+@section('content')
+    @include('errors.partials.plain', [
+        'code' => $code,
+        'title' => $title,
+        'message' => 'The server did not receive a timely response from an upstream server. Please try again.',
+        'tone' => $tone,
+    ])
+@endsection

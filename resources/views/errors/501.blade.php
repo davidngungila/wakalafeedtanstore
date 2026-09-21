@@ -1,5 +1,18 @@
-@extends('layouts.error')
+@php
+    $code = '501';
+    $title = 'Not implemented';
+    $tone = 'terracotta';
+@endphp
 
-@section('code', '501')
-@section('title', 'Not implemented')
-@section('message', 'The server does not support the functionality requested.')
+@extends(auth()->check() ? 'layouts.app' : 'errors.standalone')
+
+@section('title', $code . ' — ' . $title)
+
+@section('content')
+    @include('errors.partials.plain', [
+        'code' => $code,
+        'title' => $title,
+        'message' => 'The server does not support the functionality requested.',
+        'tone' => $tone,
+    ])
+@endsection
