@@ -234,6 +234,11 @@
             </div>
         </div>
     </div>
+    <style>
+        /* Ensure receipt drawer is visible even if global modal CSS fails - fallback */
+        #receiptModal.show { display:flex !important; }
+        #receiptModal .modal { max-height:90vh; }
+    </style>
 
     <!-- Reverse modal -->
     <div class="modal-backdrop" id="reverseModal">
@@ -352,7 +357,21 @@
                         <div class="rc-foot">Thank you for using Wakala Feedtan Store</div>
                     </div>`;
                 console.log('receipt HTML built, opening modal');
+                const modalEl = document.getElementById('receiptModal');
+                console.log('modalEl before', modalEl, 'class', modalEl?.className);
                 openModal('receiptModal');
+                console.log('modalEl after open', modalEl?.className, 'zIndex', modalEl?.style.zIndex);
+                // fallback: ensure modal is visible even if CSS transform fails
+                if (modalEl && !modalEl.classList.contains('show')) {
+                    console.warn('modal show class not added, forcing');
+                    modalEl.classList.add('show');
+                }
+                // ensure body scroll lock not hiding
+                if (modalEl) {
+                    modalEl.style.display = 'flex';
+                    const inner = modalEl.querySelector('.modal');
+                    if (inner) inner.style.transform = 'translateX(0)';
+                }
             } catch (e) {
                 console.error('viewTxn error', e);
                 toast('Failed to render receipt: ' + (e.message || 'unknown'), 'error');
