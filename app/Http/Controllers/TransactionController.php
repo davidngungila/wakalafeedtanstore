@@ -180,13 +180,18 @@ class TransactionController extends Controller
                 ->first();
 
             if ($balance) {
-                $delta = in_array($transaction->type, ['deposit', 'bank_to_wallet'], true) ? -$amount : $amount;
+                // Reverse is opposite of process(): deposit -amount -> reverse +amount, withdrawal +amount -> reverse -amount
+                $delta = match ($transaction->type) {
+                    'deposit' => $amount,
+                    'withdrawal' => -$amount,
+                    default => $amount,
+                };
                 $balance->balance += $delta;
                 $balance->save();
             }
 
             if (in_array($transaction->type, ['deposit', 'withdrawal'], true)) {
-                $direction = $transaction->type === 'deposit' ? 1 : -1;
+                $direction = $transaction->type === 'deposit' ? -1 : 1;
                 $agent = $transaction->agent;
                 $agent->cash_balance = ((float) $agent->cash_balance) + $direction * $amount;
                 $agent->save();

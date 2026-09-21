@@ -94,12 +94,47 @@ class Transaction extends Model
         return $this->hasMany(SmsMessage::class);
     }
 
+    private ?string $encryptedKeyCache = null;
+
     /**
      * Use encrypted id in URLs (e.g. /transactions/{encrypted}/receipt) to hide raw integer.
+     * Deterministic per id so all calls for same transaction in same and future requests return identical string (avoids confusion from random IV).
+     * Uses HMAC-signed base64 for determinism while still hiding the raw integer.
      */
     public function getRouteKey(): string
     {
-        return Crypt::encryptString((string) $this->getKey());
+        if ($this->encryptedKeyCache !== null) {
+            return $this->encryptedKeyCache;
+        }
+
+        if (! $this->exists || $this->getKey() === null) {
+            return (string) $this->getKey();
+        }
+
+        $id = (string) $this->getKey();
+        $sig = hash_hmac('sha256', $id, (string) config('app.key'));
+        $payload = $id.':'.$sig;
+
+        return $this->encryptedKeyCache = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
+    }
+
+    private function tryDecryptDeterministic(string $value): ?int
+    {
+        $padded = strtr($value, '-_', '+/');
+        $padLen = strlen($padded) % 4;
+        if ($padLen) {
+            $padded .= str_repeat('=', 4 - $padLen);
+        }
+
+        $decoded = base64_decode($padded, true);
+        if ($decoded === false || ! str_contains($decoded, ':')) {
+            return null;
+        }
+
+        [$id, $sig] = explode(':', $decoded, 2);
+        $expected = hash_hmac('sha256', $id, (string) config('app.key'));
+
+        return hash_equals($expected, $sig) && is_numeric($id) ? (int) $id : null;
     }
 
     public function resolveRouteBinding($value, $field = null): ?self
@@ -108,8 +143,16 @@ class Transaction extends Model
             return parent::resolveRouteBinding($value, $field);
         }
 
+        // New deterministic format first (fast, no exception)
+        if (($det = $this->tryDecryptDeterministic((string) $value)) !== null) {
+            return static::find($det);
+        }
+
+        // Legacy random-IV Crypt string (from older links)
         try {
             $id = (int) Crypt::decryptString((string) $value);
+
+            return static::find($id);
         } catch (\Throwable) {
             // Fallback to plain id for backward compatibility (e.g. /transactions/41/receipt)
             if (is_numeric($value)) {
@@ -118,8 +161,6 @@ class Transaction extends Model
 
             return null;
         }
-
-        return static::find($id);
     }
 
     public function getEncryptedIdAttribute(): string

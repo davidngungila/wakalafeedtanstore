@@ -54,15 +54,18 @@ class TransactionService
                 $balance->save();
             };
 
+            // Agent perspective: customer deposit -> agent receives cash (+cash) and gives float (-float)
+            // customer withdrawal -> agent gives cash (-cash) and receives float (+float)
             match ($data['type']) {
-                'deposit' => $adjustFloat((float) $data['amount']),
+                'deposit' => $adjustFloat(-(float) $data['amount']),
+                'withdrawal' => $adjustFloat((float) $data['amount']),
                 default => $adjustFloat(-(float) $data['amount']),
             };
 
             $cashDelta = 0;
 
             if (in_array($data['type'], ['deposit', 'withdrawal'], true)) {
-                $direction = $data['type'] === 'deposit' ? -1 : 1;
+                $direction = $data['type'] === 'deposit' ? 1 : -1;
                 $cashDelta = $direction * (float) $data['amount'];
                 $agent->cash_balance = ((float) $agent->cash_balance) + $cashDelta;
                 $agent->save();
