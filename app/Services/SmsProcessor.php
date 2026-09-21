@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Agent;
 use App\Models\Device;
+use App\Models\Network;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
 use Illuminate\Support\Carbon;
@@ -120,22 +121,72 @@ class SmsProcessor
             'balance' => $parsed['balance'] > 0 ? $parsed['balance'] : null,
         ]);
 
+        // Allow recording even when network is unresolved — fallback to a configured network
+        // so we can still compute and persist the transaction (user requested: always record).
         if ($network === null) {
-            $sms->update([
-                'processing_status' => 'FAILED',
-                'processing_error' => 'Device has no network assigned.',
-            ]);
+            $network = Network::active()->first() ?? Network::first();
 
-            return ['ok' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
+            if ($network === null) {
+                $sms->update([
+                    'processing_status' => 'FAILED',
+                    'processing_error' => 'Device has no network assigned and no fallback network exists.',
+                ]);
+
+                return ['ok' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
+            }
+
+            $sms->update(['network_id' => $network->id]);
         }
 
+        // Allow recording even when template did not match — compute fallback amount/type/reference
+        // and continue to transaction creation instead of stopping at NEEDS_REVIEW.
+        // If no computable amount exists even after fallback extraction, keep NEEDS_REVIEW.
         if ($parsed['reference'] === '' || $parsed['amount'] <= 0) {
+            $fallbackReference = $parsed['reference'] !== '' ? $parsed['reference'] : 'GEN-'.strtoupper(substr($hash, 0, 8));
+            $fallbackAmount = $parsed['amount'] > 0 ? $parsed['amount'] : $this->fallbackAmount($body);
+            $fallbackType = $parsed['type'] !== '' ? $parsed['type'] : $this->fallbackType($body);
+            $fallbackPhone = $parsed['customer_phone'] !== '' ? $parsed['customer_phone'] : ($this->fallbackPhone($body) ?? '');
+
+            // If we still cannot compute a positive amount, keep the original NEEDS_REVIEW behaviour
+            // — truly non-financial messages (OTP, promo) should not create 0-amount transactions.
+            if ($fallbackAmount <= 0 && $parsed['amount'] <= 0) {
+                $sms->update([
+                    'processing_status' => 'NEEDS_REVIEW',
+                    'processing_error' => 'SMS did not match any financial template.',
+                ]);
+
+                return ['ok' => false, 'ignored_sender' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
+            }
+
+            $parsed['reference'] = $fallbackReference;
+            $parsed['type'] = $fallbackType;
+
+            if ($fallbackAmount > 0) {
+                $parsed['amount'] = $fallbackAmount;
+            }
+
+            if ($fallbackPhone !== '') {
+                $parsed['customer_phone'] = $fallbackPhone;
+            }
+
+            // Ensure we have at least a placeholder phone — Transaction requires a string,
+            // and Agent totalFloat/cash logic works even with a generic marker.
+            if ($parsed['customer_phone'] === '') {
+                $parsed['customer_phone'] = 'UNKNOWN';
+            }
+
+            // Persist computed fallback to SMS for audit trail; clear the template error
+            // so the row is not stuck in NEEDS_REVIEW.
             $sms->update([
-                'processing_status' => 'NEEDS_REVIEW',
-                'processing_error' => 'SMS did not match any financial template.',
+                'transaction_reference' => $parsed['reference'],
+                'amount' => $parsed['amount'] > 0 ? $parsed['amount'] : null,
+                'transaction_type' => $parsed['type'],
+                'customer_phone' => $parsed['customer_phone'] !== '' ? $parsed['customer_phone'] : null,
+                'customer_name' => $parsed['customer_name'] !== '' ? $parsed['customer_name'] : null,
+                'processing_error' => null,
             ]);
 
-            return ['ok' => false, 'ignored_sender' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
+            // Do not return — fall through to duplicate check + TransactionService::process()
         }
 
         $alreadyRecorded = Transaction::query()
@@ -207,5 +258,62 @@ class SmsProcessor
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function fallbackAmount(string $body): float
+    {
+        if (preg_match('/TZS\s+([\d,]+(?:\.\d+)?)/i', $body, $m) === 1) {
+            return (float) str_replace(',', '', $m[1]);
+        }
+
+        if (preg_match('/([\d,]+\.\d{2})\s*TZS/i', $body, $m) === 1) {
+            return (float) str_replace(',', '', $m[1]);
+        }
+
+        if (preg_match('/Tsh\.?\s*([\d,]+(?:\.\d+)?)/i', $body, $m) === 1) {
+            return (float) str_replace(',', '', $m[1]);
+        }
+
+        return 0.0;
+    }
+
+    private function fallbackType(string $body): string
+    {
+        $lower = strtolower($body);
+
+        if (str_contains($lower, 'received') || str_contains($lower, 'deposited') || str_contains($lower, 'credited') || str_contains($lower, 'umepokea')) {
+            return 'deposit';
+        }
+
+        if (str_contains($lower, 'withdrawn') || str_contains($lower, 'cash out') || str_contains($lower, 'cashout') || str_contains($lower, 'umetoa')) {
+            return 'withdrawal';
+        }
+
+        if (str_contains($lower, 'sent') || str_contains($lower, 'transferred') || str_contains($lower, 'umituma')) {
+            return 'send_money';
+        }
+
+        if (str_contains($lower, 'paid') || str_contains($lower, 'payment') || str_contains($lower, 'bill') || str_contains($lower, 'lipa')) {
+            return 'bill_payment';
+        }
+
+        if (str_contains($lower, 'airtime')) {
+            return 'airtime';
+        }
+
+        if (str_contains($lower, 'bundle') || str_contains($lower, 'data ')) {
+            return 'data';
+        }
+
+        return 'deposit';
+    }
+
+    private function fallbackPhone(string $body): ?string
+    {
+        if (preg_match('/(\+255\d{9}|0\d{9,10})\b/', $body, $m) === 1) {
+            return $m[0];
+        }
+
+        return null;
     }
 }
