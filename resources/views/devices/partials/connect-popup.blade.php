@@ -165,9 +165,7 @@
             if (connectScanPoll) clearInterval(connectScanPoll);
             // Poll connect-status every 1.2s to detect when phone has scanned QR and paired
             if (deviceIdForPoll) {
-                let pollCount = 0;
                 connectScanPoll = setInterval(async () => {
-                    pollCount++;
                     try {
                         const res = await fetch(`/devices/${encodeURIComponent(deviceIdForPoll)}/connect-status`, { headers: { 'Accept': 'application/json' } });
                         if (!res.ok) return;
@@ -179,35 +177,22 @@
                                 connectScanned = true;
                                 // Phone scanned! Auto-start the full connection simulation
                                 closeModal('connectPopup');
-                                // Update step 2 to show scanned
                                 setTimeout(() => openConnectLoadingModal(), 300);
                             }
                         }
                     } catch(e) {}
-                    // Fallback: if not detected after 25s, still auto-start simulation so user sees steps
-                    if (pollCount > 20 && !connectScanned) {
-                        if (connectScanPoll) clearInterval(connectScanPoll);
-                        connectScanPoll = null;
-                        closeModal('connectPopup');
-                        openConnectLoadingModal();
-                    }
-                }, 1200);
-            } else {
-                // No device id found (e.g. /devices index) - fallback to timed auto-start
-                setTimeout(() => {
-                    closeModal('connectPopup');
-                    openConnectLoadingModal();
                 }, 1200);
             }
-            // Done button also triggers simulation immediately
+            // No fallback auto-start — only start when a scan is actually detected
+            // Done button just closes QR popup - simulation only starts on actual scan detection
             setTimeout(() => {
                 const doneBtn = document.querySelector('#connectPopup .btn-primary');
                 if (doneBtn) {
                     doneBtn.onclick = () => {
                         if (connectScanPoll) { clearInterval(connectScanPoll); connectScanPoll = null; }
                         closeModal('connectPopup');
-                        openConnectLoadingModal();
                     };
+                    doneBtn.textContent = 'Close';
                 }
             }, 100);
         };
