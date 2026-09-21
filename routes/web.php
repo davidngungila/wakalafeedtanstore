@@ -82,6 +82,17 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 
+    // Devices: allow cashier full access except deleting (delete stays admin-only)
+    Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
+    Route::get('/devices/register', [DeviceController::class, 'register'])->name('devices.register');
+    Route::get('/devices/{device}', [DeviceController::class, 'show'])->name('devices.show');
+    Route::get('/devices/{device}/edit', [DeviceController::class, 'edit'])->name('devices.edit');
+    Route::get('/devices/{device}/phones/status', [DeviceController::class, 'phonesStatus'])->name('devices.phones.status');
+    Route::post('/devices/{device}/approve', [DeviceController::class, 'approve'])->name('devices.approve');
+    Route::post('/devices/{device}/suspend', [DeviceController::class, 'suspend'])->name('devices.suspend');
+    Route::post('/devices/{device}/block', [DeviceController::class, 'block'])->name('devices.block');
+    Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke'])->name('devices.revoke');
+
     Route::middleware('role:supervisor,admin')->group(function () {
         Route::put('/transactions/{transaction}/reverse', [TransactionController::class, 'reverse'])->name('transactions.reverse');
         Route::get('/reports', ReportController::class)->name('reports.index');
@@ -94,16 +105,6 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::get('/audit', AuditLogController::class)->name('audit.index');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
-
-        Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
-        Route::get('/devices/register', [DeviceController::class, 'register'])->name('devices.register');
-        Route::get('/devices/{device}', [DeviceController::class, 'show'])->name('devices.show');
-        Route::get('/devices/{device}/edit', [DeviceController::class, 'edit'])->name('devices.edit');
-        Route::get('/devices/{device}/phones/status', [DeviceController::class, 'phonesStatus'])->name('devices.phones.status');
-        Route::post('/devices/{device}/approve', [DeviceController::class, 'approve'])->name('devices.approve');
-        Route::post('/devices/{device}/suspend', [DeviceController::class, 'suspend'])->name('devices.suspend');
-        Route::post('/devices/{device}/block', [DeviceController::class, 'block'])->name('devices.block');
-        Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke'])->name('devices.revoke');
 
         Route::get('/sms', [SmsController::class, 'index'])->name('sms.index');
         Route::get('/sms/view', [SmsController::class, 'showById'])->name('sms.view');
