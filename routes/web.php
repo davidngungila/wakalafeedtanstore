@@ -93,6 +93,14 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::post('/devices/{device}/block', [DeviceController::class, 'block'])->name('devices.block');
     Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke'])->name('devices.revoke');
 
+    // Messages: live sync for all roles (cashier/supervisor/admin) — no refresh needed (SSE)
+    Route::get('/sms', [SmsController::class, 'index'])->name('sms.index');
+    Route::get('/sms/view', [SmsController::class, 'showById'])->name('sms.view');
+    Route::get('/sms/stream', [SmsController::class, 'stream'])->name('sms.stream');
+    Route::get('/sms/{smsMessage}', [SmsController::class, 'show'])->name('sms.show');
+    Route::post('/sms/{smsMessage}/process', [SmsController::class, 'process'])->name('sms.process');
+    Route::post('/sms/{smsMessage}/force', [SmsController::class, 'forceProcess'])->name('sms.force');
+
     Route::middleware('role:supervisor,admin')->group(function () {
         Route::put('/transactions/{transaction}/reverse', [TransactionController::class, 'reverse'])->name('transactions.reverse');
         Route::get('/reports', ReportController::class)->name('reports.index');
@@ -105,13 +113,6 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::get('/audit', AuditLogController::class)->name('audit.index');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
-
-        Route::get('/sms', [SmsController::class, 'index'])->name('sms.index');
-        Route::get('/sms/view', [SmsController::class, 'showById'])->name('sms.view');
-        Route::get('/sms/stream', [SmsController::class, 'stream'])->name('sms.stream');
-        Route::get('/sms/{smsMessage}', [SmsController::class, 'show'])->name('sms.show');
-        Route::post('/sms/{smsMessage}/process', [SmsController::class, 'process'])->name('sms.process');
-        Route::post('/sms/{smsMessage}/force', [SmsController::class, 'forceProcess'])->name('sms.force');
     });
 
     Route::middleware('role:admin')->group(function () {
@@ -131,7 +132,6 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::delete('/networks/{network}', [NetworkController::class, 'destroy'])->name('networks.destroy');
         Route::post('/networks/rates', [NetworkController::class, 'updateRates'])->name('networks.updateRates');
 
-        Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
         Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
