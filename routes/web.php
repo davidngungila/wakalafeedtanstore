@@ -106,6 +106,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke'])->name('devices.revoke');
 
         Route::get('/sms', [SmsController::class, 'index'])->name('sms.index');
+        Route::get('/sms/view', [SmsController::class, 'showById'])->name('sms.view');
         Route::get('/sms/stream', [SmsController::class, 'stream'])->name('sms.stream');
         Route::get('/sms/{smsMessage}', [SmsController::class, 'show'])->name('sms.show');
         Route::post('/sms/{smsMessage}/process', [SmsController::class, 'process'])->name('sms.process');

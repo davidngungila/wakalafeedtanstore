@@ -123,7 +123,7 @@
                 </thead>
                 <tbody id="smsBody">
                     @forelse ($messages as $message)
-                        <tr data-id="{{ $message->id }}" data-sms-id="{{ $message->id }}" class="row-click" onclick="window.location='{{ route('sms.show', $message) }}'">
+                        <tr data-id="{{ $message->id }}" data-sms-id="{{ $message->id }}" class="row-click" onclick="window.location='{{ route('sms.show', $message) }}'" style="cursor:pointer;">
                             <td class="cell-sub">{{ $message->server_received_at->format('H:i:s') }}</td>
                             <td>
                                 <a href="{{ route('devices.show', $message->device) }}" class="cell-title" onclick="event.stopPropagation()">{{ $message->device?->name ?? '—' }}</a>

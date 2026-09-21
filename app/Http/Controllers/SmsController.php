@@ -193,6 +193,24 @@ class SmsController extends Controller
         return view('sms.show', compact('smsMessage'));
     }
 
+    public function showById(Request $request): View
+    {
+        $id = $request->input('id') ?? $request->input('sms') ?? $request->query('id');
+        if (! $id) {
+            abort(404, 'SMS not found');
+        }
+
+        // Try encrypted first, then plain
+        $smsMessage = (new SmsMessage)->resolveRouteBinding($id) ?? SmsMessage::find((int) $id);
+        if (! $smsMessage) {
+            abort(404);
+        }
+
+        $smsMessage->load(['device', 'network', 'transaction', 'deviceLine.network', 'agent']);
+
+        return view('sms.show', compact('smsMessage'));
+    }
+
     public function forceProcess(Request $request, SmsMessage $smsMessage): JsonResponse|RedirectResponse
     {
         // Force compute even if promo/OTP - bypass isRejected, try strict extraction with fallback
