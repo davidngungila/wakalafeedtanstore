@@ -182,6 +182,32 @@
                     <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:8px;">Full message</div>
                     <pre id="smsDetailsBody" style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:13.5px;line-height:1.6;margin:0;color:var(--coffee-700);"></pre>
                 </div>
+                <div id="smsManualProcessWrap" style="display:none; margin-top:18px; padding-top:14px; border-top:1px solid var(--line);">
+                    <h4 style="font-size:13px; font-weight:700; color:var(--coffee-900); margin-bottom:10px;">Process to transaction (manual)</h4>
+                    <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:12px;">This SMS did not match any approved template. Fill the details below to create a transaction manually. The SMS will be linked to the new transaction.</p>
+                    <form id="smsManualProcessForm" method="POST" data-sms-manual-form>
+                        @csrf
+                        <div class="form-row">
+                            <div class="field"><label>Network</label><select name="network_id" id="smsProcessNetwork" required><option value="">Select network</option>@foreach($networks as $nw)<option value="{{ $nw->id }}">{{ $nw->name }}</option>@endforeach</select></div>
+                            <div class="field"><label>Type</label><select name="type" id="smsProcessType" required><option value="deposit">Customer Deposit</option><option value="withdrawal">Customer Withdrawal</option><option value="send_money">Send Money</option><option value="bill_payment">Bill Payment</option><option value="airtime">Airtime</option><option value="data">Data Bundle</option><option value="bank_to_wallet">Bank to Wallet</option><option value="wallet_to_bank">Wallet to Bank</option></select></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="field"><label>Amount (TZS)</label><input type="number" name="amount" id="smsProcessAmount" min="1" step="any" required></div>
+                            <div class="field"><label>Reference (optional)</label><input type="text" name="reference" id="smsProcessRef" placeholder="e.g. Tnx 626..."></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="field"><label>Customer name</label><input type="text" name="customer_name" id="smsProcessCustomerName" placeholder="e.g. Juma"></div>
+                            <div class="field"><label>Customer phone</label><input type="text" name="customer_phone" id="smsProcessPhone" required placeholder="07xxxxxxxx"></div>
+                        </div>
+                        <div style="display:flex; gap:10px; margin-top:12px;">
+                            <button type="submit" class="btn btn-primary">Process to transaction</button>
+                            <button type="button" class="btn btn-ghost" onclick="closeModal('smsDetailsDrawer')">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="modal-foot" id="smsDetailsFoot" style="display:none;">
+                <button class="btn btn-primary" onclick="closeModal('smsDetailsDrawer')">Close</button>
             </div>
         </div>
     </div>
@@ -232,9 +258,11 @@
             form.submit();
         }
 
+        let currentSmsId = null;
         function openMessage(id) {
             const row = smsRowCache.get(Number(id));
             if (!row) return;
+            currentSmsId = id;
 
             const errBox = document.getElementById('smsDetailsError');
             if (row.error) {
@@ -276,8 +304,40 @@
             });
 
             document.getElementById('smsDetailsBody').textContent = row.body || '—';
+
+            // Show manual process form only for non-processed, non-duplicate SMS
+            const wrap = document.getElementById('smsManualProcessWrap');
+            const canProcess = !row.txn_reference || row.txn_reference === '—';
+            const isDuplicate = row.status_key === 'duplicate';
+            if (wrap) {
+                wrap.style.display = (canProcess && !isDuplicate) ? 'block' : 'none';
+                if (wrap.style.display === 'block') {
+                    const form = document.getElementById('smsManualProcessForm');
+                    form.action = `/sms/${id}/process`;
+                    // prefill from parsed SMS if available
+                    const amountNum = (row.amount && row.amount !== '—') ? String(row.amount).replace(/[^0-9.]/g, '') : '';
+                    document.getElementById('smsProcessAmount').value = amountNum;
+                    document.getElementById('smsProcessRef').value = (row.reference && row.reference !== '—') ? row.reference : '';
+                    document.getElementById('smsProcessCustomerName').value = (row.customer && row.customer !== '—') ? row.customer : '';
+                    document.getElementById('smsProcessPhone').value = (row.customer_phone && row.customer_phone !== '—') ? row.customer_phone : '';
+                    // try to preselect network if known
+                    const netSelect = document.getElementById('smsProcessNetwork');
+                    if (row.network && row.network !== '—') {
+                        for (const opt of netSelect.options) {
+                            if (opt.textContent.trim() === row.network) { netSelect.value = opt.value; break; }
+                        }
+                    }
+                }
+            }
+
             openModal('smsDetailsDrawer');
         }
+
+        document.getElementById('smsManualProcessForm')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const form = e.target;
+            submitForm(form, { method: 'POST', done: (data) => { toast(data.message || 'Processed', 'success'); closeModal('smsDetailsDrawer'); setTimeout(() => location.reload(), 700); } });
+        });
 
         const totalCounts = @json($counts);
         const todayCounts = @json($today);

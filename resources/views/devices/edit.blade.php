@@ -72,7 +72,8 @@
         document.querySelectorAll('[data-device-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                submitForm(form, { method: 'PUT', done: () => { toast('Device updated.', 'success'); setTimeout(() => window.location.href = '{{ route('devices.show', $device) }}', 600); } });
+                // Use POST with _method=PUT hidden input (more reliable for FormData than fetch PUT)
+                submitForm(form, { method: 'POST', done: () => { toast('Device updated.', 'success'); setTimeout(() => window.location.href = '{{ route('devices.show', $device) }}', 600); } });
             });
         });
     </script>

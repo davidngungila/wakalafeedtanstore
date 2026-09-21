@@ -107,6 +107,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
 
         Route::get('/sms', [SmsController::class, 'index'])->name('sms.index');
         Route::get('/sms/stream', [SmsController::class, 'stream'])->name('sms.stream');
+        Route::post('/sms/{smsMessage}/process', [SmsController::class, 'process'])->name('sms.process');
     });
 
     Route::middleware('role:admin')->group(function () {

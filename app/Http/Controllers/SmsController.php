@@ -5,9 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Device;
 use App\Models\Network;
 use App\Models\SmsMessage;
+use App\Models\Transaction;
+use App\Services\Sms\SmsTransactionExtractor;
+use App\Services\SmsParser;
+use App\Services\TransactionService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\StreamedResponse;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class SmsController extends Controller
@@ -178,6 +184,101 @@ class SmsController extends Controller
             'Cache-Control' => 'no-cache',
             'X-Accel-Buffering' => 'no',
         ]);
+    }
+
+    public function process(Request $request, SmsMessage $smsMessage): JsonResponse|RedirectResponse
+    {
+        if ($smsMessage->transaction_id) {
+            $message = 'This SMS has already been processed into transaction '.$smsMessage->transaction->reference;
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['sms' => $message]);
+        }
+
+        $validated = $request->validate([
+            'network_id' => ['required', 'exists:networks,id'],
+            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank'],
+            'amount' => ['required', 'numeric', 'min:1'],
+            'customer_name' => ['nullable', 'string', 'max:120'],
+            'customer_phone' => ['required', 'string', 'max:30'],
+            'reference' => ['nullable', 'string', 'max:40'],
+        ]);
+
+        $extractor = new SmsTransactionExtractor;
+        $provider = (new SmsParser)->identifyProvider($smsMessage->sender);
+        $network = Network::find($validated['network_id']);
+
+        // Try strict extraction first for audit, but allow manual override
+        $existingRef = $smsMessage->transaction_reference ?? $validated['reference'] ?? null;
+
+        if ($existingRef && Transaction::where('network_id', $validated['network_id'])->where('provider_reference', $existingRef)->exists()) {
+            $message = 'A transaction with reference '.$existingRef.' already exists for this network.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['sms' => $message]);
+        }
+
+        $transactionService = app(TransactionService::class);
+        $agent = $smsMessage->agent ?? cash_point();
+
+        if ($agent === null) {
+            $message = 'Cash point not configured.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['sms' => $message]);
+        }
+
+        $reference = $validated['reference'] ?? $smsMessage->transaction_reference ?? $existingRef ?? null;
+
+        $transaction = DB::transaction(function () use ($smsMessage, $validated, $agent, $reference, $transactionService) {
+            $txn = $transactionService->process(
+                [
+                    'network_id' => $validated['network_id'],
+                    'type' => $validated['type'],
+                    'customer_name' => $validated['customer_name'] ?? $smsMessage->customer_name,
+                    'customer_phone' => $validated['customer_phone'],
+                    'amount' => $validated['amount'],
+                ],
+                $agent,
+                auth()->id(),
+                'Via manual SMS process (SMS #'.$smsMessage->id.')',
+                $reference,
+            );
+
+            $smsMessage->update([
+                'processing_status' => 'RECORDED',
+                'processing_error' => null,
+                'transaction_id' => $txn->id,
+                'transaction_reference' => $txn->provider_reference,
+                'amount' => $txn->amount,
+                'transaction_type' => $txn->type,
+                'customer_name' => $txn->customer_name,
+                'customer_phone' => $txn->customer_phone,
+                'network_id' => $txn->network_id,
+            ]);
+
+            return $txn;
+        });
+
+        $this->recordAudit('SMS manually processed to transaction', 'SmsMessage', $smsMessage->id, [
+            'sms_id' => $smsMessage->id,
+            'transaction_id' => $transaction->id,
+            'reference' => $transaction->reference,
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'SMS processed to transaction '.$transaction->reference, 'transaction_id' => $transaction->id]);
+        }
+
+        return back()->with('status', 'SMS processed to transaction '.$transaction->reference);
     }
 
     /**
