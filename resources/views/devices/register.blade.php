@@ -234,6 +234,11 @@
                 '<p style="margin:6px 0 0;font-size:13px;color:var(--ink-soft);">' + escapeHtml(model) + ' paired with device code <b>' + escapeHtml(device.code) + '</b>. You can now authorize it.</p>';
             document.getElementById('toStep3').disabled = false;
             toast('Phone connected. Review the details and authorize.', 'success');
+            // Auto-advance to Authorize step after being connected (user requested: after being connected must auto Details -> Connect -> Authorize)
+            setTimeout(() => {
+                fillReceipts(data);
+                goStep(3);
+            }, 600);
         }
 
         function escapeHtml(value) {
