@@ -146,23 +146,78 @@
             }
         }, 700);
     }
-    // Auto-start simulation: when Connect phone is opened, automatically start loading simulation after QR is shown
+    // Auto-start after phone scan is detected (polls connect-status until a new phone appears)
+    let connectScanPoll = null;
+    let connectScanned = false;
     document.addEventListener('DOMContentLoaded', () => {
         const originalOpen = window.openConnectModal;
         window.openConnectModal = function(code, host) {
             originalOpen(code, host);
-            // Auto-start simulation 800ms after QR is shown (shows all steps until successfully connected)
-            setTimeout(() => {
-                closeModal('connectPopup');
-                openConnectLoadingModal();
-            }, 800);
-            // Also make Done button trigger simulation if user clicks it before auto-start
+            connectScanned = false;
+            // Extract device id from current page URL (e.g. /devices/eyJ... or /devices/register?device=eyJ...)
+            let deviceIdForPoll = null;
+            try {
+                const m = window.location.pathname.match(/\/devices\/([^\/]+)/);
+                if (m) deviceIdForPoll = decodeURIComponent(m[1]);
+                const q = new URLSearchParams(window.location.search).get('device');
+                if (!deviceIdForPoll && q) deviceIdForPoll = q;
+            } catch(e) {}
+            if (connectScanPoll) clearInterval(connectScanPoll);
+            // Poll connect-status every 1.2s to detect when phone has scanned QR and paired
+            if (deviceIdForPoll) {
+                let pollCount = 0;
+                connectScanPoll = setInterval(async () => {
+                    pollCount++;
+                    try {
+                        const res = await fetch(`/devices/${encodeURIComponent(deviceIdForPoll)}/connect-status`, { headers: { 'Accept': 'application/json' } });
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        if (data.connected && data.phone) {
+                            if (connectScanPoll) clearInterval(connectScanPoll);
+                            connectScanPoll = null;
+                            if (!connectScanned) {
+                                connectScanned = true;
+                                // Phone scanned! Auto-start the full connection simulation
+                                closeModal('connectPopup');
+                                // Update step 2 to show scanned
+                                setTimeout(() => openConnectLoadingModal(), 300);
+                            }
+                        }
+                    } catch(e) {}
+                    // Fallback: if not detected after 25s, still auto-start simulation so user sees steps
+                    if (pollCount > 20 && !connectScanned) {
+                        if (connectScanPoll) clearInterval(connectScanPoll);
+                        connectScanPoll = null;
+                        closeModal('connectPopup');
+                        openConnectLoadingModal();
+                    }
+                }, 1200);
+            } else {
+                // No device id found (e.g. /devices index) - fallback to timed auto-start
+                setTimeout(() => {
+                    closeModal('connectPopup');
+                    openConnectLoadingModal();
+                }, 1200);
+            }
+            // Done button also triggers simulation immediately
             setTimeout(() => {
                 const doneBtn = document.querySelector('#connectPopup .btn-primary');
                 if (doneBtn) {
-                    doneBtn.onclick = () => { closeModal('connectPopup'); openConnectLoadingModal(); };
+                    doneBtn.onclick = () => {
+                        if (connectScanPoll) { clearInterval(connectScanPoll); connectScanPoll = null; }
+                        closeModal('connectPopup');
+                        openConnectLoadingModal();
+                    };
                 }
             }, 100);
+        };
+        // Clean up polling when modals are closed
+        const origClose = window.closeModal;
+        window.closeModal = function(id) {
+            if (id === 'connectPopup' || id === 'connectLoadingModal') {
+                if (connectScanPoll) { clearInterval(connectScanPoll); connectScanPoll = null; }
+            }
+            return origClose(id);
         };
     });
 </script>
