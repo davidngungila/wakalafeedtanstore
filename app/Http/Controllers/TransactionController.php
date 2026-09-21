@@ -135,8 +135,9 @@ class TransactionController extends Controller
     public function receipt(Request $request, Transaction $transaction): View|RedirectResponse
     {
         $raw = $request->route('transaction');
-        $enc = $transaction->getRouteKey();
-        if ($raw !== $enc) {
+        // Only redirect if raw is plain numeric id (e.g. /transactions/47/receipt) -> encrypted
+        // Do NOT compare encrypted strings directly: encryption uses random IV so each encrypt is different
+        if (is_numeric($raw) && (string) $raw === (string) $transaction->id) {
             return redirect()->route('transactions.receipt', $transaction);
         }
 
@@ -148,8 +149,7 @@ class TransactionController extends Controller
     public function receiptPdf(Request $request, Transaction $transaction)
     {
         $raw = $request->route('transaction');
-        $enc = $transaction->getRouteKey();
-        if ($raw !== $enc) {
+        if (is_numeric($raw) && (string) $raw === (string) $transaction->id) {
             return redirect()->route('transactions.receipt.pdf', $transaction);
         }
 
