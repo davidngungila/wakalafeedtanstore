@@ -145,11 +145,6 @@
                                     <a href="{{ route('transactions.receipt', $txn) }}" title="View receipt" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"></path></svg>
                                     </a>
-                                    @if (! is_cashier())
-                                        <button type="button" class="warn js-reverse-txn" data-id="{{ $txn->getRouteKey() }}" data-ref="{{ $txn->reference }}" title="Reverse">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>
-                                        </button>
-                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -183,23 +178,6 @@
         #receiptModal .popup { max-height:90vh; overflow:hidden; display:flex; flex-direction:column; }
         #receiptModal .popup .modal-body { max-height:60vh; overflow-y:auto; }
     </style>
-
-    <!-- Reverse modal -->
-    <div class="modal-backdrop" id="reverseModal">
-        <div class="modal" style="max-width:440px;">
-            <div class="modal-head">
-                <h3>Reverse transaction</h3>
-                <button class="modal-close" onclick="closeModal('reverseModal')">✕</button>
-            </div>
-            <div class="modal-body">
-                <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Reversing <strong id="reverseRef" style="color:var(--coffee-900);"></strong> will restore the float and cash balances to their previous state.</p>
-            </div>
-            <div class="modal-foot">
-                <button class="btn btn-ghost" onclick="closeModal('reverseModal')">Cancel</button>
-                <button class="btn btn-danger" onclick="doReverse()">Reverse transaction</button>
-            </div>
-        </div>
-    </div>
 @endsection
 
 @section('scripts')
@@ -228,8 +206,6 @@
             ])->values();
         @endphp
         const transactionsData = @json($jsonTxns);
-
-        let reverseTarget = null;
 
         function setStatusFilter(status) {
             document.getElementById('fStatus').value = status;
@@ -327,42 +303,11 @@
         }
         // expose globally for inline handlers and ensure delegated listeners work
         window.viewTxn = viewTxn;
-        window.openReverseModal = openReverseModal;
-
-        function openReverseModal(id, reference) {
-            reverseTarget = id;
-            document.getElementById('reverseRef').textContent = reference;
-            openModal('reverseModal');
-        }
-
-        async function doReverse() {
-            if (!reverseTarget) return;
-            try {
-                const body = new URLSearchParams('_token=' + CSRF_TOKEN);
-                const response = await fetch(`/transactions/${encodeURIComponent(reverseTarget)}/reverse`, {
-                    method: 'PUT',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body,
-                });
-                const data = await response.json();
-                if (data.success) { toast(data.message, 'success'); setTimeout(() => location.reload(), 600); }
-                else { toast(data.message || 'Reversal failed.', 'error'); }
-            } catch (err) { console.error(err); toast('Something went wrong!', 'error'); }
-            closeModal('reverseModal');
-        }
 
         document.querySelectorAll('[data-process-txn]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
                 submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
-            });
-        });
-
-        // Delegated handler for reverse buttons (id is encrypted string)
-        document.querySelectorAll('.js-reverse-txn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                openReverseModal(btn.dataset.id, btn.dataset.ref);
             });
         });
 
