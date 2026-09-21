@@ -222,7 +222,7 @@
 
     <!-- Receipt modal -->
     <div class="modal-backdrop" id="receiptModal">
-        <div class="modal" style="max-width:440px;">
+        <div class="popup" style="max-width:440px; width:100%; margin:auto;">
             <div class="modal-head">
                 <h3>Transaction receipt</h3>
                 <button class="modal-close" onclick="closeModal('receiptModal')">✕</button>
@@ -235,9 +235,10 @@
         </div>
     </div>
     <style>
-        /* Ensure receipt drawer is visible even if global modal CSS fails - fallback */
-        #receiptModal.show { display:flex !important; }
-        #receiptModal .modal { max-height:90vh; }
+        /* Receipt as centered popup - overrides drawer transform */
+        #receiptModal.show { display:flex !important; align-items:center; justify-content:center; }
+        #receiptModal .popup { max-height:90vh; overflow:hidden; display:flex; flex-direction:column; }
+        #receiptModal .popup .modal-body { max-height:60vh; overflow-y:auto; }
     </style>
 
     <!-- Reverse modal -->
@@ -356,21 +357,36 @@
                         <div class="rc-rule"></div>
                         <div class="rc-foot">Thank you for using Wakala Feedtan Store</div>
                     </div>`;
-                console.log('receipt HTML built, opening modal');
+                console.log('receipt HTML built, opening modal, body len', bodyEl.innerHTML.length);
                 const modalEl = document.getElementById('receiptModal');
-                console.log('modalEl before', modalEl, 'class', modalEl?.className);
+                console.log('modalEl before', modalEl, 'class', modalEl?.className, 'inner', modalEl?.querySelector('.popup')?.className);
                 openModal('receiptModal');
                 console.log('modalEl after open', modalEl?.className, 'zIndex', modalEl?.style.zIndex);
-                // fallback: ensure modal is visible even if CSS transform fails
+                // fallback: ensure modal is visible even if CSS fails - force popup visible
                 if (modalEl && !modalEl.classList.contains('show')) {
                     console.warn('modal show class not added, forcing');
                     modalEl.classList.add('show');
                 }
-                // ensure body scroll lock not hiding
                 if (modalEl) {
                     modalEl.style.display = 'flex';
-                    const inner = modalEl.querySelector('.modal');
-                    if (inner) inner.style.transform = 'translateX(0)';
+                    const inner = modalEl.querySelector('.popup') || modalEl.querySelector('.modal');
+                    if (inner) {
+                        console.log('inner before transform', inner.style.transform, getComputedStyle(inner).transform);
+                        inner.style.transform = 'none';
+                        inner.style.position = 'relative';
+                        inner.style.right = 'auto';
+                        console.log('inner after', inner.style.transform);
+                    }
+                    // verify visibility after 50ms
+                    setTimeout(() => {
+                        const rect = modalEl.getBoundingClientRect();
+                        const innerRect = modalEl.querySelector('.popup')?.getBoundingClientRect();
+                        console.log('modal rect', rect, 'inner rect', innerRect, 'computed display', getComputedStyle(modalEl).display);
+                        if (!innerRect || innerRect.width === 0) {
+                            console.error('popup still not visible, showing alert fallback');
+                            alert(bodyEl.innerText || 'Receipt ready but modal hidden - check console');
+                        }
+                    }, 100);
                 }
             } catch (e) {
                 console.error('viewTxn error', e);
