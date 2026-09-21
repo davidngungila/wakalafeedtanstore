@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Device;
 use App\Models\Network;
+use App\Models\NetworkBalance;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
 use App\Models\User;
@@ -376,6 +377,47 @@ class SmsApiTest extends TestCase
         $this->actingAs($admin)
             ->postJson('/api/v1/sms/ingest', ['sms' => []])
             ->assertUnauthorized();
+    }
+
+    public function test_mixx_customer_deposit_decreases_float_and_increases_cash(): void
+    {
+        $device = $this->makeDevice();
+        $agent = $this->cashPoint();
+        $network = $device->network()->firstOrFail();
+
+        $balance = NetworkBalance::firstOrCreate(
+            ['agent_id' => $agent->id, 'network_id' => $network->id],
+            ['opening_balance' => 1_114_000, 'balance' => 1_114_000],
+        );
+
+        $initialFloat = (float) $balance->balance;
+        $initialCash = (float) $agent->cash_balance;
+
+        $response = $this->withHeaders($this->deviceHeaders($device))
+            ->postJson('/api/v1/sms/ingest', [
+                'sms' => [[
+                    'sender' => 'MIXX BY YAS',
+                    'received_at' => '2026-09-21 17:15:00',
+                    'message' => 'Zoezi la kuweka fedha kwa HALMA RASHIDI, 255676885670 limefanikiwa. Kiasi Tsh 5,000. Mrejaa Tsh 99. Salio Jipya ni Tsh 1,109,000. Kumbukumbu No: 26363415048141. 21/09/26 17:15.',
+                ]],
+            ])
+            ->assertOk();
+
+        $this->assertSame(1, $response->json('summary.received'));
+        $this->assertSame(1, $response->json('summary.processed'));
+
+        $txn = Transaction::firstOrFail();
+        $this->assertSame('deposit', $txn->type);
+        $this->assertSame(5_000.0, (float) $txn->amount);
+        $this->assertSame('26363415048141', $txn->provider_reference);
+        $this->assertSame('HALMA RASHIDI', $txn->customer_name);
+        $this->assertSame('255676885670', $txn->customer_phone);
+
+        $balance->refresh();
+        $agent->refresh();
+
+        $this->assertSame($initialFloat - 5_000, (float) $balance->balance);
+        $this->assertSame($initialCash + 5_000, (float) $agent->cash_balance);
     }
 
     public function test_bootstrap_records_a_phone_session(): void
