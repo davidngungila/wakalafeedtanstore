@@ -146,18 +146,21 @@
             }
         }, 700);
     }
-    // Hook the existing Connect phone button to also show loading steps after QR scan
+    // Auto-start simulation: when Connect phone is opened, automatically start loading simulation after QR is shown
     document.addEventListener('DOMContentLoaded', () => {
         const originalOpen = window.openConnectModal;
         window.openConnectModal = function(code, host) {
             originalOpen(code, host);
-            // After QR shown, also prepare loading modal for when phone scans
+            // Auto-start simulation 800ms after QR is shown (shows all steps until successfully connected)
             setTimeout(() => {
-                // If user clicks Connect again, show loading
-                const loadingBtn = document.querySelector('#connectPopup .btn-primary');
-                if (loadingBtn) {
-                    loadingBtn.onclick = () => { closeModal('connectPopup'); openConnectLoadingModal(); };
-                    loadingBtn.textContent = 'Simulate connecting...';
+                closeModal('connectPopup');
+                openConnectLoadingModal();
+            }, 800);
+            // Also make Done button trigger simulation if user clicks it before auto-start
+            setTimeout(() => {
+                const doneBtn = document.querySelector('#connectPopup .btn-primary');
+                if (doneBtn) {
+                    doneBtn.onclick = () => { closeModal('connectPopup'); openConnectLoadingModal(); };
                 }
             }, 100);
         };
