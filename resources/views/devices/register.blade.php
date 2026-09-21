@@ -142,6 +142,31 @@
         </div>
     </div>
 
+    <!-- Authorize simulation modal until finalized -->
+    <div class="modal-backdrop" id="authorizeSimulationModal">
+        <div class="popup" style="max-width:480px;">
+            <div class="modal-head">
+                <h3>Authorizing device...</h3>
+                <button class="modal-close" onclick="closeModal('authorizeSimulationModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="text-align:center; padding:12px 0;">
+                    <div style="width:48px;height:48px;border:3px solid var(--line);border-top-color:var(--terracotta-600);border-radius:50%;margin:0 auto 14px;animation:spin 1s linear infinite;"></div>
+                    <p style="font-size:14px; font-weight:600; color:var(--coffee-900); margin-bottom:14px;" id="authorizeStepText">Starting authorization...</p>
+                </div>
+                <div id="authorizeSteps" style="display:flex; flex-direction:column; gap:10px;">
+                    <div class="auth-step" style="display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:8px; background:var(--sand-100); border:1px solid var(--line);"><span class="step-icon" style="width:28px;height:28px;border-radius:50%;background:var(--line);display:flex;align-items:center;justify-content:center;font-size:13px;">1</span><div style="flex:1;"><div class="step-title" style="font-weight:600; font-size:13px;">Validating device</div><div style="font-size:11px; color:var(--ink-soft);">Checking device details & networks</div></div><span class="step-status" style="font-size:11px; color:var(--ink-soft);">● Waiting</span></div>
+                    <div class="auth-step" style="display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:8px; background:var(--sand-100); border:1px solid var(--line); opacity:.6;"><span class="step-icon" style="width:28px;height:28px;border-radius:50%;background:var(--line);display:flex;align-items:center;justify-content:center;font-size:13px;">2</span><div style="flex:1;"><div class="step-title" style="font-weight:600; font-size:13px;">Approving device</div><div style="font-size:11px; color:var(--ink-soft);">Setting status to active</div></div><span class="step-status" style="font-size:11px; color:var(--ink-soft);">● Waiting</span></div>
+                    <div class="auth-step" style="display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:8px; background:var(--sand-100); border:1px solid var(--line); opacity:.6;"><span class="step-icon" style="width:28px;height:28px;border-radius:50%;background:var(--line);display:flex;align-items:center;justify-content:center;font-size:13px;">3</span><div style="flex:1;"><div class="step-title" style="font-weight:600; font-size:13px;">Activating</div><div style="font-size:11px; color:var(--ink-soft);">Enabling SMS capture & sync</div></div><span class="step-status" style="font-size:11px; color:var(--ink-soft);">● Waiting</span></div>
+                    <div class="auth-step" style="display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:8px; background:var(--sand-100); border:1px solid var(--line); opacity:.6;"><span class="step-icon" style="width:28px;height:28px;border-radius:50%;background:var(--line);display:flex;align-items:center;justify-content:center;font-size:13px;">4</span><div style="flex:1;"><div class="step-title" style="font-weight:600; font-size:13px;">Finalizing</div><div style="font-size:11px; color:var(--ink-soft);">Preparing device for live SMS</div></div><span class="step-status" style="font-size:11px; color:var(--ink-soft);">● Waiting</span></div>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button type="button" class="btn btn-ghost" onclick="closeModal('authorizeSimulationModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
     <style>
         .wstep { display:flex; flex-direction:column; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--ink-soft); }
         .wstep .wstep-num { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:800; border:2px solid var(--line); color:var(--ink-soft); background:var(--white); transition:all .2s; }
@@ -286,6 +311,12 @@
             if (!device.approveUrl) return;
             const btn = document.getElementById('authorizeBtn');
             btn.disabled = true;
+            // Show simulation modal until finalized
+            const simModal = document.getElementById('authorizeSimulationModal');
+            if (simModal) {
+                openModal('authorizeSimulationModal');
+                runAuthorizeSimulation();
+            }
             try {
                 const response = await fetch(device.approveUrl, {
                     method: 'POST',
@@ -297,18 +328,85 @@
                 });
                 const data = await response.json();
                 if (data.success) {
+                    // Let simulation finish, then show success
+                    setTimeout(() => {
+                        completeAuthorizeSimulation(true, data);
+                    }, 1800);
+                } else {
+                    completeAuthorizeSimulation(false, data);
+                    toast(data.message || 'Failed to authorize device.', 'error');
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                completeAuthorizeSimulation(false, null);
+                toast('Failed to authorize device.', 'error');
+                btn.disabled = false;
+            }
+        }
+
+        function runAuthorizeSimulation() {
+            const steps = document.querySelectorAll('#authorizeSteps .auth-step');
+            let idx = 0;
+            function next() {
+                if (idx > 0) {
+                    const prev = steps[idx-1];
+                    prev.style.background = 'var(--acacia-100)';
+                    prev.style.borderColor = 'var(--acacia-600)';
+                    prev.querySelector('.step-icon').innerHTML = '✓';
+                    prev.querySelector('.step-icon').style.background = 'var(--acacia-600)';
+                    prev.querySelector('.step-icon').style.color = '#fff';
+                    prev.querySelector('.step-status').textContent = '✓ Done';
+                }
+                if (idx < steps.length) {
+                    const cur = steps[idx];
+                    cur.style.opacity = '1';
+                    cur.style.background = 'var(--terracotta-100)';
+                    cur.style.borderColor = 'var(--terracotta-600)';
+                    cur.querySelector('.step-icon').innerHTML = '●';
+                    cur.querySelector('.step-icon').style.background = 'var(--terracotta-600)';
+                    cur.querySelector('.step-icon').style.color = '#fff';
+                    cur.querySelector('.step-status').textContent = '● In progress';
+                    document.getElementById('authorizeStepText').textContent = cur.querySelector('.step-title').textContent + '...';
+                    idx++;
+                    setTimeout(next, 600);
+                }
+            }
+            // reset
+            steps.forEach((el, i) => {
+                el.style.opacity = i===0 ? '1' : '.6';
+                el.style.background = 'var(--sand-100)';
+                el.style.borderColor = 'var(--line)';
+                el.querySelector('.step-icon').textContent = i+1;
+                el.querySelector('.step-icon').style.background = 'var(--line)';
+                el.querySelector('.step-icon').style.color = 'var(--ink-soft)';
+                el.querySelector('.step-status').textContent = '● Waiting';
+            });
+            document.getElementById('authorizeStepText').textContent = 'Starting authorization...';
+            setTimeout(next, 400);
+        }
+
+        function completeAuthorizeSimulation(success, data) {
+            const textEl = document.getElementById('authorizeStepText');
+            if (success) {
+                document.querySelectorAll('#authorizeSteps .auth-step').forEach(el => {
+                    el.style.background = 'var(--acacia-100)';
+                    el.style.borderColor = 'var(--acacia-600)';
+                    el.querySelector('.step-icon').innerHTML = '✓';
+                    el.querySelector('.step-icon').style.background = 'var(--acacia-600)';
+                    el.querySelector('.step-status').textContent = '✓ Done';
+                });
+                if (textEl) textEl.textContent = 'Successfully authorized! ✓';
+                setTimeout(() => {
+                    closeModal('authorizeSimulationModal');
                     toast('Device authorized and activated.', 'success');
                     document.getElementById('authorizeBtn').hidden = true;
                     document.getElementById('goDeviceBtn').href = device.devicePageUrl;
                     document.getElementById('goDeviceBtn').hidden = false;
                     document.getElementById('goDeviceBtn').textContent = 'Go to device';
-                } else {
-                    toast(data.message || 'Failed to authorize device.', 'error');
-                    btn.disabled = false;
-                }
-            } catch (err) {
-                toast('Failed to authorize device.', 'error');
-                btn.disabled = false;
+                }, 600);
+            } else {
+                if (textEl) textEl.textContent = 'Authorization failed.';
+                setTimeout(() => closeModal('authorizeSimulationModal'), 800);
             }
         }
 
