@@ -212,9 +212,10 @@ class SmsProcessor
             $commissionOverride,
         );
 
-        // For float deposit SMS (You Received ...Tsh from UNION FINANCIAL ...), also record as FloatTransaction
-        // so it appears in both /transactions and /float - user requested dual recording
-        if (in_array($parsed['type'], ['bank_to_wallet', 'float_topup'], true) || str_contains(strtolower($body), 'union financial')) {
+        // For float-related SMS (bank_to_wallet, float_topup, or any with UNION FINANCIAL / Kiasi:Tsh), also record as FloatTransaction
+        // User requested: ype Bank to Wallet in type the all add float transaction (all float types should add float)
+        $isFloatSms = in_array($parsed['type'], ['bank_to_wallet', 'float_topup', 'cash_in'], true) || str_contains(strtolower($body), 'union financial') || str_contains(strtolower($body), 'kiasi:tsh') || str_contains(strtolower($body), 'kiasi: tsh');
+        if ($isFloatSms) {
             try {
                 $floatType = $parsed['type'] === 'bank_to_wallet' ? 'float_topup' : 'cash_in';
                 // Use same network and amount, create float transaction linked to daily opening
