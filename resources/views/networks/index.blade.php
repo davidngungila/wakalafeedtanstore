@@ -286,10 +286,11 @@
         let pendingNetworkName = null;
         function confirmDeleteNetwork(routeKey, name) {
             pendingNetworkName = name;
-            const isMixMpesa = name.toUpperCase().includes('MIX') && name.toUpperCase().includes('MPESA') || name.toUpperCase() === 'MIX BY YAS AND MPESA' || name === 'Mixx by Yas (HaloPesa)' || name === 'Vodacom M-Pesa' || name.toUpperCase().includes('MIX BY YAS');
-            document.getElementById('confirmNetworkTitle').textContent = isMixMpesa ? 'Delete "' + name + '" and all its SMS records?' : 'Delete "' + name + '"?';
-            if (isMixMpesa || name.toUpperCase().includes('MIX BY YAS')) {
-                document.getElementById('confirmNetworkText').innerHTML = 'Delete \"<b>' + name + '</b>\" and <b>all its SMS records</b>?<br><br><span style="color:var(--danger); font-weight:700;">This cannot be undone.</span><br><span style="font-size:12px;">All SMS, transactions and float history for this network will be permanently deleted.</span>';
+            // POP UP MODAL for MIX BY YAS AND MPESA as requested
+            const isMixMpesa = name.toUpperCase() === 'MIX BY YAS AND MPESA' || (name.toUpperCase().includes('MIX') && name.toUpperCase().includes('MPESA'));
+            document.getElementById('confirmNetworkTitle').textContent = 'Delete "' + name + '" and all its SMS records?';
+            if (isMixMpesa) {
+                document.getElementById('confirmNetworkText').innerHTML = 'Delete \"<b>' + name + '</b>\" and <b>all its SMS records</b>?<br><br><span style="color:var(--danger); font-weight:700; font-size:14px;">This cannot be undone.</span>';
                 document.querySelector('#confirmNetworkDelete .btn-danger').textContent = 'Delete ' + name;
             } else {
                 document.getElementById('confirmNetworkText').textContent = 'Delete \"' + name + '\"? This will permanently remove the network. Transactions or float history will block deletion — suspend instead.';
