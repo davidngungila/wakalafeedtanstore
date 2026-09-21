@@ -227,7 +227,7 @@ class TransactionController extends Controller
     public function reverse(Request $request, Transaction $transaction): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
-            'reason' => ['required', 'string', 'max:255'],
+            'reason' => ['nullable', 'string', 'max:255'],
         ]);
 
         if ($transaction->status === 'reversed') {
@@ -272,13 +272,13 @@ class TransactionController extends Controller
                 'status' => 'reversed',
                 'reversed_by' => auth()->id(),
                 'reversed_at' => now(),
-                'reversal_reason' => $validated['reason'],
+                'reversal_reason' => $validated['reason'] ?? '',
             ]);
         });
 
         $this->recordAudit('Transaction reversed', 'Transaction', $transaction->id, [
             'reference' => $transaction->reference,
-            'reason' => $validated['reason'],
+            'reason' => $validated['reason'] ?? '',
         ]);
 
         if ($request->expectsJson()) {

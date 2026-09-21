@@ -193,17 +193,6 @@
             </div>
             <div class="modal-body">
                 <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Reversing <strong id="reverseRef" style="color:var(--coffee-900);"></strong> will restore the float and cash balances to their previous state.</p>
-                <div class="field">
-                    <label>Reason for reversal</label>
-                    <select id="reverseReason" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--white);font-size:14px;">
-                        <option>Customer dispute - duplicate charge</option>
-                        <option>Incorrect amount charged</option>
-                        <option>Wrong network selected</option>
-                        <option>Wong customer/counterfoil</option>
-                        <option>System error</option>
-                        <option>Other</option>
-                    </select>
-                </div>
             </div>
             <div class="modal-foot">
                 <button class="btn btn-ghost" onclick="closeModal('reverseModal')">Cancel</button>
@@ -348,9 +337,8 @@
 
         async function doReverse() {
             if (!reverseTarget) return;
-            const reason = document.getElementById('reverseReason').value;
             try {
-                const body = new URLSearchParams('_token=' + CSRF_TOKEN + '&reason=' + encodeURIComponent(reason));
+                const body = new URLSearchParams('_token=' + CSRF_TOKEN);
                 const response = await fetch(`/transactions/${encodeURIComponent(reverseTarget)}/reverse`, {
                     method: 'PUT',
                     headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
