@@ -108,6 +108,7 @@
             <table>
                 <thead>
                     <tr>
+                        <th>Date</th>
                         <th>Time</th>
                         <th>Device</th>
                         <th>Line</th>
@@ -120,6 +121,7 @@
                 <tbody id="smsBody">
                     @forelse ($messages as $message)
                         <tr data-id="{{ $message->id }}" data-sms-id="{{ $message->id }}" class="row-click" onclick="window.location='{{ route('sms.show', $message) }}'" style="cursor:pointer;">
+                            <td class="cell-sub">{{ $message->server_received_at->format('d M Y') }}</td>
                             <td class="cell-sub">{{ $message->server_received_at->format('H:i:s') }}</td>
                             <td>
                                 <a href="{{ route('devices.show', $message->device) }}" class="cell-title" onclick="event.stopPropagation()">{{ $message->device?->name ?? '—' }}</a>
@@ -337,6 +339,7 @@
             rowClick: (data) => openMessage(data.sms_id),
             openBody: (data) => openMessage(data.sms_id),
             cells: (data) => [
+                smsTd(smsEsc(data.fulltime ? data.fulltime.split(' · ')[1] || data.time : data.time), 'cell-sub'),
                 smsTd(smsEsc(data.time), 'cell-sub'),
                 smsDeviceCell(data),
                 smsTd(smsEsc(data.line || '—'), 'cell-sub'),

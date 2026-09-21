@@ -42,7 +42,7 @@
             <p class="sub">Deposits, withdrawals, send money, bills, airtime and bank transfers across all networks.</p>
         </div>
         <div class="view-actions">
-            <button class="btn btn-primary" onclick="openModal('processTxnModal')">+ Process transaction</button>
+            <!-- Process transaction button removed as requested -->
         </div>
     </div>
 
@@ -165,60 +165,7 @@
         </div>
     </div>
 
-    <!-- Process transaction modal -->
-    <div class="modal-backdrop" id="processTxnModal">
-        <div class="modal">
-            <div class="modal-head">
-                <h3>Process transaction</h3>
-                <button class="modal-close" onclick="closeModal('processTxnModal')">✕</button>
-            </div>
-            <form action="{{ route('transactions.store') }}" method="POST" data-process-txn>
-                @csrf
-                <div class="modal-body">
-                    <div class="form-row">
-                        <div class="field">
-                            <label>Network</label>
-                            <select name="network_id" required>
-                                @foreach ($combos['networks'] as $network)
-                                    <option value="{{ $network->id }}">{{ $network->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="field">
-                            <label>Transaction type</label>
-                            <select name="type">
-                            <option value="deposit">Customer Deposit</option>
-                            <option value="withdrawal">Customer Withdrawal</option>
-                            <option value="send_money">Send Money</option>
-                            <option value="bill_payment">Bill Payment</option>
-                            <option value="airtime">Airtime</option>
-                            <option value="data">Data Bundle</option>
-                            <option value="bank_to_wallet">Bank to Wallet</option>
-                            <option value="wallet_to_bank">Wallet to Bank</option>
-                        </select>
-                    </div>
-                    <div class="form-row">
-                        <div class="field">
-                            <label>Customer name</label>
-                            <input type="text" name="customer_name" placeholder="e.g. Juma Athumani">
-                        </div>
-                        <div class="field">
-                            <label>Customer phone</label>
-                            <input type="text" name="customer_phone" placeholder="07xxxxxxxx" required>
-                        </div>
-                    </div>
-                    <div class="field">
-                        <label>Amount (TZS)</label>
-                        <input type="number" name="amount" min="1" step="any" placeholder="e.g. 100000" required>
-                    </div>
-                </div>
-                <div class="modal-foot">
-                    <button type="button" class="btn btn-ghost" onclick="closeModal('processTxnModal')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Process transaction</button>
-                </div>
-            </form>
-        </div>
-    </div>
+
 
     <!-- Receipt modal -->
     <div class="modal-backdrop" id="receiptModal">

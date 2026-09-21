@@ -29,6 +29,7 @@ if (! function_exists('txn_type_label')) {
             'wallet_to_bank' => 'Wallet to Bank',
             'float_deposit' => 'Float Deposit',
             'float_topup' => 'Float Top-up',
+            'float_withdrawal' => 'Float Withdrawal',
             'cash_in' => 'Cash In',
             'cash_out' => 'Cash Out',
             'float_topup' => 'Float Top-up',
