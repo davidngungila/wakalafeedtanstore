@@ -30,15 +30,23 @@ abstract class AbstractSmsParser implements SmsParserContract
                 continue;
             }
 
-            return [
+            $result = [
                 'reference' => strtoupper(trim($m['ref'] ?? '')),
                 'type' => $template['type'],
                 'amount' => (float) str_replace(',', '', $m['amount'] ?? 0),
                 'customer_name' => trim(preg_replace('/\s+/', ' ', $m['customer'] ?? '')),
                 'customer_phone' => $m['phone'] ?? '',
                 'balance' => isset($m['balance']) ? (float) str_replace(',', '', $m['balance']) : 0.0,
+                'commission' => isset($m['commission']) ? (float) str_replace(',', '', $m['commission']) : 0.0,
                 'received_at' => $this->parseDateTime($m['date'] ?? null, $m['time'] ?? null),
             ];
+
+            // Some providers include Preview Commission outside the main template (e.g. HaloPesa)
+            if ($result['commission'] <= 0 && preg_match('/Preview\s+Commission\s*:\s*([\d,]+(?:\.\d+)?)\s*TZS/i', $body, $cm) === 1) {
+                $result['commission'] = (float) str_replace(',', '', $cm[1]);
+            }
+
+            return $result;
         }
 
         return $this->blank();
@@ -90,7 +98,7 @@ abstract class AbstractSmsParser implements SmsParserContract
     }
 
     /**
-     * @return array{reference: string, type: string, amount: float, customer_name: string, customer_phone: string, balance: float, received_at: null}
+     * @return array{reference: string, type: string, amount: float, customer_name: string, customer_phone: string, balance: float, commission: float, received_at: null}
      */
     private function blank(): array
     {
@@ -101,6 +109,7 @@ abstract class AbstractSmsParser implements SmsParserContract
             'customer_name' => '',
             'customer_phone' => '',
             'balance' => 0.0,
+            'commission' => 0.0,
             'received_at' => null,
         ];
     }
@@ -117,10 +126,23 @@ abstract class AbstractSmsParser implements SmsParserContract
         }
 
         $year = strlen($parts[2]) === 4 ? $parts[2] : '20'.$parts[2];
+        $time = $time ?? '00:00';
 
-        return Carbon::createFromFormat(
-            'Y-m-d H:i',
-            $year.'-'.$parts[1].'-'.$parts[0].' '.($time ?? '00:00')
-        )->format('Y-m-d H:i:s');
+        // Normalize seconds: support both H:i and H:i:s
+        $hasSeconds = substr_count($time, ':') === 2;
+        $format = $hasSeconds ? 'Y-m-d H:i:s' : 'Y-m-d H:i';
+
+        try {
+            return Carbon::createFromFormat(
+                $format,
+                $year.'-'.$parts[1].'-'.$parts[0].' '.$time
+            )->format('Y-m-d H:i:s');
+        } catch (\Throwable) {
+            try {
+                return Carbon::parse($year.'-'.$parts[1].'-'.$parts[0].' '.$time)->format('Y-m-d H:i:s');
+            } catch (\Throwable) {
+                return null;
+            }
+        }
     }
 }

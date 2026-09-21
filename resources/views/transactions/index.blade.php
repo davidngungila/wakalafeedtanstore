@@ -314,39 +314,45 @@
         function fmt(n) { return 'TZS ' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
 
         function viewTxn(id) {
-            const t = transactionsData.find(x => Number(x.id) === Number(id));
-            if (!t) return;
-            document.getElementById('receiptBody').innerHTML = `
-                <div class="rc-receipt">
-                    <div class="rc-brand">
-                        <strong>Wakala Feedtan Store</strong>
-                        <span>Mobile Money Services</span>
-                    </div>
-                    <div class="rc-rule"></div>
-                    <div class="rc-title">Transaction Receipt</div>
-                    <div class="rc-subtitle">${TYPE_LABEL[t.type] || t.type}</div>
-                    <div class="rc-rule"></div>
-                    <div class="rc-row"><span>Reference</span><b>${t.reference}</b></div>
-                    <div class="rc-row"><span>Provider ref</span><b>${t.provider_reference || '—'}</b></div>
-                    <div class="rc-row"><span>Date</span><b>${t.created_at}</b></div>
-                    <div class="rc-row"><span>Network</span><b><span class="net-dot" style="background:${t.network_color || '#999'};"></span>&nbsp;${t.network || '—'}</b></div>
-                    <div class="rc-row"><span>Customer</span><b>${t.customer_name || '—'}</b></div>
-                    <div class="rc-row"><span>Phone</span><b>${t.customer_phone}</b></div>
-                    <div class="rc-rule"></div>
-                    <div class="rc-amount"><span>Amount</span><b>${fmt(t.amount)}</b></div>
-                    <div class="rc-row"><span>Fee</span><b>${fmt(t.fee)}</b></div>
-                    <div class="rc-row"><span>Commission</span><b>${fmt(t.commission)}</b></div>
-                    <div class="rc-row"><span>Running Cash</span><b>${t.running_cash_balance === null ? '—' : fmt(t.running_cash_balance)}</b></div>
-                    <div class="rc-row"><span>Running Float</span><b>${t.running_float_balance === null ? '—' : fmt(t.running_float_balance)}</b></div>
-                    <div class="rc-row"><span>Status</span><b>${t.status.toUpperCase()}</b></div>
-                    ${t.reversal_reason ? `<div class="rc-row"><span>Reason</span><b>${t.reversal_reason}</b></div>` : ''}
-                    ${t.notes ? `<div class="rc-row"><span>Notes</span><b>${t.notes}</b></div>` : ''}
-                    <div class="rc-rule"></div>
-                    <div class="rc-row"><span>Operator</span><b>${t.operator || authUser}</b></div>
-                    <div class="rc-rule"></div>
-                    <div class="rc-foot">Thank you for using Wakala Feedtan Store</div>
-                </div>`;
-            openModal('receiptModal');
+            try {
+                const t = transactionsData.find(x => Number(x.id) === Number(id));
+                if (!t) { toast('Transaction not found in local data. Please reload.', 'error'); return; }
+                const safe = (v) => v === null || v === undefined ? '—' : v;
+                document.getElementById('receiptBody').innerHTML = `
+                    <div class="rc-receipt">
+                        <div class="rc-brand">
+                            <strong>Wakala Feedtan Store</strong>
+                            <span>Mobile Money Services</span>
+                        </div>
+                        <div class="rc-rule"></div>
+                        <div class="rc-title">Transaction Receipt</div>
+                        <div class="rc-subtitle">${TYPE_LABEL[t.type] || t.type}</div>
+                        <div class="rc-rule"></div>
+                        <div class="rc-row"><span>Reference</span><b>${safe(t.reference)}</b></div>
+                        <div class="rc-row"><span>Provider ref</span><b>${safe(t.provider_reference) || '—'}</b></div>
+                        <div class="rc-row"><span>Date</span><b>${safe(t.created_at)}</b></div>
+                        <div class="rc-row"><span>Network</span><b><span class="net-dot" style="background:${t.network_color || '#999'};"></span>&nbsp;${safe(t.network) || '—'}</b></div>
+                        <div class="rc-row"><span>Customer</span><b>${safe(t.customer_name) || '—'}</b></div>
+                        <div class="rc-row"><span>Phone</span><b>${safe(t.customer_phone)}</b></div>
+                        <div class="rc-rule"></div>
+                        <div class="rc-amount"><span>Amount</span><b>${fmt(t.amount ?? 0)}</b></div>
+                        <div class="rc-row"><span>Fee</span><b>${fmt(t.fee ?? 0)}</b></div>
+                        <div class="rc-row"><span>Commission</span><b>${fmt(t.commission ?? 0)}</b></div>
+                        <div class="rc-row"><span>Running Cash</span><b>${t.running_cash_balance === null || t.running_cash_balance === undefined ? '—' : fmt(t.running_cash_balance)}</b></div>
+                        <div class="rc-row"><span>Running Float</span><b>${t.running_float_balance === null || t.running_float_balance === undefined ? '—' : fmt(t.running_float_balance)}</b></div>
+                        <div class="rc-row"><span>Status</span><b>${(t.status || 'unknown').toUpperCase()}</b></div>
+                        ${t.reversal_reason ? `<div class="rc-row"><span>Reason</span><b>${t.reversal_reason}</b></div>` : ''}
+                        ${t.notes ? `<div class="rc-row"><span>Notes</span><b>${t.notes}</b></div>` : ''}
+                        <div class="rc-rule"></div>
+                        <div class="rc-row"><span>Operator</span><b>${safe(t.operator) || safe(authUser)}</b></div>
+                        <div class="rc-rule"></div>
+                        <div class="rc-foot">Thank you for using Wakala Feedtan Store</div>
+                    </div>`;
+                openModal('receiptModal');
+            } catch (e) {
+                console.error('viewTxn error', e);
+                toast('Failed to render receipt: ' + (e.message || 'unknown'), 'error');
+            }
         }
 
         function openReverseModal(id, reference) {

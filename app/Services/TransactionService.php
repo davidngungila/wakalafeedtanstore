@@ -15,6 +15,7 @@ class TransactionService
      * Create a transaction and apply the float/cash adjustments.
      *
      * @param  array{network_id: int, type: string, customer_name?: string|null, customer_phone: string, amount: float}  $data
+     * @param  float|null  $commissionOverride  When provided (e.g. Preview Commission from SMS), use it instead of the rate table.
      */
     public function process(
         array $data,
@@ -22,6 +23,7 @@ class TransactionService
         ?int $performedBy = null,
         string $notes = 'Processed on counter',
         ?string $providerReference = null,
+        ?float $commissionOverride = null,
     ): Transaction {
         $agent ??= cash_point();
 
@@ -31,7 +33,8 @@ class TransactionService
 
         $rate = $this->commissionFor($agent, $data['network_id'], $data['type'], (float) $data['amount']);
 
-        $commission = round((float) $data['amount'] * $rate / 100, 2);
+        $computedCommission = round((float) $data['amount'] * $rate / 100, 2);
+        $commission = $commissionOverride !== null && $commissionOverride >= 0 ? round($commissionOverride, 2) : $computedCommission;
         $fee = $this->feeFor($data['type'], (float) $data['amount']);
 
         $balance = NetworkBalance::firstOrCreate(

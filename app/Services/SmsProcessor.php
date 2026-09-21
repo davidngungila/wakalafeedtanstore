@@ -142,10 +142,11 @@ class SmsProcessor
         // and continue to transaction creation instead of stopping at NEEDS_REVIEW.
         // If no computable amount exists even after fallback extraction, keep NEEDS_REVIEW.
         if ($parsed['reference'] === '' || $parsed['amount'] <= 0) {
-            $fallbackReference = $parsed['reference'] !== '' ? $parsed['reference'] : 'GEN-'.strtoupper(substr($hash, 0, 8));
+            $fallbackReference = $parsed['reference'] !== '' ? $parsed['reference'] : $this->fallbackReference($body, $hash);
             $fallbackAmount = $parsed['amount'] > 0 ? $parsed['amount'] : $this->fallbackAmount($body);
             $fallbackType = $parsed['type'] !== '' ? $parsed['type'] : $this->fallbackType($body);
             $fallbackPhone = $parsed['customer_phone'] !== '' ? $parsed['customer_phone'] : ($this->fallbackPhone($body) ?? '');
+            $fallbackCommission = ($parsed['commission'] ?? 0) > 0 ? $parsed['commission'] : $this->fallbackCommission($body);
 
             // If we still cannot compute a positive amount, keep the original NEEDS_REVIEW behaviour
             // — truly non-financial messages (OTP, promo) should not create 0-amount transactions.
@@ -169,6 +170,10 @@ class SmsProcessor
                 $parsed['customer_phone'] = $fallbackPhone;
             }
 
+            if ($fallbackCommission > 0) {
+                $parsed['commission'] = $fallbackCommission;
+            }
+
             // Ensure we have at least a placeholder phone — Transaction requires a string,
             // and Agent totalFloat/cash logic works even with a generic marker.
             if ($parsed['customer_phone'] === '') {
@@ -187,6 +192,14 @@ class SmsProcessor
             ]);
 
             // Do not return — fall through to duplicate check + TransactionService::process()
+        }
+
+        // Even when template matched, capture Preview Commission if present and not already parsed
+        if (($parsed['commission'] ?? 0) <= 0) {
+            $maybeCommission = $this->fallbackCommission($body);
+            if ($maybeCommission > 0) {
+                $parsed['commission'] = $maybeCommission;
+            }
         }
 
         $alreadyRecorded = Transaction::query()
@@ -210,6 +223,8 @@ class SmsProcessor
             ];
         }
 
+        $commissionOverride = isset($parsed['commission']) && (float) $parsed['commission'] > 0 ? (float) $parsed['commission'] : null;
+
         $transaction = $this->transactions->process(
             [
                 'network_id' => $network->id,
@@ -222,6 +237,7 @@ class SmsProcessor
             null,
             'Via SMS ingest',
             $parsed['reference'],
+            $commissionOverride,
         );
 
         $sms->update([
@@ -262,15 +278,56 @@ class SmsProcessor
 
     private function fallbackAmount(string $body): float
     {
-        if (preg_match('/TZS\s+([\d,]+(?:\.\d+)?)/i', $body, $m) === 1) {
-            return (float) str_replace(',', '', $m[1]);
+        // Find earliest TZS amount in the body, handling both "1,000 TZS" and "TZS 1,000"
+        // Prefer the first occurrence whichever style, to avoid picking balance (101k) over transaction (1k)
+        $candidates = [];
+
+        if (preg_match('/([\d,]+(?:\.\d+)?)\s*TZS/i', $body, $m, PREG_OFFSET_CAPTURE) === 1) {
+            $candidates[] = ['value' => (float) str_replace(',', '', $m[1][0]), 'pos' => $m[1][1]];
         }
 
-        if (preg_match('/([\d,]+\.\d{2})\s*TZS/i', $body, $m) === 1) {
-            return (float) str_replace(',', '', $m[1]);
+        if (preg_match('/TZS\s+([\d,]+(?:\.\d+)?)/i', $body, $m, PREG_OFFSET_CAPTURE) === 1) {
+            $candidates[] = ['value' => (float) str_replace(',', '', $m[1][0]), 'pos' => $m[0][1]];
+        }
+
+        if ($candidates !== []) {
+            usort($candidates, fn ($a, $b) => $a['pos'] <=> $b['pos']);
+
+            return $candidates[0]['value'];
         }
 
         if (preg_match('/Tsh\.?\s*([\d,]+(?:\.\d+)?)/i', $body, $m) === 1) {
+            return (float) str_replace(',', '', $m[1]);
+        }
+
+        return 0.0;
+    }
+
+    private function fallbackReference(string $body, string $hash): string
+    {
+        // Prefer explicit Tnx/Txn reference like "Tnx 6263421245180145"
+        if (preg_match('/\bTnx\s*[:\-]?\s*([A-Z0-9]{8,20})/i', $body, $m) === 1) {
+            return strtoupper($m[1]);
+        }
+
+        if (preg_match('/\bTxn\s*[:\-]?\s*([A-Z0-9]{8,20})/i', $body, $m) === 1) {
+            return strtoupper($m[1]);
+        }
+
+        if (preg_match('/Transaction\s+ID\s*[:\-]?\s*([A-Z0-9]{5,20})/i', $body, $m) === 1) {
+            return strtoupper($m[1]);
+        }
+
+        return 'GEN-'.strtoupper(substr($hash, 0, 8));
+    }
+
+    private function fallbackCommission(string $body): float
+    {
+        if (preg_match('/Preview\s+Commission\s*:\s*([\d,]+(?:\.\d+)?)\s*TZS/i', $body, $m) === 1) {
+            return (float) str_replace(',', '', $m[1]);
+        }
+
+        if (preg_match('/Commission\s*:\s*([\d,]+(?:\.\d+)?)\s*TZS/i', $body, $m) === 1) {
             return (float) str_replace(',', '', $m[1]);
         }
 
@@ -281,7 +338,7 @@ class SmsProcessor
     {
         $lower = strtolower($body);
 
-        if (str_contains($lower, 'received') || str_contains($lower, 'deposited') || str_contains($lower, 'credited') || str_contains($lower, 'umepokea')) {
+        if (str_contains($lower, 'received') || str_contains($lower, 'deposited') || str_contains($lower, 'credited') || str_contains($lower, 'umepokea') || str_contains($lower, 'umeweka')) {
             return 'deposit';
         }
 
@@ -289,11 +346,11 @@ class SmsProcessor
             return 'withdrawal';
         }
 
-        if (str_contains($lower, 'sent') || str_contains($lower, 'transferred') || str_contains($lower, 'umituma')) {
+        if (str_contains($lower, 'sent') || str_contains($lower, 'transferred') || str_contains($lower, 'umituma') || str_contains($lower, 'umetuma')) {
             return 'send_money';
         }
 
-        if (str_contains($lower, 'paid') || str_contains($lower, 'payment') || str_contains($lower, 'bill') || str_contains($lower, 'lipa')) {
+        if (str_contains($lower, 'paid') || str_contains($lower, 'payment') || str_contains($lower, 'bill') || str_contains($lower, 'lipa') || str_contains($lower, 'umelipa')) {
             return 'bill_payment';
         }
 
@@ -310,6 +367,10 @@ class SmsProcessor
 
     private function fallbackPhone(string $body): ?string
     {
+        if (preg_match('/\((0\d{9,10})\)/', $body, $m) === 1) {
+            return $m[1];
+        }
+
         if (preg_match('/(\+255\d{9}|0\d{9,10})\b/', $body, $m) === 1) {
             return $m[0];
         }
