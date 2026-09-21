@@ -69,7 +69,7 @@
         document.querySelectorAll('[data-cashpoint-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                submitForm(form, { method: 'PUT', done: () => { toast('Cash point updated.', 'success'); setTimeout(() => window.location.href = '{{ route('cash-point.show', $cashPoint) }}', 600); } });
+                submitForm(form, { method: 'POST', done: () => { toast('Cash point updated.', 'success'); setTimeout(() => window.location.href = '{{ route('cash-point.show', $cashPoint) }}', 600); } });
             });
         });
     </script>

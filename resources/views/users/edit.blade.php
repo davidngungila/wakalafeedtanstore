@@ -82,7 +82,8 @@
         document.querySelectorAll('[data-user-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                submitForm(form, { method: 'PUT', done: () => { toast('User updated successfully.', 'success'); setTimeout(() => window.location.href = '{{ route('users.show', $user) }}', 600); } });
+                // Use POST with _method=PUT for FormData compatibility (fixes "The name field is required" on PUT + FormData)
+                submitForm(form, { method: 'POST', done: () => { toast('User updated successfully.', 'success'); setTimeout(() => window.location.href = '{{ route('users.show', $user) }}', 600); } });
             });
         });
     </script>
