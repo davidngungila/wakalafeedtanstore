@@ -58,6 +58,14 @@ class DeviceController extends Controller
         ]);
     }
 
+    public function edit(Device $device): View
+    {
+        $device->load(['agent', 'networks', 'lines.network']);
+        $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
+
+        return view('devices.edit', compact('device', 'networks'));
+    }
+
     public function show(Request $request, Device $device): View
     {
         $device->load(['agent', 'network', 'networks', 'lines.network', 'phones']);

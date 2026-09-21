@@ -26,7 +26,7 @@
                 Connect phone
             </button>
             @if (is_admin())
-                <button class="btn btn-primary" onclick="openModal('editDeviceModal')">Edit device</button>
+                <a href="{{ route('devices.edit', $device) }}" class="btn btn-primary">Edit device</a>
             @endif
         </div>
     </div>
