@@ -19,12 +19,20 @@
             <h2>{{ $device->name }} <span class="tag {{ $badge }}" style="vertical-align:middle;">{{ ucfirst($status) }}</span></h2>
             <p class="sub">{{ $device->model ?? $device->device_uid ?? '' }} · {{ $device->device_uid ? 'UID: '.$device->device_uid : '' }}</p>
         </div>
+        @php $hasOnlinePhone = $device->phones->contains(fn($p) => $p->isOnline()); @endphp
         <div class="view-actions">
             <a href="{{ route('devices.index') }}" class="btn btn-ghost">← All devices</a>
-            <button class="btn btn-ghost" onclick="openConnectModal('{{ $device->device_code }}', '{{ url('/') }}')">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;"><rect x="7" y="2" width="10" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
-                Connect phone
-            </button>
+            @if($hasOnlinePhone)
+                <button class="btn btn-ghost" disabled title="A phone is already connected — disconnect it first" style="opacity:.6; cursor:not-allowed;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;"><rect x="7" y="2" width="10" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                    Phone connected
+                </button>
+            @else
+                <button class="btn btn-ghost" onclick="openConnectModal('{{ $device->device_code }}', '{{ url('/') }}')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;"><rect x="7" y="2" width="10" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                    Connect phone
+                </button>
+            @endif
             @if (is_admin())
                 <a href="{{ route('devices.edit', $device) }}" class="btn btn-primary">Edit device</a>
             @endif

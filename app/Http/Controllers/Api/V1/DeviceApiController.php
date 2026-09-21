@@ -27,6 +27,15 @@ class DeviceApiController extends Controller
         /** @var Device $device */
         $device = $request->attributes->get('device');
 
+        // Advanced: if a different phone is already online for this device, reject new pairing
+        $existingOnline = $device->phones()->where('device_uid', '!=', $validated['device_uid'])->get()->filter(fn ($p) => $p->isOnline());
+        if ($existingOnline->isNotEmpty()) {
+            return response()->json([
+                'message' => 'A phone is already connected to this device. Disconnect the existing phone before pairing a new one.',
+                'connected_phones' => $existingOnline->map(fn ($p) => ['device_uid' => $p->device_uid, 'model' => $p->model, 'last_seen_at' => $p->last_seen_at?->toIso8601String()])->values(),
+            ], 409);
+        }
+
         $device->update([
             'device_uid' => $validated['device_uid'],
             'model' => $validated['model'] ?? $device->model,
