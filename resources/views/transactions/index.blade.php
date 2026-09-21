@@ -146,9 +146,9 @@
                             <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
                             <td>
                                 <div class="row-actions">
-                                    <button type="button" class="js-view-receipt" data-id="{{ $txn->id }}" title="View receipt">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"></path></svg>
-                                    </button>
+                                    <a href="{{ route('transactions.receipt', $txn) }}" title="View receipt" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"></path></svg>
+                                    </a>
                                     @if (! is_cashier())
                                         <button type="button" class="warn js-reverse-txn" data-id="{{ $txn->id }}" data-ref="{{ $txn->reference }}" title="Reverse">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>
@@ -427,13 +427,7 @@
             });
         });
 
-        // Delegated handlers for receipt / reverse buttons (more reliable than inline onclick)
-        document.querySelectorAll('.js-view-receipt').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                viewTxn(btn.dataset.id);
-            });
-        });
+        // Delegated handler for reverse buttons
         document.querySelectorAll('.js-reverse-txn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();

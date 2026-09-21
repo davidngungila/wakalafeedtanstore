@@ -132,6 +132,13 @@ class TransactionController extends Controller
         return back()->with('status', 'Transaction processed successfully.');
     }
 
+    public function receipt(Transaction $transaction): View
+    {
+        $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening']);
+
+        return view('transactions.receipt', compact('transaction'));
+    }
+
     public function reverse(Request $request, Transaction $transaction): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
