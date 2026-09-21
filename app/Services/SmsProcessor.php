@@ -3,8 +3,11 @@
 namespace App\Services;
 
 use App\Models\Agent;
+use App\Models\DailyOpening;
 use App\Models\Device;
+use App\Models\FloatTransaction;
 use App\Models\Network;
+use App\Models\NetworkBalance;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
 use App\Services\Sms\SmsTransactionExtractor;
@@ -208,6 +211,45 @@ class SmsProcessor
             $parsed['reference'],
             $commissionOverride,
         );
+
+        // For float deposit SMS (You Received ...Tsh from UNION FINANCIAL ...), also record as FloatTransaction
+        // so it appears in both /transactions and /float - user requested dual recording
+        if (in_array($parsed['type'], ['bank_to_wallet', 'float_topup'], true) || str_contains(strtolower($body), 'union financial')) {
+            try {
+                $floatType = $parsed['type'] === 'bank_to_wallet' ? 'float_topup' : 'cash_in';
+                // Use same network and amount, create float transaction linked to daily opening
+                $dailyOpening = DailyOpening::forAgentAndDate($agent->id, today())->open()->first();
+                $balance = NetworkBalance::firstOrCreate(
+                    ['agent_id' => $agent->id, 'network_id' => $network->id],
+                    ['opening_balance' => 0, 'balance' => 0]
+                );
+                // Float already adjusted via TransactionService for bank_to_wallet? Check: bank_to_wallet default is float -amount, but float deposit should be +amount
+                // For You Received float deposit, we need to ensure float increases - if TransactionService decreased it, correct it
+                if ($parsed['type'] === 'bank_to_wallet') {
+                    // TransactionService for bank_to_wallet does float -amount (default), but float deposit should be +amount
+                    // So we need to adjust float + 2*amount to correct (since it already did -amount, we need +amount)
+                    $balance->balance += 2 * (float) $parsed['amount'];
+                    $balance->save();
+                    $agent->cash_balance = (float) $agent->cash_balance; // cash unchanged for float deposit
+                    $agent->save();
+                }
+
+                FloatTransaction::create([
+                    'reference' => 'FLT-'.now()->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT),
+                    'agent_id' => $agent->id,
+                    'network_id' => $network->id,
+                    'type' => $floatType,
+                    'amount' => $parsed['amount'],
+                    'fee' => 0,
+                    'status' => 'completed',
+                    'performed_by' => null,
+                    'notes' => 'Via SMS ingest - float deposit from '.($parsed['customer_name'] ?? 'bank').' ('.$parsed['reference'].')',
+                    'daily_opening_id' => $dailyOpening?->id,
+                ]);
+            } catch (\Throwable $e) {
+                \Log::warning('Float dual recording failed', ['error' => $e->getMessage(), 'txn' => $transaction->id]);
+            }
+        }
 
         $sms->update([
             'processing_status' => 'RECORDED',

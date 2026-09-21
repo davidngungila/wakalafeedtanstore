@@ -15,8 +15,9 @@
         </div>
         <div class="view-actions">
             <a class="btn btn-ghost" href="{{ route('float.index') }}">Manage float</a>
+            <a class="btn btn-ghost" href="{{ route('cash-point.show', $agent) }}">View details</a>
             @if (is_admin())
-                <button class="btn btn-primary" onclick="openCashPointDrawer()">Edit profile</button>
+                <a class="btn btn-primary" href="{{ route('cash-point.edit', $agent) }}">Edit profile</a>
             @endif
         </div>
     </div>
@@ -104,7 +105,7 @@
             <div class="panel-head">
                 <h3>Cash point details</h3>
                 @if (is_admin())
-                    <button class="link" onclick="openCashPointDrawer()">Edit</button>
+                    <a class="link" href="{{ route('cash-point.edit', $agent) }}">Edit</a>
                 @endif
             </div>
             <div class="panel-body">
