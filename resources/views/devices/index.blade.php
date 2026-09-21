@@ -163,6 +163,28 @@
                 </div>
             </div>
         </div>
+
+        <!-- Delete device pop-up modal -->
+        <div class="modal-backdrop" id="deleteDeviceModal">
+            <div class="popup" style="max-width:480px; margin:auto;">
+                <div class="modal-head">
+                    <h3>Delete device?</h3>
+                    <button class="modal-close" onclick="closeModal('deleteDeviceModal')">✕</button>
+                </div>
+                <div class="modal-body" style="text-align:center; padding:24px;">
+                    <div style="width:56px;height:56px;border-radius:50%;background:var(--danger-100);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px;color:var(--danger);"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    </div>
+                    <p style="font-size:15px;color:var(--coffee-900);line-height:1.6; font-weight:700;" id="deleteDeviceTitle">Delete this device?</p>
+                    <p style="font-size:14px;color:var(--ink-soft);line-height:1.6; margin-top:8px;" id="deleteDeviceText">This device and all its SMS records will be permanently deleted.</p>
+                    <p style="font-size:12px;color:var(--danger);line-height:1.5; margin-top:12px; background:var(--danger-100); padding:10px 12px; border-radius:8px; font-weight:600;">⚠️ This cannot be undone. All SMS records for this device will be permanently deleted.</p>
+                </div>
+                <div class="modal-foot" style="justify-content:center; gap:12px;">
+                    <button class="btn btn-ghost" onclick="closeModal('deleteDeviceModal')">Cancel</button>
+                    <button class="btn btn-danger" onclick="executeDeleteDevice()" style="background:var(--danger); color:#fff;" id="deleteDeviceBtn">Delete device</button>
+                </div>
+            </div>
+        </div>
     @endif
 @endsection
 
@@ -307,11 +329,21 @@
             }
         }
 
-        async function deleteDevice(route, name) {
-            if (!confirm(`Delete "${name}" and all its SMS records? This cannot be undone.`)) return;
-
+        let pendingDeleteRoute = null;
+        let pendingDeleteName = null;
+        function deleteDevice(route, name) {
+            pendingDeleteRoute = route;
+            pendingDeleteName = name;
+            document.getElementById('deleteDeviceTitle').textContent = 'Delete "' + name + '"?';
+            document.getElementById('deleteDeviceText').textContent = 'Delete "' + name + '" and all its SMS records? This device and all its  SMS messages will be permanently deleted.';
+            document.getElementById('deleteDeviceBtn').textContent = 'Delete ' + name;
+            openModal('deleteDeviceModal');
+        }
+        async function executeDeleteDevice() {
+            if (!pendingDeleteRoute) return;
+            closeModal('deleteDeviceModal');
             try {
-                const response = await fetch(route, {
+                const response = await fetch(pendingDeleteRoute, {
                     method: 'DELETE',
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest',
