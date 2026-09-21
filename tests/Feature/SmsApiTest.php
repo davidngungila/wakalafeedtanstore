@@ -421,6 +421,51 @@ class SmsApiTest extends TestCase
         $this->assertSame($initialCash + 5_000, (float) $agent->cash_balance);
     }
 
+    public function test_mixx_customer_withdrawal_increases_float_and_decreases_cash(): void
+    {
+        $device = $this->makeDevice();
+        $agent = $this->cashPoint();
+        $network = $device->network()->firstOrFail();
+
+        $balance = NetworkBalance::firstOrCreate(
+            ['agent_id' => $agent->id, 'network_id' => $network->id],
+            ['opening_balance' => 1_109_000, 'balance' => 1_109_000],
+        );
+        $agent->cash_balance = 100_000;
+        $agent->save();
+
+        $initialFloat = (float) $balance->balance;
+        $initialCash = (float) $agent->cash_balance;
+
+        $response = $this->withHeaders($this->deviceHeaders($device))
+            ->postJson('/api/v1/sms/ingest', [
+                'sms' => [[
+                    'sender' => 'MIXX BY YAS',
+                    'received_at' => '2026-09-21 18:28:00',
+                    'message' => 'MIXX BY YAS
+Salio lako jipya ni TSh 1,159,000. Umepokea pesa TSh 50,000 kutoka kwa 255657356874 - HASSAN HASSAN. Mrejaa TSh 288. Kumbukumbu No.:  26406953220683. 21/09/26 18:28.',
+                ]],
+            ])
+            ->assertOk();
+
+        $this->assertSame(1, $response->json('summary.received'));
+        $this->assertSame(1, $response->json('summary.processed'));
+
+        $txn = Transaction::firstOrFail();
+        $this->assertSame('withdrawal', $txn->type);
+        $this->assertSame(50_000.0, (float) $txn->amount);
+        $this->assertSame(288.0, (float) $txn->commission);
+        $this->assertSame('26406953220683', $txn->provider_reference);
+        $this->assertSame('HASSAN HASSAN', $txn->customer_name);
+        $this->assertSame('255657356874', $txn->customer_phone);
+
+        $balance->refresh();
+        $agent->refresh();
+
+        $this->assertSame($initialFloat + 50_000, (float) $balance->balance);
+        $this->assertSame($initialCash - 50_000, (float) $agent->cash_balance);
+    }
+
     public function test_bootstrap_records_a_phone_session(): void
     {
         $device = $this->makeDevice();
