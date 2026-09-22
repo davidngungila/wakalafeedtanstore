@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -12,10 +13,20 @@ use Illuminate\View\View;
 
 class ProfileController extends Controller
 {
-    public function edit(): View
+    public function edit(Request $request): View
     {
+        $user = auth()->user();
+
+        $activeSessions = DB::table('sessions')->where('user_id', $user->id)->count();
+
+        $currentSessionId = $request->session()->getId();
+        $currentSession = DB::table('sessions')->where('id', $currentSessionId)->first();
+        $currentIp = $currentSession?->ip_address;
+
         return view('profile.index', [
-            'user' => auth()->user(),
+            'user' => $user,
+            'activeSessions' => $activeSessions,
+            'currentIp' => $currentIp,
         ]);
     }
 

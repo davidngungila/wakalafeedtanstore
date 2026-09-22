@@ -18,11 +18,31 @@
         <div class="status-banner" style="background:var(--acacia-100);color:var(--acacia-600);border-radius:10px;padding:12px 16px;font-size:13.5px;font-weight:600;margin-bottom:20px;">{{ session('status') }}</div>
     @endif
 
+    <div class="panel" style="margin-bottom:24px;">
+        <div style="display:flex;align-items:center;gap:20px;padding:24px clamp(20px,4vw,32px);flex-wrap:wrap;">
+            <div style="width:72px;height:72px;border-radius:50%;overflow:hidden;flex:none;display:flex;align-items:center;justify-content:center;background:var(--sand-100);color:#fff;font-weight:700;font-size:22px;border:3px solid var(--sand-50);box-shadow:var(--shadow-md);">
+                @if ($user->avatarUrl())
+                    <img src="{{ $user->avatarUrl() }}" alt="{{ $user->name }}" style="width:100%;height:100%;object-fit:cover;">
+                @else
+                    <span style="background:linear-gradient(155deg,var(--terracotta-600),var(--gold-500));width:100%;height:100%;display:flex;align-items:center;justify-content:center;">{{ strtoupper(substr($user->name, 0, 2)) }}</span>
+                @endif
+            </div>
+            <div style="flex:1;min-width:200px;">
+                <h3 style="font-size:19px;margin:0 0 4px;">{{ $user->name }}</h3>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span class="tag {{ $user->role === 'admin' ? 'tag-gold' : ($user->role === 'supervisor' ? 'tag-green' : 'tag-terracotta') }}">{{ ucfirst($user->role) }}</span>
+                    <span class="tag {{ $user->is_active ? 'tag-green' : 'tag-grey' }}">{{ $user->is_active ? 'Active' : 'Inactive' }}</span>
+                    <span class="tag {{ $user->two_factor_enabled ? 'tag-green' : 'tag-grey' }}">{{ $user->two_factor_enabled ? '2FA enabled' : '2FA off' }}</span>
+                </div>
+            </div>
+            <a class="btn btn-ghost" href="{{ route('profile.index') }}" style="text-decoration:none;">Edit profile</a>
+        </div>
+    </div>
+
     <div class="panel-grid">
         <div class="panel">
             <div class="panel-head">
                 <h3>Account</h3>
-                <a class="link" href="{{ route('profile.index') }}">Edit profile</a>
             </div>
             <div class="panel-body">
                 <div class="detail-grid">
@@ -30,6 +50,8 @@
                     <div class="detail-item"><div class="dk">Email</div><div class="dv">{{ $user->email }}</div></div>
                     <div class="detail-item"><div class="dk">Role</div><div class="dv">{{ ucfirst($user->role) }}</div></div>
                     <div class="detail-item"><div class="dk">Cash point</div><div class="dv">{{ $user->agent?->name ?? '—' }}</div></div>
+                    <div class="detail-item"><div class="dk">Phone</div><div class="dv">{{ $user->phone ?? '—' }}</div></div>
+                    <div class="detail-item"><div class="dk">Member since</div><div class="dv">{{ $user->created_at->format('d M Y') }}</div></div>
                 </div>
             </div>
         </div>
@@ -85,6 +107,18 @@
             <span class="link">{{ $sessions->count() }} other {{ $sessions->count() === 1 ? 'device' : 'devices' }}</span>
         </div>
         <div class="panel-body" style="padding:0;">
+            @if ($currentSession)
+                <div style="display:flex;align-items:center;gap:14px;padding:18px 20px;background:var(--acacia-100);">
+                    <div style="width:38px;height:38px;border-radius:10px;background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--acacia-600);flex:none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <b style="display:block;font-size:14px;color:var(--coffee-900);">{{ $currentSession['device'] }}</b>
+                        <span style="font-size:12.5px;color:var(--ink-soft);">{{ $currentSession['browser'] }} · IP {{ $currentSession['ip'] }} · Active now</span>
+                    </div>
+                    <span class="tag tag-green">This device</span>
+                </div>
+            @endif
             @if ($sessions->isEmpty())
                 <p class="empty-state">No other active sessions.</p>
             @else
@@ -94,7 +128,7 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="6" y1="10" x2="10" y2="10"></line></svg>
                         </div>
                         <div style="flex:1;min-width:0;">
-                            <b style="display:block;font-size:14px;color:var(--coffee-900);">{{ $session['device'] }}</b>
+                            <b style="display:block;font-size:14px;color:var(--coffee-900);">{{ $session['device'] }} · {{ $session['browser'] }}</b>
                             <span style="font-size:12.5px;color:var(--ink-soft);">IP {{ $session['ip'] }} · Active {{ $session['last_seen']->diffForHumans() }}</span>
                         </div>
                         <form method="POST" action="{{ route('account.sessions.destroy', ['session' => $session['id']]) }}" data-revoke-form>

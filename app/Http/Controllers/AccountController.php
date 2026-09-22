@@ -27,22 +27,30 @@ class AccountController extends Controller
 
         $currentSessionId = $request->session()->getId();
 
+        $parse = fn (object $row, bool $isCurrent): array => [
+            'id' => $row->id,
+            'ip' => $row->ip_address ?: 'Unknown',
+            'device' => $this->parseDevice($row->user_agent),
+            'browser' => $this->parseBrowser($row->user_agent),
+            'ua' => $row->user_agent,
+            'last_seen' => Carbon::createFromTimestamp($row->last_activity),
+            'is_current' => $isCurrent,
+        ];
+
+        $currentRow = DB::table('sessions')->where('id', $currentSessionId)->first();
+
         $sessions = DB::table('sessions')
             ->where('user_id', $user->id)
             ->where('id', '!=', $currentSessionId)
             ->orderByDesc('last_activity')
             ->limit(20)
             ->get()
-            ->map(fn (object $row): array => [
-                'id' => $row->id,
-                'ip' => $row->ip_address ?: 'Unknown',
-                'device' => $this->parseDevice($row->user_agent),
-                'last_seen' => Carbon::createFromTimestamp($row->last_activity),
-            ]);
+            ->map(fn (object $row): array => $parse($row, false));
 
         return view('account.index', [
             'user' => $user,
             'sessions' => $sessions,
+            'currentSession' => $currentRow ? $parse($currentRow, true) : null,
             'pendingSecret' => $pendingSecret,
             'currentSessionId' => $currentSessionId,
         ]);
@@ -211,16 +219,57 @@ class AccountController extends Controller
             return 'macOS';
         }
 
+        if (preg_match('/iPhone/', $userAgent)) {
+            return 'iPhone';
+        }
+
+        if (preg_match('/iPad/', $userAgent)) {
+            return 'iPad';
+        }
+
+        if (preg_match('/Android/', $userAgent)) {
+            return 'Android';
+        }
+
         if (preg_match('/Linux/', $userAgent)) {
             return 'Linux';
         }
 
-        if (preg_match('/iPhone|iPad/', $userAgent)) {
-            return 'iOS device';
+        return 'Browser';
+    }
+
+    private function parseBrowser(?string $userAgent): string
+    {
+        if (! $userAgent) {
+            return 'Unknown browser';
         }
 
-        if (preg_match('/Android/', $userAgent)) {
-            return 'Android device';
+        if (preg_match('/Edg\//', $userAgent)) {
+            return 'Microsoft Edge';
+        }
+
+        if (preg_match('/OPR\//', $userAgent)) {
+            return 'Opera';
+        }
+
+        if (preg_match('/SamsungBrowser/', $userAgent)) {
+            return 'Samsung Internet';
+        }
+
+        if (preg_match('/CriOS\//', $userAgent)) {
+            return 'Chrome (iOS)';
+        }
+
+        if (preg_match('/Chrome\//', $userAgent)) {
+            return 'Chrome';
+        }
+
+        if (preg_match('/Firefox\/|FxiOS\//', $userAgent)) {
+            return 'Firefox';
+        }
+
+        if (preg_match('/Safari\//', $userAgent) && ! preg_match('/Android/', $userAgent)) {
+            return 'Safari';
         }
 
         return 'Browser';
