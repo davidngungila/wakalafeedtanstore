@@ -251,8 +251,8 @@ class TransactionController extends Controller
                 $balance->save();
             }
 
-            if (in_array($transaction->type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'bank_to_wallet', 'wallet_to_bank'], true)) {
-                $direction = in_array($transaction->type, ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet'], true) ? -1 : 1;
+            if (in_array($transaction->type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'bank_to_wallet', 'wallet_to_bank', 'airtime'], true)) {
+                $direction = in_array($transaction->type, ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet', 'airtime'], true) ? -1 : 1;
                 if ($transaction->type === 'wallet_to_bank') {
                     $direction = -1;
                 }

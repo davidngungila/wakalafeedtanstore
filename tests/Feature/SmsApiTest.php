@@ -421,6 +421,51 @@ class SmsApiTest extends TestCase
         $this->assertSame($initialCash + 5_000, (float) $agent->cash_balance);
     }
 
+    public function test_halopesa_airtime_purchase_decreases_float_and_increases_cash(): void
+    {
+        $device = $this->makeDevice();
+        $agent = $this->cashPoint();
+
+        $network = Network::where('code', 'HALOPESA')->firstOrFail();
+
+        $balance = NetworkBalance::firstOrCreate(
+            ['agent_id' => $agent->id, 'network_id' => $network->id],
+            ['opening_balance' => 1_086_000, 'balance' => 1_086_000],
+        );
+
+        $initialFloat = (float) $balance->balance;
+        $initialCash = (float) $agent->cash_balance;
+
+        $response = $this->withHeaders($this->deviceHeaders($device))
+            ->postJson('/api/v1/sms/ingest', [
+                'sms' => [[
+                    'sender' => 'HaloPesa',
+                    'received_at' => '2026-09-22 14:04:03',
+                    'message' => 'HaloPesa
+IMEFANIKIWA!
+Tnx 6264506375080782. Umelipa 1,000 TZS kwa 0615301112 tarehe 22/09/2026 14:04:03. Ada: 0 TZS. Preview Commission: 50 TZS.
+Salio jipya: 1,085,000.00 TZS',
+                ]],
+            ])
+            ->assertOk();
+
+        $this->assertSame(1, $response->json('summary.received'));
+        $this->assertSame(1, $response->json('summary.processed'));
+
+        $txn = Transaction::firstOrFail();
+        $this->assertSame('airtime', $txn->type);
+        $this->assertSame(1_000.0, (float) $txn->amount);
+        $this->assertSame(50.0, (float) $txn->commission);
+        $this->assertSame('6264506375080782', $txn->provider_reference);
+        $this->assertSame('0615301112', $txn->customer_phone);
+
+        $balance->refresh();
+        $agent->refresh();
+
+        $this->assertSame($initialFloat - 1_000, (float) $balance->balance);
+        $this->assertSame($initialCash + 1_000, (float) $agent->cash_balance);
+    }
+
     public function test_mixx_customer_withdrawal_increases_float_and_decreases_cash(): void
     {
         $device = $this->makeDevice();
