@@ -74,6 +74,32 @@
             </div>
         </form>
     </div>
+
+    <div class="modal-backdrop" id="confirmCorrectionModal">
+        <div class="modal">
+            <div class="modal-head">
+                <h3>Confirm correction</h3>
+                <button class="modal-close" onclick="closeModal('confirmCorrectionModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13.5px;color:var(--ink-soft);margin-bottom:14px;">Are you sure you want to record this correction? It will be applied to the <b>Reconciliation #{{ $reconciliation->code }}</b> session.</p>
+                <div class="receipt">
+                    <div class="receipt-row"><span>Applies to</span><b id="cfmAppliesTo">—</b></div>
+                    <div class="receipt-row"><span>Correction type</span><b id="cfmType">—</b></div>
+                    <div class="receipt-row"><span>Reference</span><b id="cfmReference">—</b></div>
+                    <div class="receipt-row"><span>Amount</span><b id="cfmAmount">—</b></div>
+                    <div class="receipt-row"><span>Notes</span><b id="cfmNotes">—</b></div>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button type="button" class="btn btn-ghost" onclick="closeModal('confirmCorrectionModal')">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmCorrectionBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M20 6 9 17l-5-5"></path></svg>
+                    Yes, record correction
+                </button>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @section('scripts')
@@ -85,11 +111,40 @@
             if (v === 'float') document.getElementById('corrNetwork').setAttribute('required', 'required');
         }
 
-        document.querySelectorAll('[data-correction-form]').forEach(form => {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                submitForm(form, { method: 'POST', done: () => setTimeout(() => window.location.href = '{{ route('reconciliation.show', $reconciliation) }}', 600) });
-            });
+        function cfmSet(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value || '—';
+        }
+
+        const correctionForm = document.querySelector('[data-correction-form]');
+
+        correctionForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (!correctionForm.reportValidity()) return;
+
+            const scope = correctionForm.querySelector('[name="scope"]');
+            const network = correctionForm.querySelector('[name="network_id"]');
+            const type = correctionForm.querySelector('[name="type"]');
+            const ref = correctionForm.querySelector('[name="reference"]');
+            const amount = correctionForm.querySelector('[name="amount"]');
+            const notes = correctionForm.querySelector('[name="notes"]');
+
+            const appliesTo = scope.value === 'float'
+                ? (network.selectedOptions[0]?.textContent.trim() || 'Network Float')
+                : 'Cash in Till';
+
+            cfmSet('cfmAppliesTo', appliesTo);
+            cfmSet('cfmType', type.selectedOptions[0]?.textContent.trim());
+            cfmSet('cfmReference', ref.value.trim());
+            cfmSet('cfmAmount', 'TZS ' + Number(amount.value).toLocaleString('en-US', { maximumFractionDigits: 2 }));
+            cfmSet('cfmNotes', notes.value.trim());
+
+            openModal('confirmCorrectionModal');
+        });
+
+        document.getElementById('confirmCorrectionBtn').addEventListener('click', () => {
+            closeModal('confirmCorrectionModal');
+            submitForm(correctionForm, { method: 'POST', done: () => setTimeout(() => window.location.href = '{{ route('reconciliation.show', $reconciliation) }}', 600) });
         });
     </script>
 @endsection
