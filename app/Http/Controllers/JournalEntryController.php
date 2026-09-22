@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Account;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Services\TransactionJournalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,8 @@ class JournalEntryController extends Controller
 {
     public function index(Request $request): View
     {
+        app(TransactionJournalService::class)->ensureSynced();
+
         $status = $request->string('status', 'all')->toString();
 
         $entries = JournalEntry::query()

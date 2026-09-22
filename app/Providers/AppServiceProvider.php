@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\Transaction;
+use App\Observers\TransactionObserver;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\RateLimiter;
@@ -25,5 +27,7 @@ class AppServiceProvider extends ServiceProvider
         Blade::directive('money', fn (string $expression) => "<?php echo money($expression); ?>");
 
         RateLimiter::for('device-me', fn () => Limit::perMinute(30)->by(request()->ip() ?? 'unknown'));
+
+        Transaction::observe(TransactionObserver::class);
     }
 }

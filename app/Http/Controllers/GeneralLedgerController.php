@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Account;
 use App\Services\LedgerService;
+use App\Services\TransactionJournalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\View\View;
@@ -12,6 +13,8 @@ class GeneralLedgerController extends Controller
 {
     public function __invoke(Request $request, LedgerService $ledger): View
     {
+        app(TransactionJournalService::class)->ensureSynced();
+
         $accountId = $request->integer('account_id');
         $account = $accountId > 0 ? Account::find($accountId) : Account::query()->first();
 

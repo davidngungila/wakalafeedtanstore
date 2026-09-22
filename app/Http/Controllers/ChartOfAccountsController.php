@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Services\TransactionJournalService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,8 @@ class ChartOfAccountsController extends Controller
      */
     public function index(): View
     {
+        app(TransactionJournalService::class)->ensureSynced();
+
         $accounts = Account::query()
             ->withCount('journalLines')
             ->orderBy('code')

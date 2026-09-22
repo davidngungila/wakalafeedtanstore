@@ -7,6 +7,7 @@ use App\Models\Network;
 use App\Models\NetworkBalance;
 use App\Models\Reconciliation;
 use App\Models\Transaction;
+use App\Services\TransactionJournalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\View\View;
@@ -15,6 +16,8 @@ class ReportController extends Controller
 {
     public function __invoke(Request $request): View
     {
+        app(TransactionJournalService::class)->ensureSynced();
+
         $report = $request->input('report', 'daily');
 
         $agent = cash_point();

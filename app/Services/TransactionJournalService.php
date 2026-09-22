@@ -7,6 +7,7 @@ use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Network;
 use App\Models\Transaction;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -315,6 +316,153 @@ class TransactionJournalService
             'parent_id' => $parentId,
             'is_active' => true,
         ]);
+    }
+
+    /**
+     * Ensure finance is in sync — backfill any missing journals once per hour.
+     * Safe to call on every web request: uses cache gate and chunked backfill.
+     */
+    public function ensureSynced(): void
+    {
+        if (app()->runningInConsole()) {
+            return;
+        }
+
+        if (Cache::has('finance_backfill_done')) {
+            return;
+        }
+
+        // Only proceed if there are actually missing entries
+        $hasMissing = Transaction::where('status', 'completed')
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('journal_entries')
+                    ->whereColumn('journal_entries.reference', 'transactions.reference');
+            })
+            ->exists();
+
+        $hasMissingReversed = Transaction::where('status', 'reversed')
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('journal_entries')
+                    ->whereColumn('journal_entries.reference', 'transactions.reference')
+                    ->where('journal_entries.status', JournalEntry::STATUS_POSTED);
+            })
+            ->exists();
+
+        $hasOrphanReversed = Transaction::where('status', 'reversed')
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('journal_entries')
+                    ->whereColumn('journal_entries.reference', 'transactions.reference');
+            })
+            ->exists();
+
+        if (! $hasMissing && ! $hasMissingReversed && ! $hasOrphanReversed) {
+            Cache::put('finance_backfill_done', true, 3600);
+
+            return;
+        }
+
+        // Backfill a chunk at a time to avoid request timeout
+        $this->backfillMissing(500);
+
+        // If still missing after this chunk, keep cache short so next request continues
+        $stillMissing = Transaction::where('status', 'completed')
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('journal_entries')
+                    ->whereColumn('journal_entries.reference', 'transactions.reference');
+            })
+            ->exists();
+
+        if ($stillMissing || $hasMissingReversed || $hasOrphanReversed) {
+            Cache::put('finance_backfill_done', true, 300);
+        } else {
+            Cache::put('finance_backfill_done', true, 3600);
+        }
+    }
+
+    /**
+     * Backfill journal entries for existing transactions that have no entry yet.
+     *
+     * @return array{posted: int, reversed: int, skipped: int}
+     */
+    public function backfillMissing(?int $limit = null): array
+    {
+        $posted = 0;
+        $reversed = 0;
+        $skipped = 0;
+
+        $query = Transaction::with('network')->orderBy('id');
+
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+
+        $query->chunkById(200, function ($transactions) use (&$posted, &$reversed, &$skipped) {
+            foreach ($transactions as $txn) {
+                $existing = JournalEntry::where('reference', $txn->reference)->first();
+
+                if ($txn->status === 'completed') {
+                    if ($existing !== null) {
+                        $skipped++;
+
+                        continue;
+                    }
+
+                    $entry = $this->postForTransaction($txn);
+
+                    if ($entry !== null) {
+                        $posted++;
+                    } else {
+                        $skipped++;
+                    }
+                } elseif ($txn->status === 'reversed') {
+                    if ($existing === null) {
+                        // No original entry — post as completed then reverse to reflect net zero
+                        $original = $this->postForTransactionForBackfill($txn);
+
+                        if ($original !== null) {
+                            $posted++;
+                            $rev = $this->reverseForTransaction($txn, $txn->reversed_by);
+
+                            if ($rev !== null) {
+                                $reversed++;
+                            }
+                        } else {
+                            $skipped++;
+                        }
+                    } elseif ($existing->status === JournalEntry::STATUS_POSTED) {
+                        $rev = $this->reverseForTransaction($txn, $txn->reversed_by);
+
+                        if ($rev !== null) {
+                            $reversed++;
+                        } else {
+                            $skipped++;
+                        }
+                    } else {
+                        $skipped++;
+                    }
+                } else {
+                    $skipped++;
+                }
+            }
+        });
+
+        return compact('posted', 'reversed', 'skipped');
+    }
+
+    /**
+     * Helper for backfill of reversed transactions: post without status guard.
+     */
+    private function postForTransactionForBackfill(Transaction $transaction): ?JournalEntry
+    {
+        // Temporarily treat as completed for posting, then the caller will reverse
+        $clone = clone $transaction;
+        $clone->status = 'completed';
+
+        return $this->postForTransaction($clone);
     }
 
     /**

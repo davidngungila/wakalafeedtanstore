@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Network;
 use App\Models\Transaction;
+use App\Services\TransactionJournalService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,6 +28,8 @@ class FinanceController extends Controller
 
     public function __invoke(Request $request): View|RedirectResponse|StreamedResponse
     {
+        app(TransactionJournalService::class)->ensureSynced();
+
         if (cash_point() === null) {
             return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before viewing finance.');
         }

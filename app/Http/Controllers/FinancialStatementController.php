@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\LedgerService;
+use App\Services\TransactionJournalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\View\View;
@@ -11,6 +12,8 @@ class FinancialStatementController extends Controller
 {
     public function income(Request $request, LedgerService $ledger): View
     {
+        app(TransactionJournalService::class)->ensureSynced();
+
         [$from, $to] = $this->period($request);
 
         $statement = $ledger->incomeStatement($from, $to);
@@ -20,6 +23,8 @@ class FinancialStatementController extends Controller
 
     public function balance(Request $request, LedgerService $ledger): View
     {
+        app(TransactionJournalService::class)->ensureSynced();
+
         $asOf = $request->filled('as_of')
             ? Carbon::parse($request->string('as_of')->toString())
             : today();
