@@ -129,13 +129,15 @@
         </div>
     @endif
 
-    <div class="panel-grid">
-        <div class="panel">
-            <div class="panel-head">
-                <h3>Corrections</h3>
+    <div class="panel">
+        <div class="panel-head">
+            <h3>Corrections</h3>
+            <div style="display:flex;align-items:center;gap:12px;">
                 <span class="link">{{ $reconciliation->corrections->count() }} recorded</span>
+                <button type="button" class="btn btn-primary btn-sm" onclick="openModal('addCorrectionModal')">+ Add correction</button>
             </div>
-            <div class="panel-body">
+        </div>
+        <div class="panel-body">
                 @forelse ($reconciliation->corrections as $correction)
                     <div class="activity-row">
                         <div class="activity-ico" style="background:var(--terracotta-100);color:var(--terracotta-600);">
@@ -169,14 +171,18 @@
             </div>
         </div>
 
-        <div class="panel">
-            <div class="panel-head">
+        </div>
+
+    <div class="modal-backdrop" id="addCorrectionModal">
+        <div class="modal">
+            <div class="modal-head">
                 <h3>Add correction</h3>
-                <span class="link">Fix differences with a reference</span>
+                <span class="sub">Fix differences with a reference</span>
+                <button class="modal-close" onclick="closeModal('addCorrectionModal')">✕</button>
             </div>
-            <div class="panel-body">
-                <form method="POST" action="{{ route('reconciliation.corrections.store', $reconciliation) }}" data-correction-form>
-                    @csrf
+            <form method="POST" action="{{ route('reconciliation.corrections.store', $reconciliation) }}" data-correction-form>
+                @csrf
+                <div class="modal-body">
                     <div class="form-row">
                         <div class="field">
                             <label>Applies to</label>
@@ -217,11 +223,12 @@
                         <label>Notes (optional)</label>
                         <textarea name="notes" rows="2" maxlength="1000" placeholder="Additional details..."></textarea>
                     </div>
-                    <div class="modal-foot" style="padding:0;margin-top:16px;">
-                        <button type="submit" class="btn btn-primary">Record correction</button>
-                    </div>
-                </form>
-            </div>
+                </div>
+                <div class="modal-foot">
+                    <button type="button" class="btn btn-ghost" onclick="closeModal('addCorrectionModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Record correction</button>
+                </div>
+            </form>
         </div>
     </div>
 @endsection
