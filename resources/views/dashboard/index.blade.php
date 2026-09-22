@@ -3,6 +3,13 @@
 @section('title', 'Dashboard')
 
 @section('content')
+    <style>
+        .seg{display:flex;gap:6px;background:var(--sand-100);border:1px solid var(--line);border-radius:20px;padding:3px;}
+        .seg-btn{border:none;background:transparent;font-size:12px;font-weight:700;color:var(--ink-soft);padding:5px 13px;border-radius:16px;cursor:pointer;}
+        .seg-btn.is-active{background:var(--white);color:var(--terracotta-600);box-shadow:var(--shadow-sm);}
+        .chart-box{position:relative;height:250px;}
+    </style>
+
     <div class="view-head">
         <div>
             <h2>Dashboard</h2>
@@ -77,27 +84,14 @@
     <div class="panel-grid">
         <div class="panel">
             <div class="panel-head">
-                <h3>7-day transaction volume</h3>
-                <span class="link">TZS</span>
+                <h3>Transaction volume trend</h3>
+                <div class="seg" id="dashPeriod">
+                    <button type="button" class="seg-btn" data-period="7">7 days</button>
+                    <button type="button" class="seg-btn is-active" data-period="30">30 days</button>
+                </div>
             </div>
             <div class="panel-body">
-                <div class="bars">
-                    @foreach ($chart as $day)
-                        <div class="bar-col">
-                            <div class="bar-wrap">
-                                <div class="bar" style="height:{{ max(3, round($day['deposits'] / $chartMax * 100)) }}%;" title="Deposits @money($day['deposits'])"></div>
-                                <div class="bar bar-gold" style="height:{{ max(3, round($day['withdrawals'] / $chartMax * 100)) }}%;" title="Withdrawals @money($day['withdrawals'])"></div>
-                            </div>
-                            <div class="bar-label">{{ $day['label'] }}</div>
-                        </div>
-                    @endforeach
-                </div>
-                <div class="kpi-row">
-                    <div class="kpi-item"><b>@money($monthCommission)</b><span>Commission this month</span></div>
-                    <div class="kpi-item"><b>@money($monthFees)</b><span>Fees charged this month</span></div>
-                    <div class="kpi-item"><b>{{ $pendingCount }}</b><span>Pending transactions</span></div>
-                    <div class="kpi-item"><b>{{ $failedCount }}</b><span>Failed transactions</span></div>
-                </div>
+                <div class="chart-box"><canvas id="volumeChart"></canvas></div>
             </div>
         </div>
 
@@ -136,6 +130,77 @@
                         @endforeach
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Deposits vs withdrawals</h3>
+                <span class="link">TZS</span>
+            </div>
+            <div class="panel-body">
+                <div class="bars" id="bars-7" hidden>
+                    @foreach ($series7['deposits'] as $i => $d)
+                        <div class="bar-col">
+                            <div class="bar-wrap">
+                                <div class="bar" style="height:{{ max(3, round($d / $series7['chartMax'] * 100)) }}%;" title="Deposits @money($d)"></div>
+                                <div class="bar bar-gold" style="height:{{ max(3, round($series7['withdrawals'][$i] / $series7['chartMax'] * 100)) }}%;" title="Withdrawals @money($series7['withdrawals'][$i])"></div>
+                            </div>
+                            <div class="bar-label">{{ $series7['labels'][$i] }}</div>
+                        </div>
+                    @endforeach
+                </div>
+                <div class="bars" id="bars-30">
+                    @foreach ($series30['deposits'] as $i => $d)
+                        <div class="bar-col">
+                            <div class="bar-wrap">
+                                <div class="bar" style="height:{{ max(3, round($d / $series30['chartMax'] * 100)) }}%;" title="Deposits @money($d)"></div>
+                                <div class="bar bar-gold" style="height:{{ max(3, round($series30['withdrawals'][$i] / $series30['chartMax'] * 100)) }}%;" title="Withdrawals @money($series30['withdrawals'][$i])"></div>
+                            </div>
+                            <div class="bar-label">{{ $series30['labels'][$i] }}</div>
+                        </div>
+                    @endforeach
+                </div>
+                <div class="kpi-row">
+                    <div class="kpi-item"><b>@money($monthCommission)</b><span>Commission this month</span></div>
+                    <div class="kpi-item"><b>@money($monthFees)</b><span>Fees charged this month</span></div>
+                    <div class="kpi-item"><b>{{ $pendingCount }}</b><span>Pending transactions</span></div>
+                    <div class="kpi-item"><b>{{ $failedCount }}</b><span>Failed transactions</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Commission by network</h3>
+                <span class="link">Ranked</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="commissionChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Mobile-money float trend</h3>
+                <span class="link">Live</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="floatChart"></canvas></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Transaction status</h3>
+                <span class="link"></span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="statusChart"></canvas></div>
             </div>
         </div>
     </div>
@@ -237,6 +302,8 @@
 @endsection
 
 @section('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
     <script>
         @php
             $dashTxns = $recentTransactions->map(fn ($t) => [
@@ -288,5 +355,134 @@
                 ['Operator', t.operator || '{{ auth()->user()->name }}'],
             ];
         }, 'Transaction details');
+
+        @php
+            $commData = $commissionByNetwork->map(fn ($n) => [
+                'name' => $n->name,
+                'value' => (float) $n->completed_commission,
+                'color' => $n->color ?: '#A98968',
+            ])->values();
+        @endphp
+        const dashSeries = { 7: @json($series7), 30: @json($series30) };
+        const commData = @json($commData);
+        const statusKeys = ['completed', 'pending', 'failed', 'reversed'];
+        const statusColors = { completed: '#5E6E3F', pending: '#D4A24C', failed: '#B33A3A', reversed: '#7A5C42' };
+
+        const PALETTE = { volume: '#C2592B', volumeFill: 'rgba(194,89,43,.18)', float: '#5E6E3F', floatFill: 'rgba(94,110,63,.20)' };
+
+        let currentPeriod = 30;
+        let volumeChart, floatChart, statusChart, commissionChart;
+
+        function renderBars(period) {
+            document.getElementById('bars-7').hidden = period !== 7;
+            document.getElementById('bars-30').hidden = period !== 30;
+        }
+
+        function updateCharts() {
+            const s = dashSeries[currentPeriod];
+
+            volumeChart.data.labels = s.labels;
+            volumeChart.data.datasets[0].data = s.volume;
+            volumeChart.data.datasets[0].pointRadius = currentPeriod === 7 ? 3 : 0;
+
+            floatChart.data.labels = s.labels;
+            floatChart.data.datasets[0].data = s.float;
+            floatChart.data.datasets[0].pointRadius = currentPeriod === 7 ? 3 : 0;
+
+            statusChart.data.labels = s.labels;
+            statusKeys.forEach((k, i) => { statusChart.data.datasets[i].data = s.statuses[k]; });
+
+            volumeChart.update();
+            floatChart.update();
+            statusChart.update();
+            renderBars(currentPeriod);
+        }
+
+        function bindPeriodToggle() {
+            document.querySelectorAll('#dashPeriod .seg-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    currentPeriod = parseInt(btn.dataset.period, 10);
+                    document.querySelectorAll('#dashPeriod .seg-btn').forEach(b => b.classList.toggle('is-active', b === btn));
+                    updateCharts();
+                });
+            });
+        }
+
+        (function initDashCharts() {
+            if (typeof Chart === 'undefined') { return; }
+
+            const baseOpts = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#6B5A48', font: { size: 12 } } } },
+                scales: { x: { ticks: { color: '#7A5C42', font: { size: 10 } }, grid: { color: '#F0E7D6' } }, y: { ticks: { color: '#7A5C42', font: { size: 10 } }, grid: { color: '#F0E7D6' } } },
+            };
+
+            const s = dashSeries[currentPeriod];
+
+            volumeChart = new Chart(document.getElementById('volumeChart'), {
+                type: 'line',
+                data: {
+                    labels: s.labels,
+                    datasets: [{
+                        label: 'Transaction volume (TZS)',
+                        data: s.volume,
+                        borderColor: PALETTE.volume,
+                        backgroundColor: PALETTE.volumeFill,
+                        fill: true,
+                        tension: .4,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                    }],
+                },
+                options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+            });
+
+            floatChart = new Chart(document.getElementById('floatChart'), {
+                type: 'line',
+                data: {
+                    labels: s.labels,
+                    datasets: [{
+                        label: 'Available float (TZS)',
+                        data: s.float,
+                        borderColor: PALETTE.float,
+                        backgroundColor: PALETTE.floatFill,
+                        fill: true,
+                        tension: .4,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                    }],
+                },
+                options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+            });
+
+            statusChart = new Chart(document.getElementById('statusChart'), {
+                type: 'bar',
+                data: {
+                    labels: s.labels,
+                    datasets: statusKeys.map(k => ({ label: ucFirst(k), data: s.statuses[k], backgroundColor: statusColors[k] })),
+                },
+                options: { ...baseOpts, scales: { ...baseOpts.scales, x: { ...baseOpts.scales.x, stacked: true }, y: { ...baseOpts.scales.y, stacked: true, beginAtZero: true } } },
+            });
+
+            commissionChart = new Chart(document.getElementById('commissionChart'), {
+                type: 'bar',
+                data: {
+                    labels: commData.map(d => d.name),
+                    datasets: [{
+                        label: 'Commission (TZS)',
+                        data: commData.map(d => d.value),
+                        backgroundColor: commData.map(d => d.color),
+                        borderRadius: 6,
+                    }],
+                },
+                options: { ...baseOpts, indexAxis: 'y', scales: { ...baseOpts.scales, x: { ...baseOpts.scales.x, beginAtZero: true } } },
+            });
+
+            renderBars(currentPeriod);
+            bindPeriodToggle();
+        })();
+
+        function ucFirst(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
     </script>
 @endsection
