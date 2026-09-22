@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Account;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Transaction;
 use App\Services\TransactionJournalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,6 +38,43 @@ class JournalEntryController extends Controller
             ->get(['id', 'code', 'name', 'type', 'parent_id']);
 
         return view('finance.journal-entries', compact('entries', 'totals', 'accounts', 'status'));
+    }
+
+    public function show(JournalEntry $journalEntry): View
+    {
+        app(TransactionJournalService::class)->ensureSynced();
+
+        $journalEntry->load(['lines.account', 'creator', 'poster']);
+
+        $transaction = Transaction::with(['network', 'agent', 'operator'])
+            ->where('reference', $journalEntry->reference)
+            ->first();
+
+        // Find reversal entry if this entry was reversed, or original if this is a reversal
+        $reversal = null;
+        $original = null;
+
+        if ($journalEntry->status === JournalEntry::STATUS_REVERSED) {
+            $reversal = JournalEntry::with('lines.account')
+                ->where('description', 'like', 'Reversal of '.$journalEntry->reference.'%')
+                ->first();
+        }
+
+        if (str_starts_with($journalEntry->reference, 'RVS-')) {
+            // Try to extract original reference from description: "Reversal of TXN-... — ..."
+            if (preg_match('/Reversal of ([A-Z0-9\-]+)/', $journalEntry->description, $m)) {
+                $original = JournalEntry::with('lines.account')->where('reference', $m[1])->first();
+            }
+        }
+
+        // Also check if any entry reverses this one via lines (fallback)
+        if ($reversal === null && $journalEntry->status === JournalEntry::STATUS_REVERSED) {
+            $reversal = JournalEntry::where('reference', 'like', 'RVS-%')
+                ->where('description', 'like', '%'.$journalEntry->reference.'%')
+                ->first();
+        }
+
+        return view('finance.journal-entry-show', compact('journalEntry', 'transaction', 'reversal', 'original'));
     }
 
     public function store(Request $request): RedirectResponse

@@ -110,6 +110,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::get('/finance', FinanceController::class)->name('finance.index');
         Route::get('/finance/chart-of-accounts', [ChartOfAccountsController::class, 'index'])->name('finance.accounts.index');
         Route::get('/finance/journal-entries', [JournalEntryController::class, 'index'])->name('finance.journals.index');
+        Route::get('/finance/journal-entries/{journalEntry}', [JournalEntryController::class, 'show'])->name('finance.journals.show');
         Route::get('/finance/general-ledger', GeneralLedgerController::class)->name('finance.ledger.index');
         Route::get('/finance/statements/income', [FinancialStatementController::class, 'income'])->name('finance.statements.income');
         Route::get('/finance/statements/balance', [FinancialStatementController::class, 'balance'])->name('finance.statements.balance');

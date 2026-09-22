@@ -65,9 +65,9 @@
                 </thead>
                 <tbody>
                     @forelse ($entries as $entry)
-                        <tr>
+                        <tr class="row-click" style="cursor:pointer;" onclick="window.location='{{ route('finance.journals.show', $entry) }}'">
                             <td class="cell-title">{{ $entry->entry_date->format('d M Y') }}</td>
-                            <td class="cell-title">{{ $entry->reference }}</td>
+                            <td class="cell-title"><a href="{{ route('finance.journals.show', $entry) }}" onclick="event.stopPropagation()" style="color:var(--terracotta-600);text-decoration:none;font-weight:700;">{{ $entry->reference }}</a></td>
                             <td class="cell-sub">{{ Str::limit($entry->description, 55) }}</td>
                             <td>@money($entry->totalDebits())</td>
                             <td>@money($entry->totalCredits())</td>
@@ -75,8 +75,11 @@
                             <td class="cell-sub">{{ $entry->creator?->name ?? '—' }}</td>
                             <td>
                                 <div class="row-actions">
+                                    <a href="{{ route('finance.journals.show', $entry) }}" onclick="event.stopPropagation()" title="View details" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    </a>
                                     @if (is_admin() && $entry->status === 'draft')
-                                        <form method="POST" action="{{ route('finance.journals.post', $entry) }}" onsubmit="return confirm('Post {{ $entry->reference }}?')">
+                                        <form method="POST" action="{{ route('finance.journals.post', $entry) }}" onsubmit="return confirm('Post {{ $entry->reference }}?')" onclick="event.stopPropagation()">
                                             @csrf
                                             <button class="warn" title="Post">
                                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 14 2 2 4-4"></path><circle cx="12" cy="12" r="10"></circle></svg>
@@ -84,7 +87,7 @@
                                         </form>
                                     @endif
                                     @if (is_admin() && $entry->status === 'posted')
-                                        <form method="POST" action="{{ route('finance.journals.reverse', $entry) }}" onsubmit="return confirm('Reverse {{ $entry->reference }} with an offsetting entry?')">
+                                        <form method="POST" action="{{ route('finance.journals.reverse', $entry) }}" onsubmit="return confirm('Reverse {{ $entry->reference }} with an offsetting entry?')" onclick="event.stopPropagation()">
                                             @csrf
                                             <button class="danger" title="Reverse">
                                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
