@@ -46,7 +46,7 @@ if (! function_exists('status_badge')) {
     function status_badge(string $status): string
     {
         return match (strtolower($status)) {
-            'completed', 'active', 'reconciled', 'success' => 'tag-green',
+            'completed', 'active', 'reconciled', 'resolved', 'success' => 'tag-green',
             'pending', 'open', 'silver' => 'tag-gold',
             'failed', 'suspended', 'variance' => 'tag-red',
             'reversed', 'inactive', 'draft' => 'tag-grey',

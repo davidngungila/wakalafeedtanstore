@@ -35,6 +35,11 @@
             <div class="stat-value">@money($totals['varianceAmount'])</div>
             <div class="stat-label">Open variance amount</div>
         </div>
+        <div class="stat-card" style="--stat-tint:var(--acacia-100);--stat-fg:var(--acacia-600);">
+            <div class="stat-top"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-11-7.4"></path><path d="M20 3v6h-6"></path></svg></div></div>
+            <div class="stat-value">{{ $totals['resolved'] }}</div>
+            <div class="stat-label">Resolved via corrections</div>
+        </div>
     </div>
 
     <div class="table-card">
@@ -49,11 +54,13 @@
                         <th>Float variance</th>
                         <th>Status</th>
                         <th>By</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody id="reconRows">
                     @forelse ($records as $record)
-                        <tr data-date="{{ $record->reconciliation_date }}"
+                        <tr data-id="{{ $record->id }}"
+                            data-date="{{ $record->reconciliation_date }}"
                             data-code="{{ $record->code }}"
                             data-expected="{{ $record->expected_cash }}"
                             data-counted="{{ $record->counted_cash }}"
@@ -84,9 +91,17 @@
                             </td>
                             <td><span class="tag {{ status_badge($record->status) }}">{{ ucfirst($record->status) }}</span></td>
                             <td class="cell-sub">{{ $record->reconciler?->name ?? '—' }}</td>
+                            <td>
+                                <div class="row-actions">
+                                    <button onclick="window.location='{{ route('reconciliation.show', $record) }}'" title="More details" style="width:auto;padding:0 12px;gap:6px;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"></path></svg>
+                                        <span>More</span>
+                                    </button>
+                                </div>
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="empty-state"><h4>No reconciliations yet</h4><p>Run your first end-of-day reconciliation.</p></td></tr>
+                        <tr><td colspan="8" class="empty-state"><h4>No reconciliations yet</h4><p>Run your first end-of-day reconciliation.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -123,7 +138,11 @@
                 ['Reconciled by', tr.dataset.reconciler || '—'],
                 ['Notes', tr.dataset.notes || '—'],
             ];
-        }, 'Reconciliation session');
+        }, tr => 'Reconciliation #' + tr.dataset.code, tr => [{
+            label: 'More details',
+            class: 'btn-primary',
+            action: () => window.location = '{{ route('reconciliation.show', ':id') }}'.replace(':id', tr.dataset.id),
+        }]);
 
         document.querySelectorAll('[data-recon-form]').forEach(form => {
             form.addEventListener('submit', (e) => {

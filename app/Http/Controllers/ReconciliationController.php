@@ -6,10 +6,12 @@ use App\Models\Agent;
 use App\Models\Network;
 use App\Models\NetworkBalance;
 use App\Models\Reconciliation;
+use App\Models\ReconciliationCorrection;
 use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class ReconciliationController extends Controller
@@ -22,6 +24,7 @@ class ReconciliationController extends Controller
             'reconciled' => Reconciliation::where('status', 'reconciled')->count(),
             'open' => Reconciliation::where('status', 'open')->count(),
             'variance' => Reconciliation::where('status', 'variance')->count(),
+            'resolved' => Reconciliation::where('status', 'resolved')->count(),
             'varianceAmount' => (float) Reconciliation::where('status', 'variance')->sum('cash_variance'),
         ];
 
@@ -176,6 +179,135 @@ class ReconciliationController extends Controller
         }
 
         return back()->with('status', 'Reconciliation saved.');
+    }
+
+    public function show(Reconciliation $reconciliation): View
+    {
+        $reconciliation->load(['agent', 'reconciler', 'corrections.network', 'corrections.creator']);
+
+        $channels = $this->settledChannels($reconciliation);
+
+        $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
+
+        return view('reconciliation.show', compact('reconciliation', 'channels', 'networks'));
+    }
+
+    public function storeCorrection(Request $request, Reconciliation $reconciliation): RedirectResponse
+    {
+        $validated = $request->validate([
+            'scope' => ['required', 'in:cash,float'],
+            'network_id' => ['nullable', 'required_if:scope,float', 'exists:networks,id'],
+            'type' => ['required', Rule::in(array_keys(ReconciliationCorrection::types()))],
+            'reference' => ['required', 'string', 'max:120'],
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $correction = $reconciliation->corrections()->create([
+            'scope' => $validated['scope'],
+            'network_id' => $validated['scope'] === 'float' ? $validated['network_id'] : null,
+            'type' => $validated['type'],
+            'reference' => $validated['reference'],
+            'amount' => $validated['amount'],
+            'notes' => $validated['notes'] ?? null,
+            'created_by' => auth()->id(),
+        ]);
+
+        $this->recomputeStatus($reconciliation);
+
+        $this->recordAudit('Reconciliation correction recorded', 'Reconciliation', $reconciliation->id, [
+            'type' => $correction->typeLabel(),
+            'reference' => $correction->reference,
+            'amount' => $correction->amount,
+            'status' => $reconciliation->fresh()->status,
+        ]);
+
+        return back()->with('status', 'Correction recorded.');
+    }
+
+    public function destroyCorrection(Reconciliation $reconciliation, ReconciliationCorrection $correction): RedirectResponse
+    {
+        $correction->delete();
+
+        $this->recomputeStatus($reconciliation);
+
+        $this->recordAudit('Reconciliation correction removed', 'Reconciliation', $reconciliation->id, [
+            'reference' => $correction->reference,
+            'status' => $reconciliation->fresh()->status,
+        ]);
+
+        return back()->with('status', 'Correction removed.');
+    }
+
+    /**
+     * Per-channel settlement view: raw variance, settled by corrections, remaining.
+     *
+     * @return array<string, array{
+     *     label: string,
+     *     system: float,
+     *     counted: float,
+     *     variance: float,
+     *     settled: float,
+     *     remaining: float
+     * }>
+     */
+    private function settledChannels(Reconciliation $reconciliation): array
+    {
+        $corrections = $reconciliation->corrections;
+
+        $channels = [
+            'cash' => [
+                'label' => 'Cash in Till',
+                'system' => (float) $reconciliation->expected_cash,
+                'counted' => (float) $reconciliation->counted_cash,
+                'variance' => (float) $reconciliation->cash_variance,
+            ],
+        ];
+
+        foreach (($reconciliation->network_balances ?? []) as $balance) {
+            $name = $balance['network'] ?? 'Network';
+            $system = (float) ($balance['system'] ?? 0);
+            $counted = (float) ($balance['counted'] ?? 0);
+            $channels['float.'.$name] = [
+                'label' => $name.' Float',
+                'system' => $system,
+                'counted' => $counted,
+                'variance' => $counted - $system,
+            ];
+        }
+
+        foreach ($channels as $key => $channel) {
+            $sum = 0.0;
+
+            if ($key === 'cash') {
+                $sum = (float) $corrections->where('scope', 'cash')->sum(fn (ReconciliationCorrection $c) => $c->signedAmount());
+            } else {
+                $networkName = substr($key, 6);
+                $sum = (float) $corrections
+                    ->where('scope', 'float')
+                    ->filter(fn (ReconciliationCorrection $c) => $c->network?->name === $networkName)
+                    ->sum(fn (ReconciliationCorrection $c) => $c->signedAmount());
+            }
+
+            $channels[$key]['settled'] = round($sum, 2);
+            $channels[$key]['remaining'] = round($channel['variance'] - $sum, 2);
+        }
+
+        return $channels;
+    }
+
+    private function recomputeStatus(Reconciliation $reconciliation): void
+    {
+        $channels = $this->settledChannels($reconciliation);
+
+        $anyVariance = collect($channels)->contains(fn (array $c) => abs($c['variance']) > 0.005);
+        $allResolved = collect($channels)->every(fn (array $c) => abs($c['remaining']) < 0.005);
+
+        $status = ! $anyVariance ? 'reconciled' : ($allResolved ? 'resolved' : 'variance');
+
+        if ($reconciliation->status !== $status) {
+            $reconciliation->update(['status' => $status]);
+        }
     }
 
     private function previousClosingCash(Agent $agent, string $date): float

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'agent_id',
@@ -50,5 +51,21 @@ class Reconciliation extends Model
     public function reconciler(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reconciled_by');
+    }
+
+    /**
+     * @return HasMany<ReconciliationCorrection, $this>
+     */
+    public function corrections(): HasMany
+    {
+        return $this->hasMany(ReconciliationCorrection::class);
+    }
+
+    /**
+     * Display code for the session (no dedicated column exists).
+     */
+    public function getCodeAttribute(): string
+    {
+        return 'RC-'.str_pad((string) $this->getKey(), 4, '0', STR_PAD_LEFT);
     }
 }
