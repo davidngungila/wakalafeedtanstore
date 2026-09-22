@@ -21,7 +21,7 @@
         </div>
     @endif
 
-    <div class="panel" style="max-width:720px;">
+    <div class="panel">
         <div class="panel-head">
             <h3>Record a correction</h3>
             <span class="link">Reconciliation #{{ $reconciliation->code }}</span>
@@ -46,28 +46,26 @@
                             @endforeach
                         </select>
                     </div>
-                </div>
-                <div class="field">
-                    <label>Correction type</label>
-                    <select name="type" required>
-                        @foreach (\App\Models\ReconciliationCorrection::types() as $value => $label)
-                            <option value="{{ $value }}">{{ $label }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="form-row">
+                    <div class="field" style="grid-column:1 / -1;">
+                        <label>Correction type</label>
+                        <select name="type" required>
+                            @foreach (\App\Models\ReconciliationCorrection::types() as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="field">
                         <label>Reference <span style="font-weight:400;color:var(--ink-soft);font-size:12px;">(transaction / customer / reason)</span></label>
                         <input type="text" name="reference" maxlength="120" placeholder="e.g. TXN-88213 or customer name" value="{{ old('reference') }}" required>
                     </div>
                     <div class="field">
                         <label>Amount (TZS)</label>
-                        <input type="number" name="amount" min="0.01" step="0.01" value="{{ old('amount') }}" required>
+                        <input type="number" name="amount" min="0.01" step="0.01" value="{{ old('amount') }}" placeholder="0.00" required>
                     </div>
-                </div>
-                <div class="field">
-                    <label>Notes (optional)</label>
-                    <textarea name="notes" rows="2" maxlength="1000" placeholder="Additional details...">{{ old('notes') }}</textarea>
+                    <div class="field" style="grid-column:1 / -1;">
+                        <label>Notes (optional)</label>
+                        <textarea name="notes" rows="3" maxlength="1000" placeholder="Additional details...">{{ old('notes') }}</textarea>
+                    </div>
                 </div>
             </div>
             <div class="modal-foot">
