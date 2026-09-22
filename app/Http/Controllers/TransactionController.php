@@ -7,6 +7,7 @@ use App\Models\Network;
 use App\Models\NetworkBalance;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
+use App\Services\TransactionJournalService;
 use App\Services\TransactionService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Dompdf\Dompdf;
@@ -18,7 +19,10 @@ use Illuminate\View\View;
 
 class TransactionController extends Controller
 {
-    public function __construct(private readonly TransactionService $transactions) {}
+    public function __construct(
+        private readonly TransactionService $transactions,
+        private readonly TransactionJournalService $journals = new TransactionJournalService,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -274,6 +278,8 @@ class TransactionController extends Controller
                 'reversed_at' => now(),
                 'reversal_reason' => $validated['reason'] ?? '',
             ]);
+
+            $this->journals->reverseForTransaction($transaction, auth()->id());
         });
 
         $this->recordAudit('Transaction reversed', 'Transaction', $transaction->id, [

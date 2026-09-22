@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 class TransactionService
 {
+    public function __construct(private readonly TransactionJournalService $journals = new TransactionJournalService) {}
+
     /**
      * Create a transaction and apply the float/cash adjustments.
      *
@@ -97,6 +99,9 @@ class TransactionService
             if ($dailyOpening !== null) {
                 $dailyOpening->addTransactionVolume((float) $txn->amount, (float) $txn->commission);
             }
+
+            $txn->load('network');
+            $this->journals->postForTransaction($txn);
 
             return $txn;
         });

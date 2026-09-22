@@ -8,6 +8,11 @@
         .seg-btn{border:none;background:transparent;font-size:12px;font-weight:700;color:var(--ink-soft);padding:5px 13px;border-radius:16px;cursor:pointer;}
         .seg-btn.is-active{background:var(--white);color:var(--terracotta-600);box-shadow:var(--shadow-sm);}
         .chart-box{position:relative;height:250px;}
+        .heatmap-wrap{display:flex;flex-direction:column;gap:8px;}
+        .heatmap-head,.heatmap-row{display:grid;grid-template-columns:170px repeat(6,1fr);gap:6px;align-items:center;}
+        .heatmap-block-label{font-size:10.5px;color:var(--ink-soft);font-weight:700;text-align:center;text-transform:uppercase;}
+        .heatmap-net{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--coffee-900);white-space:nowrap;overflow:hidden;}
+        .heatmap-cell{height:26px;border-radius:6px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;background:var(--sand-100);}
     </style>
 
     <div class="view-head">
@@ -208,6 +213,136 @@
     <div class="panel-grid">
         <div class="panel">
             <div class="panel-head">
+                <h3>Transaction count by network</h3>
+                <span class="link">Count</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="countChart"></canvas></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Hourly transaction activity</h3>
+                <span class="link">Last 30 days</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="hourlyChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Average transaction value</h3>
+                <span class="link">TZS</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="avgChart"></canvas></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Cash at till trend</h3>
+                <span class="link">Live</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="cashChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Float distribution</h3>
+                <span class="link">Now</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="floatDonutChart"></canvas></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Fees vs commission</h3>
+                <span class="link">TZS</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="feesCommChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Reconciliation variance</h3>
+                <span class="link">Last 14</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="reconChart"></canvas></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Daily net cash flow</h3>
+                <span class="link">Today</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="waterfallChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Network performance matrix</h3>
+                <span class="link">7 days</span>
+            </div>
+            <div class="panel-body">
+                <div class="heatmap-wrap">
+                    <div class="heatmap-head">
+                        <span></span>
+                        @foreach ($networkMatrix['blocks'] as $block)
+                            <span class="heatmap-block-label">{{ $block }}</span>
+                        @endforeach
+                    </div>
+                    @php
+                        $matrixMax = collect($networkMatrix['rows'])->map(fn ($r) => max($r['cells']))->max() ?: 1;
+                    @endphp
+                    @foreach ($networkMatrix['rows'] as $row)
+                        <div class="heatmap-row">
+                            <span class="heatmap-net">
+                                <span class="net-dot" style="background:{{ $row['color'] }};"></span>{{ $row['name'] }}
+                            </span>
+                            @foreach ($row['cells'] as $count)
+                                <span class="heatmap-cell" @if($count > 0) title="{{ $count }} txn" @endif style="@if($count > 0) background:{{ $row['color'] }};opacity:{{ max(.25, $count / $matrixMax) }};color:#fff; @endif">{{ $count > 0 ? $count : '' }}</span>
+                            @endforeach
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Transaction value distribution</h3>
+                <span class="link">Histogram</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box"><canvas id="distChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-grid">
+        <div class="panel">
+            <div class="panel-head">
                 <h3>Recent transactions</h3>
                 <a href="{{ route('transactions.index') }}" class="link">View all</a>
             </div>
@@ -362,16 +497,35 @@
                 'value' => (float) $n->completed_commission,
                 'color' => $n->color ?: '#A98968',
             ])->values();
+            $countData = $countByNetwork->map(fn ($n) => [
+                'name' => $n->name,
+                'value' => (int) $n->completed_count,
+                'color' => $n->color ?: '#A98968',
+            ])->values();
+            $floatDonutData = $networkBalances->map(fn ($n) => [
+                'name' => $n['name'],
+                'value' => (float) $n['balance'],
+                'color' => $n['color'] ?: '#A98968',
+            ])->values();
+            $reconLabels = $reconVariance->map(fn ($r) => \Illuminate\Support\Carbon::parse($r->reconciliation_date)->format('d M'))->values();
+            $reconValues = $reconVariance->map(fn ($r) => (float) $r->cash_variance)->values();
         @endphp
         const dashSeries = { 7: @json($series7), 30: @json($series30) };
         const commData = @json($commData);
+        const countData = @json($countData);
+        const hourlyCounts = @json($hourlyCounts);
+        const floatDonutData = @json($floatDonutData);
+        const reconLabels = @json($reconLabels);
+        const reconValues = @json($reconValues);
+        const cashFlowData = @json($cashFlow);
+        const distData = @json($valueDistribution);
         const statusKeys = ['completed', 'pending', 'failed', 'reversed'];
         const statusColors = { completed: '#5E6E3F', pending: '#D4A24C', failed: '#B33A3A', reversed: '#7A5C42' };
 
-        const PALETTE = { volume: '#C2592B', volumeFill: 'rgba(194,89,43,.18)', float: '#5E6E3F', floatFill: 'rgba(94,110,63,.20)' };
+        const PALETTE = { volume: '#C2592B', volumeFill: 'rgba(194,89,43,.18)', float: '#5E6E3F', floatFill: 'rgba(94,110,63,.20)', cash: '#7A5C42', cashFill: 'rgba(122,92,66,.18)', avg: '#8a6418', fees: '#B33A3A', commission: '#5E6E3F' };
 
         let currentPeriod = 30;
-        let volumeChart, floatChart, statusChart, commissionChart;
+        let volumeChart, floatChart, statusChart, commissionChart, countChart, hourlyChart, avgChart, cashChart, floatDonutChart, feesCommChart, reconChart, waterfallChart, distChart;
 
         function renderBars(period) {
             document.getElementById('bars-7').hidden = period !== 7;
@@ -391,6 +545,15 @@
 
             statusChart.data.labels = s.labels;
             statusKeys.forEach((k, i) => { statusChart.data.datasets[i].data = s.statuses[k]; });
+
+            if (avgChart) { avgChart.data.labels = s.labels; avgChart.data.datasets[0].data = s.avgValue; avgChart.update(); }
+            if (cashChart) { cashChart.data.labels = s.labels; cashChart.data.datasets[0].data = s.cash; cashChart.update(); }
+            if (feesCommChart) {
+                feesCommChart.data.labels = s.labels;
+                feesCommChart.data.datasets[0].data = s.fees;
+                feesCommChart.data.datasets[1].data = s.commission;
+                feesCommChart.update();
+            }
 
             volumeChart.update();
             floatChart.update();
@@ -478,6 +641,99 @@
                 },
                 options: { ...baseOpts, indexAxis: 'y', scales: { ...baseOpts.scales, x: { ...baseOpts.scales.x, beginAtZero: true } } },
             });
+
+            const countEl = document.getElementById('countChart');
+            if (countEl) {
+                countChart = new Chart(countEl, {
+                    type: 'bar',
+                    data: {
+                        labels: countData.map(d => d.name),
+                        datasets: [{ label: 'Transactions', data: countData.map(d => d.value), backgroundColor: countData.map(d => d.color), borderRadius: 6 }],
+                    },
+                    options: { ...baseOpts, indexAxis: 'y', scales: { ...baseOpts.scales, x: { ...baseOpts.scales.x, beginAtZero: true } } },
+                });
+            }
+
+            const hourlyEl = document.getElementById('hourlyChart');
+            if (hourlyEl) {
+                hourlyChart = new Chart(hourlyEl, {
+                    type: 'bar',
+                    data: {
+                        labels: Array.from({length:24}, (_,i)=> String(i).padStart(2,'0')+':00'),
+                        datasets: [{ label: 'Transactions', data: hourlyCounts, backgroundColor: '#C2592B', borderRadius: 4 }],
+                    },
+                    options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+                });
+            }
+
+            const avgEl = document.getElementById('avgChart');
+            if (avgEl) {
+                avgChart = new Chart(avgEl, {
+                    type: 'line',
+                    data: { labels: s.labels, datasets: [{ label: 'Avg value (TZS)', data: s.avgValue, borderColor: PALETTE.avg, backgroundColor: 'rgba(138,100,24,.15)', fill: true, tension: .4, pointRadius: 0, borderWidth: 2 }] },
+                    options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+                });
+            }
+
+            const cashEl = document.getElementById('cashChart');
+            if (cashEl) {
+                cashChart = new Chart(cashEl, {
+                    type: 'line',
+                    data: { labels: s.labels, datasets: [{ label: 'Cash at till (TZS)', data: s.cash, borderColor: PALETTE.cash, backgroundColor: PALETTE.cashFill, fill: true, tension: .4, pointRadius: 0, borderWidth: 2 }] },
+                    options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+                });
+            }
+
+            const floatDonutEl = document.getElementById('floatDonutChart');
+            if (floatDonutEl) {
+                floatDonutChart = new Chart(floatDonutEl, {
+                    type: 'doughnut',
+                    data: { labels: floatDonutData.map(d=>d.name), datasets: [{ data: floatDonutData.map(d=>d.value), backgroundColor: floatDonutData.map(d=>d.color), borderWidth: 2, borderColor: '#fff' }] },
+                    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ color:'#6B5A48', font:{size:11}, padding:14 } } } },
+                });
+            }
+
+            const feesEl = document.getElementById('feesCommChart');
+            if (feesEl) {
+                feesCommChart = new Chart(feesEl, {
+                    type: 'bar',
+                    data: { labels: s.labels, datasets: [
+                        { label: 'Fees', data: s.fees, backgroundColor: PALETTE.fees },
+                        { label: 'Commission', data: s.commission, backgroundColor: PALETTE.commission },
+                    ]},
+                    options: { ...baseOpts, scales: { ...baseOpts.scales, x: { ...baseOpts.scales.x, stacked: false }, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+                });
+            }
+
+            const reconEl = document.getElementById('reconChart');
+            if (reconEl) {
+                reconChart = new Chart(reconEl, {
+                    type: 'bar',
+                    data: { labels: reconLabels, datasets: [{ label: 'Cash variance (TZS)', data: reconValues, backgroundColor: reconValues.map(v=> v>=0 ? '#5E6E3F' : '#B33A3A'), borderRadius: 4 }] },
+                    options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, beginAtZero: false } } },
+                });
+            }
+
+            const waterfallEl = document.getElementById('waterfallChart');
+            if (waterfallEl && cashFlowData) {
+                waterfallChart = new Chart(waterfallEl, {
+                    type: 'bar',
+                    data: {
+                        labels: cashFlowData.labels,
+                        datasets: [{ label: 'TZS', data: cashFlowData.tops.map((top,i)=> [cashFlowData.bases[i], top]), backgroundColor: cashFlowData.colors, borderRadius: 6, borderSkipped:false }],
+                    },
+                    options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+                });
+            }
+
+            const distEl = document.getElementById('distChart');
+            if (distEl && distData) {
+                distChart = new Chart(distEl, {
+                    type: 'bar',
+                    data: { labels: distData.labels, datasets: [{ label: 'Transactions', data: distData.values, backgroundColor: '#7A5C42', borderRadius: 4 }] },
+                    options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+                });
+            }
 
             renderBars(currentPeriod);
             bindPeriodToggle();
