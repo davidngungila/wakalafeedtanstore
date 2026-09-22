@@ -257,10 +257,10 @@
                             @csrf
                             <button class="btn btn-primary">Approve &amp; activate</button>
                         </form>
-                    @elseif ($device->status === 'suspended')
-                        <form method="POST" action="{{ route('devices.approve', $device) }}" onsubmit="return confirm('Reactivate this suspended device?')">
+                    @elseif (in_array($device->status, ['suspended', 'blocked', 'revoked'], true))
+                        <form method="POST" action="{{ route('devices.approve', $device) }}" onsubmit="return confirm('Reconnect this device? It will be activated again.')">
                             @csrf
-                            <button class="btn btn-primary">Re-activate</button>
+                            <button class="btn btn-primary">Reconnect</button>
                         </form>
                     @endif
                     @if (is_admin())

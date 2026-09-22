@@ -239,7 +239,15 @@
             if ((isAdmin || isSupervisor) && status === 'pending') {
                 actions.push({
                     label: 'Approve & activate',
-                    action: () => approveDevice(deviceId, tr.dataset.approveRoute),
+                    action: () => approveDevice(deviceId, tr.dataset.approveRoute, 'Approve and activate this device?', 'Device approved and activated.'),
+                    class: 'btn-primary'
+                });
+            }
+
+            if ((isAdmin || isSupervisor) && ['suspended', 'blocked', 'revoked'].includes(status)) {
+                actions.push({
+                    label: 'Reconnect',
+                    action: () => approveDevice(deviceId, tr.dataset.approveRoute, 'Reconnect this device? It will be activated again.', 'Device reconnected and activated.'),
                     class: 'btn-primary'
                 });
             }
@@ -301,8 +309,8 @@
             showRegenerateCodeModal(deviceId);
         }
 
-        async function approveDevice(deviceId, route) {
-            if (!confirm('Approve and activate this device?')) return;
+        async function approveDevice(deviceId, route, confirmText, successText) {
+            if (!confirm(confirmText)) return;
 
             try {
                 const response = await fetch(route, {
@@ -317,7 +325,7 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    toast('Device approved and activated.', 'success');
+                    toast(successText, 'success');
                     closeModal('rowDetailsModal');
                     setTimeout(() => location.reload(), 500);
                 } else {

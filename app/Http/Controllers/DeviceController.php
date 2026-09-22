@@ -371,10 +371,6 @@ class DeviceController extends Controller
 
     public function approve(Request $request, Device $device): JsonResponse|RedirectResponse
     {
-        if (in_array($device->status, ['blocked', 'revoked'], true)) {
-            return response()->json(['success' => false, 'message' => 'Blocked or revoked devices cannot be re-activated.'], 422);
-        }
-
         $device->approve();
 
         $this->recordAudit('Device approved', 'Device', $device->id, ['status' => 'active']);

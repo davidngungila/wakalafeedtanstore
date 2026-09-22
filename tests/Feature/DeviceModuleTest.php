@@ -270,17 +270,33 @@ class DeviceModuleTest extends TestCase
             ->assertSee('Transaction of TZS 50000');
     }
 
-    public function test_blocked_or_revoked_devices_cannot_be_reactivated(): void
+    public function test_blocked_or_revoked_devices_can_be_reactivated(): void
     {
         $device = $this->makeDevice('revoked');
 
         $this->actingAs($this->admin())
             ->post(route('devices.approve', $device))
-            ->assertStatus(422);
+            ->assertRedirect();
 
         $this->assertDatabaseHas('devices', [
             'id' => $device->id,
-            'status' => 'revoked',
+            'status' => 'active',
+            'revoked_at' => null,
+        ]);
+    }
+
+    public function test_suspended_devices_can_be_reactivated(): void
+    {
+        $device = $this->makeDevice('suspended');
+
+        $this->actingAs($this->admin())
+            ->post(route('devices.approve', $device))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('devices', [
+            'id' => $device->id,
+            'status' => 'active',
+            'suspended_at' => null,
         ]);
     }
 
