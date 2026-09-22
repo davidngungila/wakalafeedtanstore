@@ -140,6 +140,18 @@
             }
         });
 
+        input.addEventListener('input', function () {
+            if (btn.disabled) return;
+            const complete = this.maxLength === 6
+                ? /^\d{6}$/.test(this.value)
+                : /^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){3}$/.test(this.value);
+            if (complete) {
+                btn.disabled = true;
+                btn.textContent = 'Verifying…';
+                plain.submit();
+            }
+        });
+
         plain.addEventListener('submit', function () {
             btn.disabled = true;
             btn.textContent = 'Verifying…';
