@@ -60,6 +60,7 @@
                 <tbody id="reconRows">
                     @forelse ($records as $record)
                         <tr data-id="{{ $record->id }}"
+                            data-key="{{ $record->getRouteKey() }}"
                             data-date="{{ $record->reconciliation_date }}"
                             data-code="{{ $record->code }}"
                             data-expected="{{ $record->expected_cash }}"
@@ -141,7 +142,7 @@
         }, tr => 'Reconciliation #' + tr.dataset.code, tr => [{
             label: 'More details',
             class: 'btn-primary',
-            action: () => window.location = '{{ route('reconciliation.show', ':id') }}'.replace(':id', tr.dataset.id),
+            action: () => window.location = '{{ route('reconciliation.show', ':key') }}'.replace(':key', tr.dataset.key),
         }]);
 
         document.querySelectorAll('[data-recon-form]').forEach(form => {
