@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Agent;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ProfileAccountTest extends TestCase
@@ -83,5 +85,26 @@ class ProfileAccountTest extends TestCase
             'name' => 'Renamed Agent',
             'phone' => '0712345679',
         ]);
+    }
+
+    public function test_profile_update_uploads_avatar(): void
+    {
+        $user = $this->user();
+
+        $this->actingAs($user)
+            ->put(route('profile.update'), [
+                'name' => $user->name,
+                'email' => $user->email,
+                'avatar' => UploadedFile::fake()->image('photo.png', 100, 100),
+            ], ['Accept' => 'application/json'])
+            ->assertJson(['success' => true]);
+
+        $this->assertNotNull($user->fresh()->profile_photo_path);
+
+        Storage::disk('public')->assertExists($user->fresh()->profile_photo_path);
+
+        $this->actingAs($user)
+            ->get($user->fresh()->avatarUrl())
+            ->assertOk();
     }
 }

@@ -13,24 +13,20 @@
     <div class="panel" style="margin-bottom:24px;">
         <div style="display:flex;align-items:center;gap:26px;padding:30px clamp(20px,4vw,36px);flex-wrap:wrap;">
             <div style="flex:none;">
-                <form method="POST" action="{{ route('profile.update') }}" data-avatar-form style="display:contents;">
-                    @csrf
-                    <input type="hidden" name="_method" value="PUT">
-                    <input type="file" name="avatar" id="avatarInput" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;">
-                    <button type="button" id="avatarButton" class="avatar-ring" title="Change photo" style="border:none;background:none;cursor:pointer;padding:0;border-radius:50%;position:relative;">
-                        <span id="avatarPreview" style="width:96px;height:96px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(155deg,var(--terracotta-600),var(--gold-500));color:#fff;font-weight:700;font-size:30px;border:4px solid var(--sand-50);box-shadow:var(--shadow-md);">
-                            @if ($user->avatarUrl())
-                                <img src="{{ $user->avatarUrl() }}" alt="{{ $user->name }}" style="width:100%;height:100%;object-fit:cover;">
-                            @else
-                                {{ strtoupper(substr($user->name, 0, 2)) }}
-                            @endif
-                        </span>
-                        <span class="avatar-hover">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-                            <span>Change</span>
-                        </span>
-                    </button>
-                </form>
+                <input type="file" name="avatar" id="avatarInput" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" form="profileForm">
+                <button type="button" id="avatarButton" class="avatar-ring" title="Change photo" style="border:none;background:none;cursor:pointer;padding:0;border-radius:50%;position:relative;">
+                    <span id="avatarPreview" style="width:96px;height:96px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(155deg,var(--terracotta-600),var(--gold-500));color:#fff;font-weight:700;font-size:30px;border:4px solid var(--sand-50);box-shadow:var(--shadow-md);">
+                        @if ($user->avatarUrl())
+                            <img src="{{ $user->avatarUrl() }}" alt="{{ $user->name }}" style="width:100%;height:100%;object-fit:cover;">
+                        @else
+                            {{ strtoupper(substr($user->name, 0, 2)) }}
+                        @endif
+                    </span>
+                    <span class="avatar-hover">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                        <span>Change</span>
+                    </span>
+                </button>
             </div>
             <div style="flex:1;min-width:240px;">
                 <h3 style="font-size:21px;margin:0 0 4px;">{{ $user->name }}</h3>
@@ -46,7 +42,7 @@
                 <p style="margin:0;color:var(--ink-soft);font-size:14px;">{{ $user->email }}</p>
             </div>
             <div style="text-align:right;flex:none;">
-                <button type="button" class="btn btn-ghost" style="padding:10px 18px;" onclick="location.href='{{ route('account.index') }}'">Manage security</button>
+                <a class="btn btn-ghost" href="{{ route('account.index') }}" style="padding:10px 18px;text-decoration:none;">Manage security</a>
             </div>
         </div>
     </div>
@@ -62,7 +58,7 @@
                 <h3>Profile information</h3>
             </div>
             <div class="panel-body">
-                <form method="POST" action="{{ route('profile.update') }}" data-profile-form enctype="multipart/form-data">
+                <form method="POST" action="{{ route('profile.update') }}" id="profileForm" data-profile-form enctype="multipart/form-data">
                     @csrf
                     <input type="hidden" name="_method" value="PUT">
                     <div class="field"><label>Full name</label><input type="text" name="name" value="{{ $user->name }}" required maxlength="120"></div>
@@ -164,17 +160,10 @@
             bars.forEach(b => { b.style.background = 'var(--sand-200)'; });
         }
 
-        document.querySelectorAll('[data-avatar-form]').forEach(form => {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                submitForm(form, { method: 'PUT', done: () => setTimeout(() => location.reload(), 600) });
-            });
-        });
-
         document.querySelectorAll('[data-profile-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                submitForm(form, { method: 'PUT', done: () => toast('Profile updated successfully.', 'success') });
+                submitForm(form, { method: 'PUT', done: () => setTimeout(() => location.reload(), 600) });
             });
         });
 
