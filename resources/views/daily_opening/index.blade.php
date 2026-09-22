@@ -8,6 +8,7 @@
             <h2>Daily Openings</h2>
             <p class="sub">History of daily opening and closing records.</p>
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Daily Openings'])
     </div>
 
     @if ($errors->any())

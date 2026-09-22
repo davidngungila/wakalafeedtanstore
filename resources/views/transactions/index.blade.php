@@ -143,6 +143,15 @@
                             <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
                             <td>
                                 <div class="row-actions">
+                                    @if($txn->is_unusual)
+                                        <button type="button" title="Unusual: {{ $txn->unusual_reason }}" onclick="clearUnusual({{ $txn->id }})" style="width:32px;height:32px;border-radius:8px;border:1.5px solid var(--danger);background:var(--danger-100);display:flex;align-items:center;justify-content:center;color:var(--danger);">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                        </button>
+                                    @else
+                                        <button type="button" title="Mark as unusual" onclick="openUnusualModal({{ $txn->id }}, '{{ addslashes($txn->reference) }}')" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                        </button>
+                                    @endif
                                     <a href="{{ route('transactions.receipt', $txn) }}" title="View receipt" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"></path></svg>
                                     </a>
@@ -173,6 +182,27 @@
             </div>
         </div>
     </div>
+
+    <!-- Mark unusual modal -->
+    <div class="modal-backdrop" id="unusualModal">
+        <div class="modal" style="max-width:440px;">
+            <div class="modal-head">
+                <h3>Mark as Unusual</h3>
+                <button class="modal-close" onclick="closeModal('unusualModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13.5px;color:var(--ink-soft);margin:0 0 12px;">Mark <strong id="unusualTxnRef"></strong> as unusual and provide a reason.</p>
+                <div class="field">
+                    <label>Reason</label>
+                    <textarea id="unusualReason" rows="3" placeholder="Why is this transaction unusual?" style="width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13.5px;font-family:inherit;resize:vertical;"></textarea>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="closeModal('unusualModal')">Cancel</button>
+                <button class="btn btn-danger" onclick="submitUnusual()">Mark Unusual</button>
+            </div>
+        </div>
+    </div>
     <style>
         /* Receipt as centered popup - overrides drawer transform */
         #receiptModal.show { display:flex !important; align-items:center; justify-content:center; }
@@ -198,6 +228,8 @@
                 'provider_reference' => $t->provider_reference,
                 'notes' => $t->notes,
                 'reversal_reason' => $t->reversal_reason,
+                'is_unusual' => $t->is_unusual,
+                'unusual_reason' => $t->unusual_reason,
                 'running_cash_balance' => $t->running_cash_balance !== null ? (float) $t->running_cash_balance : null,
                 'running_float_balance' => $t->running_float_balance !== null ? (float) $t->running_float_balance : null,
                 'network' => $t->network?->name,
@@ -332,5 +364,48 @@
                 ['Operator', t.operator || authUser],
             ];
         }, 'Transaction details');
+
+        let unusualTxnId = null;
+        function openUnusualModal(id, ref) {
+            unusualTxnId = id;
+            document.getElementById('unusualTxnRef').textContent = ref;
+            document.getElementById('unusualReason').value = '';
+            openModal('unusualModal');
+        }
+
+        async function submitUnusual() {
+            const reason = document.getElementById('unusualReason').value.trim();
+            if (!reason) { toast('Please provide a reason', 'error'); return; }
+            try {
+                const resp = await fetch('/transactions/' + unusualTxnId + '/mark-unusual', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                    body: JSON.stringify({ reason }),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data.success) {
+                    toast(data.message || 'Marked as unusual', 'success');
+                    setTimeout(() => location.reload(), 400);
+                } else {
+                    toast(data.message || 'Failed to mark unusual', 'error');
+                }
+            } catch (e) { toast('Network error', 'error'); }
+        }
+
+        async function clearUnusual(id) {
+            try {
+                const resp = await fetch('/transactions/' + id + '/unusual', {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data.success) {
+                    toast(data.message || 'Unusual flag cleared', 'success');
+                    setTimeout(() => location.reload(), 400);
+                } else {
+                    toast(data.message || 'Failed to clear flag', 'error');
+                }
+            } catch (e) { toast('Network error', 'error'); }
+        }
     </script>
 @endsection

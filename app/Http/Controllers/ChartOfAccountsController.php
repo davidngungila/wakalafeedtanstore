@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Services\ExportService;
 use App\Services\TransactionJournalService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -30,7 +31,51 @@ class ChartOfAccountsController extends Controller
 
         $totals = $accounts->groupBy('type')->map->count();
 
-        return view('finance.chart-of-accounts', compact('tree', 'accounts', 'totals'));
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('finance.accounts.export');
+
+        return view('finance.chart-of-accounts', compact('tree', 'accounts', 'totals', 'exportColumns', 'exportRoute'));
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
+
+        $rows = Account::orderBy('code')->get()
+            ->map(fn (Account $a) => [
+                'code' => $a->code,
+                'name' => $a->name,
+                'type' => ucfirst($a->type),
+                'parent' => $a->parent_id ? ($a->parent?->code ?? '—') : '—',
+                'description' => $a->description ?? '—',
+                'status' => $a->is_active ? 'Active' : 'Inactive',
+                'journal_lines' => $a->journalLines()->count(),
+            ])
+            ->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
+
+        $title = 'Chart of Accounts';
+        $subtitle = 'Generated '.now()->format('d M Y H:i').' — '.$rows->count().' accounts';
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $rows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $rows);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'code', 'label' => 'Code'],
+            ['key' => 'name', 'label' => 'Name'],
+            ['key' => 'type', 'label' => 'Type'],
+            ['key' => 'parent', 'label' => 'Parent'],
+            ['key' => 'description', 'label' => 'Description'],
+            ['key' => 'status', 'label' => 'Status'],
+            ['key' => 'journal_lines', 'label' => 'Journal Lines'],
+        ];
     }
 
     public function store(Request $request): RedirectResponse

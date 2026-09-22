@@ -11,6 +11,7 @@
         <div class="view-actions">
             <a href="{{ route('float.create') }}" class="btn btn-primary">+ New float / cash entry</a>
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Float Transactions'])
     </div>
 
     <div class="stat-grid">

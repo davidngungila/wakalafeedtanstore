@@ -152,6 +152,9 @@ class ReportController extends Controller
         $pendingCount = Transaction::where('status', 'pending')->count();
         $failedCount = Transaction::where('status', 'failed')->count();
 
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('reports.export');
+
         return view('reports.index', compact(
             'report',
             'daily',
@@ -182,7 +185,9 @@ class ReportController extends Controller
             'monthCommission',
             'monthFees',
             'pendingCount',
-            'failedCount'
+            'failedCount',
+            'exportColumns',
+            'exportRoute',
         ));
     }
 
@@ -340,5 +345,52 @@ class ReportController extends Controller
         });
 
         return compact('labels', 'values');
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
+
+        $agent = cash_point();
+        $agentId = $agent?->id;
+
+        $allTxns = Transaction::where('status', 'completed');
+        if ($agentId !== null) {
+            $allTxns->where('agent_id', $agentId);
+        }
+
+        $rows = Network::withCount(['transactions as txn_count' => fn ($q) => $q->where('status', 'completed')
+            ->when($agentId, fn ($q) => $q->where('agent_id', $agentId))])
+            ->get()
+            ->map(fn (Network $n) => [
+                'network' => $n->name,
+                'transactions' => $n->txn_count,
+                'volume' => money($n->transactions()->where('status', 'completed')->when($agentId, fn ($q) => $q->where('agent_id', $agentId))->sum('amount')),
+                'commission' => money($n->transactions()->where('status', 'completed')->when($agentId, fn ($q) => $q->where('agent_id', $agentId))->sum('commission')),
+                'fees' => money($n->transactions()->where('status', 'completed')->when($agentId, fn ($q) => $q->where('agent_id', $agentId))->sum('fee')),
+            ])
+            ->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
+
+        $title = 'Reports — Network Summary';
+        $subtitle = 'Generated '.now()->format('d M Y H:i').' — '.$rows->count().' networks';
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $rows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $rows);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'network', 'label' => 'Network'],
+            ['key' => 'transactions', 'label' => 'Transactions'],
+            ['key' => 'volume', 'label' => 'Volume'],
+            ['key' => 'commission', 'label' => 'Commission'],
+            ['key' => 'fees', 'label' => 'Fees'],
+        ];
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Network;
 use App\Models\Transaction;
+use App\Services\ExportService;
 use App\Services\TransactionJournalService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -68,8 +69,11 @@ class FinanceController extends Controller
             'breakdown',
             'byNetwork',
             'byType',
-            'settlement'
-        ));
+            'settlement',
+        ) + [
+            'exportColumns' => $this->exportColumns(),
+            'exportRoute' => route('finance.export'),
+        ]);
     }
 
     /**
@@ -274,5 +278,52 @@ class FinanceController extends Controller
 
             fclose($out);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    public function exportPdf(Request $request, ExportService $export)
+    {
+        $range = $request->string('range', 'month')->toString();
+        $tab = $request->string('tab', 'pnl')->toString();
+
+        $start = $this->startOf($range);
+        $completed = fn (Builder $query): Builder => $query->where('status', 'completed')
+            ->when($start !== null, fn (Builder $q): Builder => $q->where('created_at', '>=', $start));
+
+        $cards = $this->cards($completed);
+        $breakdown = $this->breakdown($completed, $range);
+        $byNetwork = $this->byNetwork($completed);
+        $byType = $this->byType($completed);
+        $settlement = $this->settlement($completed);
+
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
+
+        $rawRows = match ($tab) {
+            'network' => array_map(fn (array $r) => ['label' => $r['name'], 'count' => $r['count'], 'amount' => money($r['volume']), 'commission' => money($r['commission'])], $byNetwork),
+            'type' => array_map(fn (array $r) => ['label' => $r['label'], 'count' => $r['count'], 'amount' => money($r['volume']), 'commission' => money($r['commission'])], $byType),
+            default => array_map(fn (array $r) => ['label' => $r['label'], 'count' => $r['count'], 'amount' => money($r['amount']), 'commission' => money($r['commission'])], $breakdown),
+        };
+
+        $rows = collect($rawRows)->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
+
+        $title = 'Finance Report — '.ucfirst($tab);
+        $subtitle = 'Period: '.ucfirst($range).' — Generated '.now()->format('d M Y H:i');
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $rows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $rows, ['totals' => $cards]);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'label', 'label' => 'Label'],
+            ['key' => 'count', 'label' => 'Count'],
+            ['key' => 'amount', 'label' => 'Amount'],
+            ['key' => 'commission', 'label' => 'Commission'],
+        ];
     }
 }

@@ -6,6 +6,7 @@ use App\Models\Account;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Transaction;
+use App\Services\ExportService;
 use App\Services\TransactionJournalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,7 +38,60 @@ class JournalEntryController extends Controller
             ->orderBy('code')
             ->get(['id', 'code', 'name', 'type', 'parent_id']);
 
-        return view('finance.journal-entries', compact('entries', 'totals', 'accounts', 'status'));
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('finance.journals.export');
+
+        return view('finance.journal-entries', compact('entries', 'totals', 'accounts', 'status', 'exportColumns', 'exportRoute'));
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $status = $request->string('status', 'all')->toString();
+
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
+
+        $rows = JournalEntry::query()
+            ->with('lines.account')
+            ->when($status !== 'all', fn ($q) => $q->where('status', $status))
+            ->latest()
+            ->limit(5000)
+            ->get()
+            ->map(fn (JournalEntry $e) => [
+                'reference' => $e->reference,
+                'date' => $e->entry_date,
+                'description' => $e->description,
+                'status' => ucfirst($e->status),
+                'debits' => money($e->lines()->sum('debit')),
+                'credits' => money($e->lines()->sum('credit')),
+                'created_by' => $e->creator?->name ?? '—',
+                'posted_at' => $e->posted_at?->format('d M Y H:i') ?? '—',
+            ])
+            ->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
+
+        $title = 'Journal Entries';
+        $subtitle = 'Generated '.now()->format('d M Y H:i').' — '.$rows->count().' entries';
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $rows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $rows);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'reference', 'label' => 'Reference'],
+            ['key' => 'date', 'label' => 'Date'],
+            ['key' => 'description', 'label' => 'Description'],
+            ['key' => 'status', 'label' => 'Status'],
+            ['key' => 'debits', 'label' => 'Debits'],
+            ['key' => 'credits', 'label' => 'Credits'],
+            ['key' => 'created_by', 'label' => 'Created By'],
+            ['key' => 'posted_at', 'label' => 'Posted At'],
+        ];
     }
 
     public function show(JournalEntry $journalEntry): View

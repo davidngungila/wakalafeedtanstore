@@ -13,6 +13,7 @@
                 <button class="btn btn-primary" onclick="openEntryDrawer()">New journal entry</button>
             @endif
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Journal Entries'])
     </div>
 
     @include('finance._nav')

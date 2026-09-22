@@ -11,6 +11,7 @@
         <div class="view-actions">
             <button class="btn btn-primary" onclick="openUserModal()">+ Add user</button>
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Users'])
     </div>
 
     <form method="GET" action="{{ route('users.index') }}">

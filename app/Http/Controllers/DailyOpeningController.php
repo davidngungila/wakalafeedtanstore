@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DailyOpening;
 use App\Models\Network;
 use App\Models\Transaction;
+use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -234,6 +235,59 @@ class DailyOpeningController extends Controller
             ->latest('opening_date')
             ->paginate(30);
 
-        return view('daily_opening.index', compact('openings'));
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('daily-opening.export');
+
+        return view('daily_opening.index', compact('openings', 'exportColumns', 'exportRoute'));
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $agent = cash_point();
+
+        if ($agent === null) {
+            return back()->with('error', 'No cash point configured.');
+        }
+
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
+
+        $rows = DailyOpening::where('agent_id', $agent->id)
+            ->latest('opening_date')
+            ->limit(5000)
+            ->get()
+            ->map(fn (DailyOpening $d) => [
+                'date' => $d->opening_date,
+                'cash_opening' => money($d->cash_opening),
+                'cash_closing' => $d->cash_closing !== null ? money($d->cash_closing) : '—',
+                'total_volume' => money($d->total_volume),
+                'total_commission' => money($d->total_commission),
+                'total_transactions' => $d->total_transactions,
+                'status' => $d->is_closed ? 'Closed' : 'Open',
+            ])
+            ->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
+
+        $title = 'Daily Openings Report';
+        $subtitle = 'Generated '.now()->format('d M Y H:i').' — '.$rows->count().' records';
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $rows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $rows);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'date', 'label' => 'Date'],
+            ['key' => 'cash_opening', 'label' => 'Cash Opening'],
+            ['key' => 'cash_closing', 'label' => 'Cash Closing'],
+            ['key' => 'total_volume', 'label' => 'Total Volume'],
+            ['key' => 'total_commission', 'label' => 'Commission'],
+            ['key' => 'total_transactions', 'label' => 'Transactions'],
+            ['key' => 'status', 'label' => 'Status'],
+        ];
     }
 }

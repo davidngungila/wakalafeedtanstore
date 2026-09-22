@@ -115,6 +115,8 @@ class TransactionController extends Controller
                 'operator' => $t->operator?->name ?? '—',
                 'running_cash' => $t->running_cash_balance !== null ? money($t->running_cash_balance) : '—',
                 'running_float' => $t->running_float_balance !== null ? money($t->running_float_balance) : '—',
+                'is_unusual' => $t->is_unusual ? 'Yes' : 'No',
+                'unusual_reason' => $t->unusual_reason ?? '—',
             ];
         });
 
@@ -124,6 +126,7 @@ class TransactionController extends Controller
             foreach ($columns as $col) {
                 $out[$col['key']] = $row[$col['key']] ?? '';
             }
+
             return $out;
         });
 
@@ -161,6 +164,8 @@ class TransactionController extends Controller
             ['key' => 'operator', 'label' => 'Operator'],
             ['key' => 'running_cash', 'label' => 'Running Cash'],
             ['key' => 'running_float', 'label' => 'Running Float'],
+            ['key' => 'is_unusual', 'label' => 'Unusual'],
+            ['key' => 'unusual_reason', 'label' => 'Unusual Reason'],
         ];
     }
 
@@ -391,6 +396,41 @@ class TransactionController extends Controller
         }
 
         return back()->with('status', 'Transaction reversed successfully.');
+    }
+
+    public function markUnusual(Request $request, Transaction $transaction): JsonResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        $transaction->markUnusual($validated['reason']);
+
+        $this->recordAudit('Transaction marked unusual', 'Transaction', $transaction->id, [
+            'reference' => $transaction->reference,
+            'reason' => $validated['reason'],
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Transaction marked as unusual.']);
+        }
+
+        return back()->with('status', 'Transaction marked as unusual.');
+    }
+
+    public function clearUnusual(Request $request, Transaction $transaction): JsonResponse|RedirectResponse
+    {
+        $transaction->markUnusual(null);
+
+        $this->recordAudit('Transaction unusual flag cleared', 'Transaction', $transaction->id, [
+            'reference' => $transaction->reference,
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Unusual flag cleared.']);
+        }
+
+        return back()->with('status', 'Unusual flag cleared.');
     }
 
     /**

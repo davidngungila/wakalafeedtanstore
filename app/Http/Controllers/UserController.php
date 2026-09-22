@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Agent;
 use App\Models\User;
+use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,7 +25,55 @@ class UserController extends Controller
 
         $agents = Agent::where('status', 'active')->orderBy('name')->get(['id', 'name', 'code']);
 
-        return view('users.index', compact('users', 'agents') + ['activeRole' => $request->input('role', 'all')]);
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('users.export');
+
+        return view('users.index', compact('users', 'agents', 'exportColumns', 'exportRoute') + ['activeRole' => $request->input('role', 'all')]);
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $query = User::with('agent');
+
+        if ($request->filled('role') && $request->input('role') !== 'all') {
+            $query->where('role', $request->input('role'));
+        }
+
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
+
+        $rows = $query->orderBy('created_at')->get()->map(fn (User $u) => [
+            'name' => $u->name,
+            'email' => $u->email,
+            'phone' => $u->phone ?? '—',
+            'role' => ucfirst($u->role),
+            'agent' => $u->agent?->name ?? '—',
+            'status' => $u->is_active ? 'Active' : 'Inactive',
+            'joined' => $u->created_at->format('d M Y'),
+        ])->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
+
+        $title = 'Users Report';
+        $subtitle = 'Generated '.now()->format('d M Y H:i').' — '.$rows->count().' records';
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $rows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $rows);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'name', 'label' => 'Name'],
+            ['key' => 'email', 'label' => 'Email'],
+            ['key' => 'phone', 'label' => 'Phone'],
+            ['key' => 'role', 'label' => 'Role'],
+            ['key' => 'agent', 'label' => 'Agent'],
+            ['key' => 'status', 'label' => 'Status'],
+            ['key' => 'joined', 'label' => 'Joined'],
+        ];
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse

@@ -13,6 +13,7 @@
                 <a href="{{ route('devices.register') }}" class="btn btn-primary">+ Register device</a>
             </div>
         @endif
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Devices'])
     </div>
 
     @include('devices.partials.credentials-popup')

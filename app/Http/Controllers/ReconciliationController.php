@@ -6,6 +6,7 @@ use App\Models\Agent;
 use App\Models\Network;
 use App\Models\NetworkBalance;
 use App\Models\Reconciliation;
+use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,7 +27,57 @@ class ReconciliationController extends Controller
 
         $networks = Network::orderBy('name')->get();
 
-        return view('reconciliation.index', compact('records', 'totals', 'networks'));
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('reconciliation.export');
+
+        return view('reconciliation.index', compact('records', 'totals', 'networks', 'exportColumns', 'exportRoute'));
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
+
+        $rows = Reconciliation::with(['agent', 'reconciler'])->latest()->limit(5000)->get()
+            ->map(fn (Reconciliation $r) => [
+                'date' => $r->reconciliation_date,
+                'agent' => $r->agent?->code ?? '—',
+                'reconciler' => $r->reconciler?->name ?? '—',
+                'expected_cash' => money($r->expected_cash),
+                'counted_cash' => money($r->counted_cash),
+                'cash_variance' => money($r->cash_variance),
+                'total_float' => money($r->total_float),
+                'float_variance' => money($r->float_variance),
+                'status' => ucfirst($r->status),
+                'notes' => $r->notes ?? '—',
+            ])
+            ->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
+
+        $title = 'Reconciliation Report';
+        $subtitle = 'Generated '.now()->format('d M Y H:i').' — '.$rows->count().' records';
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $rows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $rows);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'date', 'label' => 'Date'],
+            ['key' => 'agent', 'label' => 'Agent'],
+            ['key' => 'reconciler', 'label' => 'Reconciled By'],
+            ['key' => 'expected_cash', 'label' => 'Expected Cash'],
+            ['key' => 'counted_cash', 'label' => 'Counted Cash'],
+            ['key' => 'cash_variance', 'label' => 'Cash Variance'],
+            ['key' => 'total_float', 'label' => 'Total Float'],
+            ['key' => 'float_variance', 'label' => 'Float Variance'],
+            ['key' => 'status', 'label' => 'Status'],
+            ['key' => 'notes', 'label' => 'Notes'],
+        ];
     }
 
     public function create(): View|RedirectResponse

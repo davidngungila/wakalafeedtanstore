@@ -14,6 +14,7 @@
                 <button class="btn btn-primary" onclick="openAccountDrawer()">New account</button>
             @endif
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Chart of Accounts'])
     </div>
 
     @include('finance._nav')

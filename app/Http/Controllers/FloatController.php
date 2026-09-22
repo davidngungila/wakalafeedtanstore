@@ -6,6 +6,7 @@ use App\Models\DailyOpening;
 use App\Models\FloatTransaction;
 use App\Models\Network;
 use App\Models\NetworkBalance;
+use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -50,7 +51,65 @@ class FloatController extends Controller
 
         $networks = Network::active()->pluck('name', 'id');
 
-        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'summary', 'todayOpening'));
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('float.export');
+
+        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'summary', 'todayOpening', 'exportColumns', 'exportRoute'));
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $cashPoint = cash_point();
+
+        if ($cashPoint === null) {
+            return back()->with('error', 'No cash point configured.');
+        }
+
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
+
+        $rows = FloatTransaction::with(['network', 'operator'])
+            ->where('agent_id', $cashPoint->id)
+            ->latest()
+            ->limit(5000)
+            ->get()
+            ->map(fn (FloatTransaction $f) => [
+                'reference' => $f->reference,
+                'date' => $f->created_at->format('d M Y H:i'),
+                'network' => $f->network?->name ?? '—',
+                'type' => ucfirst(str_replace('_', ' ', $f->type)),
+                'amount' => money($f->amount),
+                'fee' => money($f->fee),
+                'operator' => $f->operator?->name ?? '—',
+                'status' => ucfirst($f->status),
+                'notes' => $f->notes ?? '—',
+            ])
+            ->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
+
+        $title = 'Float Transactions';
+        $subtitle = 'Generated '.now()->format('d M Y H:i').' — '.$rows->count().' records';
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $rows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $rows);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'reference', 'label' => 'Reference'],
+            ['key' => 'date', 'label' => 'Date'],
+            ['key' => 'network', 'label' => 'Network'],
+            ['key' => 'type', 'label' => 'Type'],
+            ['key' => 'amount', 'label' => 'Amount'],
+            ['key' => 'fee', 'label' => 'Fee'],
+            ['key' => 'operator', 'label' => 'Operator'],
+            ['key' => 'status', 'label' => 'Status'],
+            ['key' => 'notes', 'label' => 'Notes'],
+        ];
     }
 
     public function create(): View|RedirectResponse

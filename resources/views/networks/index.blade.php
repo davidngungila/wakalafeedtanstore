@@ -13,6 +13,7 @@
                 <button class="btn btn-primary" onclick="openNetworkModal()">+ Add network</button>
             @endif
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Networks'])
     </div>
 
     <div class="stat-grid">

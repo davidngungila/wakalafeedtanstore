@@ -24,6 +24,7 @@
             <button class="btn btn-ghost" onclick="window.print()">Print report</button>
             <button class="btn btn-primary" onclick="toast('Report generated in demo mode','success')">Export PDF</button>
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Reports'])
     </div>
 
     <div class="stat-grid">

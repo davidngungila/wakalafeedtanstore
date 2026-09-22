@@ -11,6 +11,7 @@
         <div class="view-actions">
             <button class="btn btn-ghost" onclick="window.print()">Print</button>
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'General Ledger'])
     </div>
 
     @include('finance._nav')

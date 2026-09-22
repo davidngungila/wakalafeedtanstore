@@ -11,6 +11,7 @@
         <div class="view-actions">
             <a href="{{ route('reconciliation.create') }}" class="btn btn-primary">+ New reconciliation</a>
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Reconciliation'])
     </div>
 
     <div class="stat-grid">

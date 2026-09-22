@@ -113,6 +113,8 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
 
     Route::middleware('role:supervisor,admin')->group(function () {
         Route::put('/transactions/{transaction}/reverse', [TransactionController::class, 'reverse'])->name('transactions.reverse');
+        Route::put('/transactions/{transaction}/mark-unusual', [TransactionController::class, 'markUnusual'])->name('transactions.mark-unusual');
+        Route::delete('/transactions/{transaction}/unusual', [TransactionController::class, 'clearUnusual'])->name('transactions.clear-unusual');
         Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
         Route::get('/reports', ReportController::class)->name('reports.index');
         Route::get('/finance', FinanceController::class)->name('finance.index');

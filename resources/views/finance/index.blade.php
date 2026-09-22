@@ -12,6 +12,7 @@
             <button class="btn btn-ghost" onclick="window.print()">Print</button>
             <a href="{{ route('finance.index', ['tab' => $tab, 'range' => $range, 'export' => 1]) }}" class="btn btn-primary">Export CSV</a>
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Finance'])
     </div>
 
     <div class="stat-grid">

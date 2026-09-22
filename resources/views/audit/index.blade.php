@@ -8,6 +8,7 @@
             <h2>Audit Logs</h2>
             <p class="sub">Every significant action recorded for compliance and accountability.</p>
         </div>
+        @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Audit Log'])
     </div>
 
     <form method="GET" action="{{ route('audit.index') }}">

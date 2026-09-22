@@ -9,6 +9,7 @@ use App\Models\Network;
 use App\Models\NetworkBalance;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
+use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -48,7 +49,49 @@ class NetworkController extends Controller
 
         $types = ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet'];
 
-        return view('networks.index', compact('networks', 'totalFloat', 'rates', 'types') + ['activeType' => $activeType]);
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('networks.export');
+
+        return view('networks.index', compact('networks', 'totalFloat', 'rates', 'types', 'exportColumns', 'exportRoute') + ['activeType' => $activeType]);
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
+
+        $rows = Network::withCount('transactions')->get()->map(fn (Network $n) => [
+            'name' => $n->name,
+            'code' => $n->code,
+            'status' => $n->is_active ? 'Active' : 'Suspended',
+            'transactions' => $n->transactions_count,
+            'float' => money($n->balances()->sum('balance')),
+            'volume' => money($n->transactions()->where('status', 'completed')->sum('amount')),
+            'commission' => money($n->transactions()->where('status', 'completed')->sum('commission')),
+        ])->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
+
+        $title = 'Networks Report';
+        $subtitle = 'Generated '.now()->format('d M Y H:i').' — '.$rows->count().' records';
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $rows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $rows);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'name', 'label' => 'Name'],
+            ['key' => 'code', 'label' => 'Code'],
+            ['key' => 'status', 'label' => 'Status'],
+            ['key' => 'transactions', 'label' => 'Transactions'],
+            ['key' => 'float', 'label' => 'Float'],
+            ['key' => 'volume', 'label' => 'Volume'],
+            ['key' => 'commission', 'label' => 'Commission'],
+        ];
     }
 
     public function show(Request $request, Network $network): View
