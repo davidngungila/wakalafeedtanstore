@@ -9,7 +9,7 @@
             <p class="sub">Compare counted till cash and network floats against system balances every day.</p>
         </div>
         <div class="view-actions">
-            <button class="btn btn-primary" onclick="openReconModal()">+ New reconciliation</button>
+            <a href="{{ route('reconciliation.create') }}" class="btn btn-primary">+ New reconciliation</a>
         </div>
     </div>
 
@@ -93,59 +93,11 @@
     </div>
 
     <!-- New reconciliation modal -->
-    <div class="modal-backdrop" id="reconModal">
-        <div class="modal" style="max-width:620px;">
-            <div class="modal-head">
-                <h3>New reconciliation</h3>
-                <button class="modal-close" onclick="closeModal('reconModal')">✕</button>
-            </div>
-            <form action="{{ route('reconciliation.store') }}" method="POST" data-recon-form>
-                @csrf
-                <div class="modal-body">
-                    <div class="form-row">
-                        <div class="field">
-                            <label>Reconciliation date</label>
-                            <input type="date" name="reconciliation_date" value="{{ date('Y-m-d') }}" required>
-                        </div>
-                    </div>
-                    <div class="settings-section" style="margin-top:4px;"><h4>Cash</h4></div>
-                    <div class="form-row">
-                        <div class="field">
-                            <label>Counted cash (TZS)</label>
-                            <input type="number" name="counted_cash" min="0" step="any" placeholder="0" required>
-                        </div>
-                    </div>
-                    <div class="settings-section"><h4>Counted float per network</h4></div>
-                    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px;">Leave blank on any network to use the system balance.</p>
-                    <div class="form-row" style="grid-template-columns:1fr 1fr;">
-                        @foreach ($networks as $network)
-                            <div class="field">
-                                <label>
-                                    <span class="net-dot" style="background:{{ $network->color }};"></span>
-                                    {{ $network->name }}
-                                </label>
-                                <input type="number" name="counted_floats[{{ $network->id }}]" min="0" step="any" placeholder="0">
-                            </div>
-                        @endforeach
-                    </div>
-                    <div class="field">
-                        <label>Notes</label>
-                        <textarea name="notes" rows="2" placeholder="Optional notes…"></textarea>
-                    </div>
-                </div>
-                <div class="modal-foot">
-                    <button type="button" class="btn btn-ghost" onclick="closeModal('reconModal')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save reconciliation</button>
-                </div>
-            </form>
-        </div>
-    </div>
+
 @endsection
 
 @section('scripts')
     <script>
-        function openReconModal() { openModal('reconModal'); }
-
         function reconFmt(n) { return 'TZS ' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
 
         bindRowClick('#reconRows tr[data-code]', tr => {

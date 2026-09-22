@@ -78,6 +78,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::post('/float', [FloatController::class, 'store'])->name('float.store');
 
     Route::get('/reconciliation', [ReconciliationController::class, 'index'])->name('reconciliation.index');
+    Route::get('/reconciliation/create', [ReconciliationController::class, 'create'])->name('reconciliation.create');
     Route::post('/reconciliation', [ReconciliationController::class, 'store'])->name('reconciliation.store');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.index');

@@ -29,6 +29,29 @@ class ReconciliationController extends Controller
         return view('reconciliation.index', compact('records', 'totals', 'networks'));
     }
 
+    public function create(): View|RedirectResponse
+    {
+        $agent = cash_point();
+
+        if ($agent === null) {
+            return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before reconciling.');
+        }
+
+        $openingCash = $this->previousClosingCash($agent, today()->toDateString());
+
+        $balances = $agent->balances()->with('network')->orderBy('network_id')->get()->mapWithKeys(
+            fn (NetworkBalance $balance): array => [$balance->network_id => (float) $balance->balance],
+        );
+
+        return view('reconciliation.create', [
+            'agent' => $agent,
+            'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
+            'expectedCash' => (float) $agent->cash_balance,
+            'openingCash' => $openingCash,
+            'balances' => $balances,
+        ]);
+    }
+
     public function store(Request $request): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
