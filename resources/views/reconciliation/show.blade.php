@@ -142,19 +142,19 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="m19 9-5 5-4-4-3 3"></path></svg>
                         </div>
                         <div class="activity-text" style="flex:1;min-width:0;">
-                            <div>
+                            <div class="activity-time" style="margin-bottom:4px;">{{ $correction->scope === 'cash' ? 'Cash in Till' : $correction->network?->name }}</div>
+                            <div class="activity-row" style="gap:6px;align-items:center;margin-bottom:4px;">
                                 <b>{{ $correction->typeLabel() }}</b>
-                                <span class="tag {{ $correction->signedAmount() > 0 ? 'tag-terracotta' : 'tag-red' }}" style="margin-left:6px;">
+                                <span class="tag {{ $correction->signedAmount() > 0 ? 'tag-terracotta' : 'tag-red' }}">
                                     {{ $correction->signedAmount() > 0 ? '+' : '' }}@money($correction->amount)
                                 </span>
                             </div>
-                            <div class="activity-time">
-                                Ref: <strong>{{ $correction->reference }}</strong>
-                                · {{ $correction->scope === 'cash' ? 'Cash' : $correction->network?->name }}
-                                @if ($correction->notes)
-                                    · {{ $correction->notes }}
-                                @endif
+                            <div class="cell-sub" style="margin-bottom:4px;">
+                                Reference: <strong style="color:var(--ink,var(--coffee-700));">{{ $correction->reference }}</strong>
                             </div>
+                            @if ($correction->notes)
+                                <div class="activity-time" style="margin-bottom:4px;">{{ $correction->notes }}</div>
+                            @endif
                             <div class="activity-time">Added by {{ $correction->creator?->name ?? '—' }} · {{ $correction->created_at->format('d M Y H:i') }}</div>
                         </div>
                         <form method="POST" action="{{ route('reconciliation.corrections.destroy', [$reconciliation, $correction]) }}" onsubmit="return confirm('Remove this correction?')">
