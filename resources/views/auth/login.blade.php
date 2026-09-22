@@ -79,6 +79,8 @@
                 <span>Mobile Money OS</span>
             </div>
         </div>
+        <p class="sub">Access your cash point control room.</p>
+
         @if ($errors->any())
             <div class="error">{{ $errors->first() }}</div>
         @endif
