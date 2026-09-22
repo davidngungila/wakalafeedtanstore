@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\Transaction;
 use App\Services\TransactionJournalService;
+use App\Services\TransactionNotifier;
 use Illuminate\Support\Facades\Log;
 
 class TransactionObserver
@@ -23,6 +24,8 @@ class TransactionObserver
                 'error' => $e->getMessage(),
             ]);
         }
+
+        app(TransactionNotifier::class)->notifyDetected($transaction->fresh(['network', 'agent']));
     }
 
     public function updated(Transaction $transaction): void

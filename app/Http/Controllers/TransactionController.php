@@ -299,6 +299,20 @@ class TransactionController extends Controller
 
         $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening', 'smsMessages.device']);
 
+        // Include SMS linked by provider reference (in case transaction_id wasn't set at ingest time)
+        if (filled($transaction->provider_reference)) {
+            $byRef = SmsMessage::query()
+                ->where('transaction_reference', $transaction->provider_reference)
+                ->whereNull('transaction_id')
+                ->with(['device'])
+                ->get();
+
+            $transaction->setRelation(
+                'smsMessages',
+                $transaction->smsMessages->concat($byRef)->unique('id')->values()
+            );
+        }
+
         return view('transactions.receipt', compact('transaction'));
     }
 
@@ -310,6 +324,19 @@ class TransactionController extends Controller
         }
 
         $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening', 'smsMessages.device']);
+
+        if (filled($transaction->provider_reference)) {
+            $byRef = SmsMessage::query()
+                ->where('transaction_reference', $transaction->provider_reference)
+                ->whereNull('transaction_id')
+                ->with(['device'])
+                ->get();
+
+            $transaction->setRelation(
+                'smsMessages',
+                $transaction->smsMessages->concat($byRef)->unique('id')->values()
+            );
+        }
 
         try {
             $pdf = Pdf::loadView('transactions.receipt-pdf', compact('transaction'));
@@ -349,18 +376,18 @@ class TransactionController extends Controller
                 ->first();
 
             if ($balance) {
-                // Reverse is opposite of process(): deposit/float_deposit -amount -> reverse +amount, withdrawal +amount -> reverse -amount
+                // Reverse is opposite of process(): deposit/float_deposit -amount -> reverse +amount; withdrawal/bank_to_wallet +amount -> reverse -amount
                 $delta = match ($transaction->type) {
-                    'deposit', 'float_deposit', 'float_topup', 'bank_to_wallet' => $amount,
-                    'withdrawal' => -$amount,
+                    'deposit', 'float_deposit', 'float_topup' => $amount,
+                    'withdrawal', 'bank_to_wallet' => -$amount,
                     default => $amount,
                 };
                 $balance->balance += $delta;
                 $balance->save();
             }
 
-            if (in_array($transaction->type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'bank_to_wallet', 'wallet_to_bank', 'airtime'], true)) {
-                $direction = in_array($transaction->type, ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet', 'airtime'], true) ? -1 : 1;
+            if (in_array($transaction->type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
+                $direction = in_array($transaction->type, ['deposit', 'float_deposit', 'float_topup', 'airtime'], true) ? -1 : 1;
                 if ($transaction->type === 'wallet_to_bank') {
                     $direction = -1;
                 }

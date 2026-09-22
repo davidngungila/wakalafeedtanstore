@@ -108,6 +108,7 @@ class CashPointController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'owner_name' => ['nullable', 'string', 'max:120'],
             'phone' => ['required', 'string', 'max:30'],
+            'email' => ['nullable', 'email', 'max:120'],
             'national_id' => ['nullable', 'string', 'max:40'],
             'region' => ['nullable', 'string', 'max:80'],
             'district' => ['nullable', 'string', 'max:80'],

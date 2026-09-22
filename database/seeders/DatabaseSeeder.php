@@ -150,6 +150,7 @@ class DatabaseSeeder extends Seeder
             ],
             'notifications' => [
                 'email_daily_summary' => '1',
+                'email_transactions' => '1',
                 'sms_float_alerts' => '0',
                 'whatsapp_reports' => '0',
                 'email_failed_txns' => '1',

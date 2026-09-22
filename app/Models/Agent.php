@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Crypt;
     'name',
     'owner_name',
     'phone',
+    'email',
     'national_id',
     'region',
     'district',

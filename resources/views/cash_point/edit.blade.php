@@ -30,7 +30,10 @@
                     <div class="field"><label>Owner name</label><input type="text" name="owner_name" value="{{ old('owner_name', $cashPoint->owner_name) }}"></div>
                     <div class="field"><label>Phone</label><input type="text" name="phone" value="{{ old('phone', $cashPoint->phone) }}" required></div>
                 </div>
-                <div class="field"><label>National ID</label><input type="text" name="national_id" value="{{ old('national_id', $cashPoint->national_id) }}"></div>
+                <div class="form-row">
+                    <div class="field"><label>National ID</label><input type="text" name="national_id" value="{{ old('national_id', $cashPoint->national_id) }}"></div>
+                    <div class="field"><label>Email (for automatic transaction &amp; report emails)</label><input type="email" name="email" value="{{ old('email', $cashPoint->email) }}"></div>
+                </div>
                 <div class="form-row">
                     <div class="field"><label>Region</label><input type="text" name="region" value="{{ old('region', $cashPoint->region) }}"></div>
                     <div class="field"><label>District</label><input type="text" name="district" value="{{ old('district', $cashPoint->district) }}"></div>

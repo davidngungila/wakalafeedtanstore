@@ -224,16 +224,8 @@ class SmsProcessor
                     ['agent_id' => $agent->id, 'network_id' => $network->id],
                     ['opening_balance' => 0, 'balance' => 0]
                 );
-                // Float already adjusted via TransactionService for bank_to_wallet? Check: bank_to_wallet default is float -amount, but float deposit should be +amount
-                // For You Received float deposit, we need to ensure float increases - if TransactionService decreased it, correct it
-                if ($parsed['type'] === 'bank_to_wallet') {
-                    // TransactionService for bank_to_wallet does float -amount (default), but float deposit should be +amount
-                    // So we need to adjust float + 2*amount to correct (since it already did -amount, we need +amount)
-                    $balance->balance += 2 * (float) $parsed['amount'];
-                    $balance->save();
-                    $agent->cash_balance = (float) $agent->cash_balance; // cash unchanged for float deposit
-                    $agent->save();
-                }
+                // bank_to_wallet is a float deposit/top-up: TransactionService already increased the per-network
+                // float by +amount, so nothing further to adjust here.
 
                 FloatTransaction::create([
                     'reference' => 'FLT-'.now()->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT),

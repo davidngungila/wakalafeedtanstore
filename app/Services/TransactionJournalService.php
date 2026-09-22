@@ -30,11 +30,13 @@ class TransactionJournalService
         'TIGOPESA' => '1240',
     ];
 
-    private const DEPOSIT_LIKE = ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet', 'airtime'];
+    private const DEPOSIT_LIKE = ['deposit', 'float_deposit', 'float_topup', 'airtime'];
 
     private const WITHDRAWAL_LIKE = ['withdrawal', 'wallet_to_bank'];
 
     private const FLOAT_OUT_ONLY = ['send_money', 'bill_payment', 'data'];
+
+    private const FLOAT_IN_ONLY = ['bank_to_wallet'];
 
     /**
      * Auto-post a balanced journal entry for a completed transaction.
@@ -43,6 +45,7 @@ class TransactionJournalService
      *  - deposit-like (cash +A, float −A): Dr Cash A | Cr Float(A−C−F) | Cr Commission C | Cr Fee F
      *  - withdrawal-like (cash −A, float +A): Dr Float(A+C+F) | Cr Cash A | Cr Commission C | Cr Fee F
      *  - float-out only (cash 0, float −A): Dr Customer Float Liability A | Cr Float(A−C−F) | Cr Commission C | Cr Fee F
+     *  - float-in only / bank_to_wallet (cash 0, float +A): Dr Float A | Cr Customer Float Liability(A−C−F) | Cr Commission C | Cr Fee F
      */
     public function postForTransaction(Transaction $transaction): ?JournalEntry
     {
@@ -119,6 +122,26 @@ class TransactionJournalService
                     }
                 } else {
                     $lines[] = $this->line($floatAccount->id, abs($floatNet), 0, 'Float in (net) — '.txn_type_label($type));
+                }
+
+                if ($commission > 0) {
+                    $lines[] = $this->line($commissionAccount->id, 0, $commission, 'Commission — '.$transaction->reference);
+                }
+
+                if ($fee > 0) {
+                    $lines[] = $this->line($feeAccount->id, 0, $fee, 'Fee — '.$transaction->reference);
+                }
+            } elseif (in_array($type, self::FLOAT_IN_ONLY, true)) {
+                // Dr Float A | Cr Liability(A−net) | Cr Commission C | Cr Fee F
+                $floatNet = $amount - $net;
+                $lines[] = $this->line($floatAccount->id, $amount, 0, 'Float in (bank to wallet) — '.txn_type_label($type));
+
+                if ($floatNet >= 0) {
+                    if ($floatNet > 0) {
+                        $lines[] = $this->line($liabilityAccount->id, 0, $floatNet, 'Customer float liability — '.txn_type_label($type));
+                    }
+                } else {
+                    $lines[] = $this->line($liabilityAccount->id, abs($floatNet), 0, 'Liability in (net) — '.txn_type_label($type));
                 }
 
                 if ($commission > 0) {

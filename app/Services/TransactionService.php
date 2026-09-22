@@ -58,16 +58,17 @@ class TransactionService
 
             // Agent perspective: customer deposit / float deposit -> agent receives cash (+cash) and gives float (-float)
             // customer withdrawal / float withdrawal -> agent gives cash (-cash) and receives float (+float)
+            // bank_to_wallet / float top-up -> money moves FROM the bank INTO the wallet: float +amount, cash unchanged
             match ($data['type']) {
-                'deposit', 'float_deposit', 'float_topup', 'bank_to_wallet' => $adjustFloat(-(float) $data['amount']),
-                'withdrawal' => $adjustFloat((float) $data['amount']),
+                'deposit', 'float_deposit', 'float_topup' => $adjustFloat(-(float) $data['amount']),
+                'withdrawal', 'bank_to_wallet' => $adjustFloat((float) $data['amount']),
                 default => $adjustFloat(-(float) $data['amount']),
             };
 
             $cashDelta = 0;
 
-            if (in_array($data['type'], ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'bank_to_wallet', 'wallet_to_bank', 'airtime'], true)) {
-                $direction = in_array($data['type'], ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet', 'airtime'], true) ? 1 : -1;
+            if (in_array($data['type'], ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
+                $direction = in_array($data['type'], ['deposit', 'float_deposit', 'float_topup', 'airtime'], true) ? 1 : -1;
                 // wallet_to_bank is opposite of bank_to_wallet
                 if ($data['type'] === 'wallet_to_bank') {
                     $direction = -1;

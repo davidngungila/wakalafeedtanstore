@@ -21,9 +21,15 @@
 </div>
 <div class="form-row">
     <div class="field">
+        <label>Email (for automatic transaction &amp; report emails)</label>
+        <input type="email" name="email" value="{{ old('email', $agent?->email) }}" placeholder="cashpoint@company.com">
+    </div>
+    <div class="field">
         <label>National ID</label>
         <input type="text" name="national_id" value="{{ old('national_id', $agent?->national_id) }}">
     </div>
+</div>
+<div class="form-row">
     <div class="field">
         <label>Level</label>
         <select name="agent_level" required>
@@ -31,6 +37,14 @@
             <option value="silver" @selected(old('agent_level', $agent?->agent_level) === 'silver')>Silver</option>
             <option value="gold" @selected(old('agent_level', $agent?->agent_level) === 'gold')>Gold</option>
             <option value="platinum" @selected(old('agent_level', $agent?->agent_level) === 'platinum')>Platinum</option>
+        </select>
+    </div>
+    <div class="field">
+        <label>Status</label>
+        <select name="status" required>
+            <option value="active" @selected(old('status', $agent?->status) === 'active')>Active</option>
+            <option value="suspended" @selected(old('status', $agent?->status) === 'suspended')>Suspended</option>
+            <option value="inactive" @selected(old('status', $agent?->status) === 'inactive')>Inactive</option>
         </select>
     </div>
 </div>
@@ -50,15 +64,7 @@
         <input type="text" name="ward" value="{{ old('ward', $agent?->ward) }}">
     </div>
     <div class="field">
-        <label>Status</label>
-        <select name="status" required>
-            <option value="active" @selected(old('status', $agent?->status) === 'active')>Active</option>
-            <option value="suspended" @selected(old('status', $agent?->status) === 'suspended')>Suspended</option>
-            <option value="inactive" @selected(old('status', $agent?->status) === 'inactive')>Inactive</option>
-        </select>
+        <label>Street</label>
+        <input type="text" name="street" value="{{ old('street', $agent?->street) }}">
     </div>
-</div>
-<div class="field">
-    <label>Street</label>
-    <input type="text" name="street" value="{{ old('street', $agent?->street) }}">
 </div>

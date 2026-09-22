@@ -156,6 +156,16 @@
                     </div>
                     <div class="toggle-row">
                         <div class="toggle-text">
+                            <strong>Email on every transaction</strong>
+                            <span>Send an email to the cash point for every detected transaction.</span>
+                        </div>
+                        <select name="notifications[email_transactions]" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13px;font-weight:600;background:var(--white);color:var(--coffee-700);">
+                            <option value="1" {{ ($notif['email_transactions'] ?? '1') == 1 ? 'selected' : '' }}>On</option>
+                            <option value="0" {{ ($notif['email_transactions'] ?? '') == 0 ? 'selected' : '' }}>Off</option>
+                        </select>
+                    </div>
+                    <div class="toggle-row">
+                        <div class="toggle-text">
                             <strong>Failed transaction alerts</strong>
                             <span>Notify immediately when a transaction fails to process.</span>
                         </div>
