@@ -356,14 +356,18 @@ class DashboardController extends Controller
         Transaction::where('status', 'completed')
             ->where('created_at', '>=', today()->subDays(7))
             ->where('created_at', '<', today()->addDay())
-            ->pluck('network_id', 'created_at')
-            ->each(function ($networkId, $createdAt) use ($rows) {
+            ->get(['network_id', 'created_at'])
+            ->each(function ($row) use ($rows) {
+                $networkId = $row->network_id;
                 if (! $rows->has($networkId)) {
                     return;
                 }
 
-                $block = (int) floor(Carbon::parse($createdAt)->format('G') / 4);
-                $rows[$networkId]['cells'][max(0, min(5, $block))] += 1;
+                $block = (int) floor(Carbon::parse($row->created_at)->format('G') / 4);
+                $block = max(0, min(5, $block));
+                $entry = $rows->get($networkId);
+                $entry['cells'][$block] += 1;
+                $rows->put($networkId, $entry);
             });
 
         return [

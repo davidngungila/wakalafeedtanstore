@@ -302,13 +302,17 @@ class ReportController extends Controller
         $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
         $rows = $networks->mapWithKeys(fn (Network $n) => [$n->id => ['name' => $n->name, 'color' => $n->color ?: '#A98968', 'cells' => array_fill(0, 6, 0)]]);
         Transaction::where('status', 'completed')->where('created_at', '>=', today()->subDays(7))->where('created_at', '<', today()->addDay())
-            ->pluck('network_id', 'created_at')
-            ->each(function ($networkId, $createdAt) use ($rows) {
+            ->get(['network_id', 'created_at'])
+            ->each(function ($row) use ($rows) {
+                $networkId = $row->network_id;
                 if (! $rows->has($networkId)) {
                     return;
                 }
-                $block = (int) floor(Carbon::parse($createdAt)->format('G') / 4);
-                $rows[$networkId]['cells'][max(0, min(5, $block))] += 1;
+                $block = (int) floor(Carbon::parse($row->created_at)->format('G') / 4);
+                $block = max(0, min(5, $block));
+                $entry = $rows->get($networkId);
+                $entry['cells'][$block] += 1;
+                $rows->put($networkId, $entry);
             });
 
         return ['blocks' => $blocks, 'rows' => $rows->values()->all()];
