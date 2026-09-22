@@ -86,6 +86,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::get('/reconciliation/create', [ReconciliationController::class, 'create'])->name('reconciliation.create');
     Route::post('/reconciliation', [ReconciliationController::class, 'store'])->name('reconciliation.store');
     Route::get('/reconciliation/{reconciliation}', [ReconciliationController::class, 'show'])->name('reconciliation.show');
+    Route::get('/reconciliation/{reconciliation}/corrections/create', [ReconciliationController::class, 'createCorrection'])->name('reconciliation.corrections.create');
     Route::post('/reconciliation/{reconciliation}/corrections', [ReconciliationController::class, 'storeCorrection'])->name('reconciliation.corrections.store');
     Route::delete('/reconciliation/{reconciliation}/corrections/{correction}', [ReconciliationController::class, 'destroyCorrection'])->name('reconciliation.corrections.destroy');
 

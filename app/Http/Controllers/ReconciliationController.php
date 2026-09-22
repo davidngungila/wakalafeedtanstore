@@ -192,6 +192,15 @@ class ReconciliationController extends Controller
         return view('reconciliation.show', compact('reconciliation', 'channels', 'networks'));
     }
 
+    public function createCorrection(Reconciliation $reconciliation): View
+    {
+        $reconciliation->load(['agent']);
+
+        $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
+
+        return view('reconciliation.corrections.create', compact('reconciliation', 'networks'));
+    }
+
     public function storeCorrection(Request $request, Reconciliation $reconciliation): RedirectResponse
     {
         $validated = $request->validate([
@@ -222,7 +231,7 @@ class ReconciliationController extends Controller
             'status' => $reconciliation->fresh()->status,
         ]);
 
-        return back()->with('status', 'Correction recorded.');
+        return redirect()->route('reconciliation.show', $reconciliation)->with('status', 'Correction recorded.');
     }
 
     public function destroyCorrection(Reconciliation $reconciliation, ReconciliationCorrection $correction): RedirectResponse

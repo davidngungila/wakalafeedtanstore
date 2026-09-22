@@ -134,7 +134,7 @@
             <h3>Corrections</h3>
             <div style="display:flex;align-items:center;gap:12px;">
                 <span class="link">{{ $reconciliation->corrections->count() }} recorded</span>
-                <button type="button" class="btn btn-primary btn-sm" onclick="openModal('addCorrectionModal')">+ Add correction</button>
+                <a href="{{ route('reconciliation.corrections.create', $reconciliation) }}" class="btn btn-primary btn-sm">+ Add correction</a>
             </div>
         </div>
         <div class="panel-body">
@@ -170,83 +170,4 @@
                 @endforelse
             </div>
         </div>
-
-        </div>
-
-    <div class="modal-backdrop" id="addCorrectionModal">
-        <div class="modal">
-            <div class="modal-head">
-                <h3>Add correction</h3>
-                <span class="sub">Fix differences with a reference</span>
-                <button class="modal-close" onclick="closeModal('addCorrectionModal')">✕</button>
-            </div>
-            <form method="POST" action="{{ route('reconciliation.corrections.store', $reconciliation) }}" data-correction-form>
-                @csrf
-                <div class="modal-body">
-                    <div class="form-row">
-                        <div class="field">
-                            <label>Applies to</label>
-                            <select name="scope" id="corrScope" required onchange="toggleCorrNetwork()">
-                                <option value="cash">Cash in Till</option>
-                                <option value="float">Network Float</option>
-                            </select>
-                        </div>
-                        <div class="field" id="corrNetworkWrap" style="display:none;">
-                            <label>Network</label>
-                            <select name="network_id" id="corrNetwork">
-                                <option value="">Select network</option>
-                                @foreach ($networks as $network)
-                                    <option value="{{ $network->id }}">{{ $network->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
-                    <div class="field">
-                        <label>Correction type</label>
-                        <select name="type" required>
-                            @foreach (\App\Models\ReconciliationCorrection::types() as $value => $label)
-                                <option value="{{ $value }}">{{ $label }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="form-row">
-                        <div class="field">
-                            <label>Reference <span style="font-weight:400;color:var(--ink-soft);font-size:12px;">(transaction / customer / reason)</span></label>
-                            <input type="text" name="reference" maxlength="120" placeholder="e.g. TXN-88213 or customer name" required>
-                        </div>
-                        <div class="field">
-                            <label>Amount (TZS)</label>
-                            <input type="number" name="amount" min="0.01" step="0.01" required>
-                        </div>
-                    </div>
-                    <div class="field">
-                        <label>Notes (optional)</label>
-                        <textarea name="notes" rows="2" maxlength="1000" placeholder="Additional details..."></textarea>
-                    </div>
-                </div>
-                <div class="modal-foot">
-                    <button type="button" class="btn btn-ghost" onclick="closeModal('addCorrectionModal')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Record correction</button>
-                </div>
-            </form>
-        </div>
-    </div>
-@endsection
-
-@section('scripts')
-    <script>
-        function toggleCorrNetwork() {
-            const v = document.getElementById('corrScope').value;
-            document.getElementById('corrNetworkWrap').style.display = v === 'float' ? 'block' : 'none';
-            document.getElementById('corrNetwork').removeAttribute('required');
-            if (v === 'float') document.getElementById('corrNetwork').setAttribute('required', 'required');
-        }
-
-        document.querySelectorAll('[data-correction-form]').forEach(form => {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
-            });
-        });
-    </script>
 @endsection

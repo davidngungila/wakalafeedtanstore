@@ -76,8 +76,24 @@ class ReconciliationCorrectionFeatureTest extends TestCase
             ->assertSee('Cash in Till')
             ->assertSee('M-Pesa Float')
             ->assertSee('Add correction')
-            ->assertSee('Money received in error')
             ->assertSee('520,000');
+    }
+
+    public function test_add_correction_page_renders_correction_form(): void
+    {
+        [$reconciliation] = $this->setupReconciliation();
+
+        $this->actingAs($this->user())
+            ->get(route('reconciliation.corrections.create', $reconciliation))
+            ->assertOk()
+            ->assertSee('Add correction')
+            ->assertSee('Fix differences with a reference')
+            ->assertSee('Applies to')
+            ->assertSee('Cash in Till')
+            ->assertSee('Money received in error')
+            ->assertSee('Reference')
+            ->assertSee('Amount (TZS)')
+            ->assertSee('Record correction');
     }
 
     public function test_recording_cash_correction_marks_session_resolved_when_fully_settled(): void
