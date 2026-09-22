@@ -40,6 +40,18 @@ class SmsApiTest extends TestCase
         ];
     }
 
+    private function approver(): User
+    {
+        return User::where('email', 'admin@moneyagent.local')->firstOrFail();
+    }
+
+    private function approve(SmsMessage $sms): void
+    {
+        $this->actingAs($this->approver())
+            ->postJson(route('sms.approve', $sms))
+            ->assertOk();
+    }
+
     public function test_missing_device_code_is_rejected(): void
     {
         $this->getJson('/api/v1/sms/senders')->assertUnauthorized();
@@ -219,10 +231,17 @@ class SmsApiTest extends TestCase
         $this->assertArrayNotHasKey('ignored_sender', $response->json('results.0'));
 
         $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
-        $this->assertSame('RECORDED', $sms->processing_status);
+        $this->assertSame('APPROVAL_PENDING', $sms->processing_status);
         $this->assertSame('TATU BANK', $sms->sender);
         $this->assertSame('bank', $sms->provider);
         $this->assertSame('VODACOM', $sms->network?->code);
+        $this->assertNull($sms->transaction_id);
+        $this->assertSame(0, Transaction::count());
+
+        $this->approve($sms);
+
+        $sms->refresh();
+        $this->assertSame('RECORDED', $sms->processing_status);
         $this->assertNotNull($sms->transaction_id);
         $this->assertSame(1, Transaction::count());
     }
@@ -283,13 +302,18 @@ class SmsApiTest extends TestCase
         $this->assertSame(1, $response->json('summary.processed'));
 
         $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
-        $this->assertSame('RECORDED', $sms->processing_status);
+        $this->assertSame('APPROVAL_PENDING', $sms->processing_status);
         $this->assertSame('withdrawal', $sms->transaction_type);
         $this->assertSame(100_000.0, (float) $sms->amount);
         $this->assertSame('JUMA ATHUMANI', $sms->customer_name);
         $this->assertSame('0712345678', $sms->customer_phone);
-        $this->assertNotNull($sms->transaction_id);
+        $this->assertNull($sms->transaction_id);
+        $this->assertSame(0, Transaction::count());
 
+        $this->approve($sms);
+
+        $sms->refresh();
+        $this->assertNotNull($sms->transaction_id);
         $this->assertSame(1, Transaction::count());
         $this->assertDatabaseHas('transactions', [
             'id' => $sms->transaction_id,
@@ -331,13 +355,17 @@ class SmsApiTest extends TestCase
         $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
         $this->assertSame('tigo', $sms->provider);
         $this->assertSame('TIGOPESA', $sms->network?->code);
-        $this->assertSame('RECORDED', $sms->processing_status);
+        $this->assertSame('APPROVAL_PENDING', $sms->processing_status);
         $this->assertSame('withdrawal', $sms->transaction_type);
         $this->assertSame('MP250920ABC123', $sms->transaction_reference);
         $this->assertSame(50_000.0, (float) $sms->amount);
         $this->assertSame('JOHN DOE', $sms->customer_name);
         $this->assertSame('0712345678', $sms->customer_phone);
         $this->assertSame(350_000.0, (float) $sms->balance);
+        $this->assertSame(0, Transaction::count());
+
+        $this->approve($sms);
+
         $this->assertSame(1, Transaction::count());
     }
 
@@ -354,6 +382,12 @@ class SmsApiTest extends TestCase
             ->postJson('/api/v1/sms/ingest', ['sms' => [['sender' => 'MPESA', 'message' => $bodyA]]])
             ->assertOk();
 
+        $held = SmsMessage::where('device_id', $first->id)->firstOrFail();
+        $this->actingAs($this->approver())
+            ->postJson(route('sms.approve', $held))
+            ->assertOk();
+        $this->assertSame(1, Transaction::count());
+
         $response = $this->withHeaders($this->deviceHeaders($second))
             ->postJson('/api/v1/sms/ingest', ['sms' => [['sender' => 'MPESA', 'message' => $bodyB]]])
             ->assertOk();
@@ -364,6 +398,77 @@ class SmsApiTest extends TestCase
         $duplicate = SmsMessage::where('device_id', $second->id)->firstOrFail();
         $this->assertTrue($duplicate->is_duplicate);
         $this->assertSame('DUPLICATE', $duplicate->processing_status);
+    }
+
+    public function test_unapproved_duplicate_reference_is_held_only_once(): void
+    {
+        $network = Network::where('code', 'VODACOM')->first();
+        $first = $this->makeDevice('active', $network);
+        $second = $this->makeDevice('active', $network);
+
+        $body = 'P98765 confirmed. You have received TZS 100,000.00 from JUMA ATHUMANI 0712345678.';
+
+        $this->withHeaders($this->deviceHeaders($first))
+            ->postJson('/api/v1/sms/ingest', ['sms' => [['sender' => 'MPESA', 'message' => $body]]])
+            ->assertOk();
+
+        $response = $this->withHeaders($this->deviceHeaders($second))
+            ->postJson('/api/v1/sms/ingest', ['sms' => [['sender' => 'MPESA', 'message' => $body, 'received_at' => '2026-09-14 11:00:00']]])
+            ->assertOk();
+
+        $this->assertTrue($response->json('results.0.duplicate'));
+        $this->assertSame(0, Transaction::count());
+
+        $duplicate = SmsMessage::where('device_id', $second->id)->firstOrFail();
+        $this->assertTrue($duplicate->is_duplicate);
+        $this->assertSame('DUPLICATE', $duplicate->processing_status);
+    }
+
+    public function test_approve_rejects_message_not_waiting_for_approval(): void
+    {
+        $device = $this->makeDevice();
+
+        $this->withHeaders($this->deviceHeaders($device))
+            ->postJson('/api/v1/sms/ingest', [
+                'sms' => [['sender' => 'MPESA', 'message' => 'P98765 Hello there, this is not financial.']],
+            ])
+            ->assertOk();
+
+        $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
+        $this->assertSame('NEEDS_REVIEW', $sms->processing_status);
+        $this->assertSame(0, Transaction::count());
+
+        $this->actingAs($this->approver())
+            ->postJson(route('sms.approve', $sms))
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'This SMS is not waiting for approval (stored).');
+
+        $this->assertSame(0, Transaction::count());
+    }
+
+    public function test_approve_records_performed_by_and_rejects_second_approval(): void
+    {
+        $device = $this->makeDevice();
+
+        $this->withHeaders($this->deviceHeaders($device))
+            ->postJson('/api/v1/sms/ingest', [
+                'sms' => [['sender' => 'MPESA', 'message' => 'P98765 confirmed. You have received TZS 100,000.00 from JUMA ATHUMANI 0712345678.']],
+            ])
+            ->assertOk();
+
+        $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
+        $this->approve($sms);
+
+        $this->assertDatabaseHas('transactions', [
+            'provider_reference' => 'P98765',
+            'performed_by' => $this->approver()->id,
+            'notes' => 'Via SMS approval (SMS #'.$sms->id.')',
+        ]);
+
+        $this->actingAs($this->approver())
+            ->postJson(route('sms.approve', $sms))
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
     }
 
     public function test_cashiers_and_staff_cannot_touch_device_api(): void
@@ -405,6 +510,9 @@ class SmsApiTest extends TestCase
 
         $this->assertSame(1, $response->json('summary.received'));
         $this->assertSame(1, $response->json('summary.processed'));
+
+        $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
+        $this->approve($sms);
 
         $txn = Transaction::firstOrFail();
         $this->assertSame('deposit', $txn->type);
@@ -452,6 +560,9 @@ Salio jipya: 1,085,000.00 TZS',
         $this->assertSame(1, $response->json('summary.received'));
         $this->assertSame(1, $response->json('summary.processed'));
 
+        $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
+        $this->approve($sms);
+
         $txn = Transaction::firstOrFail();
         $this->assertSame('airtime', $txn->type);
         $this->assertSame(1_000.0, (float) $txn->amount);
@@ -495,6 +606,9 @@ Salio lako jipya ni TSh 1,159,000. Umepokea pesa TSh 50,000 kutoka kwa 255657356
 
         $this->assertSame(1, $response->json('summary.received'));
         $this->assertSame(1, $response->json('summary.processed'));
+
+        $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
+        $this->approve($sms);
 
         $txn = Transaction::firstOrFail();
         $this->assertSame('withdrawal', $txn->type);

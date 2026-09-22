@@ -56,7 +56,11 @@
                     </div>
                     <a href="{{ route('transactions.receipt', $smsMessage->transaction) }}" class="btn btn-primary">View transaction receipt</a>
                 @else
-                    <p style="font-size:13px; color:var(--ink-soft); margin-bottom:14px;">This SMS is currently <strong>{{ sms_status_label($smsMessage->processing_status, $smsMessage->is_duplicate, $smsMessage->processing_error) }}</strong>. You can force compute it as a transaction, or use the manual form below.</p>
+                    <p style="font-size:13px; color:var(--ink-soft); margin-bottom:14px;">This SMS is currently <strong>{{ sms_status_label($smsMessage->processing_status, $smsMessage->is_duplicate, $smsMessage->processing_error) }}</strong>. You can approve, force compute it as a transaction, or use the manual form below.</p>
+                    @if($smsMessage->processing_status === 'APPROVAL_PENDING')
+                        <button type="button" class="btn btn-primary" onclick="openApproveModal()">Approve &amp; record transaction</button>
+                        <p style="font-size:11px;color:var(--ink-soft);margin-top:8px;">This detected transaction is waiting for approval. Approving records it as a full transaction with float/cash adjustments.</p>
+                    @endif
                     <form method="POST" action="{{ route('sms.force', $smsMessage) }}" style="display:inline;">
                         @csrf
                         <button type="submit" class="btn btn-primary">Force compute to transaction</button>
@@ -130,10 +134,68 @@
             </div>
         </div>
     @endif
+
+    <!-- Approve transaction confirm modal -->
+    @if($smsMessage->processing_status === 'APPROVAL_PENDING')
+        <div class="modal-backdrop" id="approveSmsModal">
+            <div class="modal" style="max-width:540px;">
+                <div class="modal-head">
+                    <h3>Record this detected transaction?</h3>
+                    <button class="modal-close" onclick="closeModal('approveSmsModal')">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div id="approveSmsError" class="box-alert" style="display:none;"></div>
+                    <p style="font-size:13px;color:var(--ink-soft);margin:0 0 10px;">This auto-detected message will be recorded as a full transaction with float/cash adjustments. Only approve it if the transaction is genuine.</p>
+                    <div class="detail-grid">
+                        <div class="detail-item"><div class="dk">Sender</div><div class="dv">{{ $smsMessage->sender }}</div></div>
+                        <div class="detail-item"><div class="dk">Network</div><div class="dv">@if($smsMessage->network)<span class="net-dot" style="background:{{ $smsMessage->network->color }};"></span> {{ $smsMessage->network->name }}@else — @endif</div></div>
+                        <div class="detail-item"><div class="dk">Type</div><div class="dv">{{ $smsMessage->transaction_type ? txn_type_label($smsMessage->transaction_type) : '—' }}</div></div>
+                        <div class="detail-item"><div class="dk">Amount</div><div class="dv">{{ $smsMessage->amount ? money($smsMessage->amount) : '—' }}</div></div>
+                        <div class="detail-item"><div class="dk">Customer</div><div class="dv">{{ $smsMessage->customer_name ?? '—' }} @if($smsMessage->customer_phone) ({{ $smsMessage->customer_phone }}) @endif</div></div>
+                        <div class="detail-item"><div class="dk">Reference</div><div class="dv">{{ $smsMessage->transaction_reference ?? '—' }}</div></div>
+                    </div>
+                    <div class="receipt" style="margin-top:12px;">
+                        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:8px;">Detected message</div>
+                        <pre style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:13.5px;line-height:1.6;margin:0;color:var(--coffee-700);max-height:140px;overflow:auto;">{{ $smsMessage->message_body }}</pre>
+                    </div>
+                </div>
+                <div class="modal-foot">
+                    <button class="btn btn-ghost" onclick="closeModal('approveSmsModal')">Cancel</button>
+                    <button class="btn btn-primary" id="approveSmsBtn" onclick="submitApprove()">Yes, record transaction</button>
+                </div>
+            </div>
+        </div>
+    @endif
 @endsection
 
 @section('scripts')
     <script>
+        function openApproveModal() { openModal('approveSmsModal'); }
+
+        function submitApprove() {
+            const btn = document.getElementById('approveSmsBtn');
+            btn.disabled = true;
+            btn.textContent = 'Recording…';
+            fetch('{{ route('sms.approve', $smsMessage) }}', {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF_TOKEN },
+                body: JSON.stringify({}),
+            })
+            .then(r => r.json().catch(() => ({})).then(d => ({ ok: r.ok, d })))
+            .then(({ ok, d }) => {
+                if (!ok || !d.success) throw new Error(d.message || 'Approval failed.');
+                toast(d.message, 'success');
+                closeModal('approveSmsModal');
+                setTimeout(() => window.location.reload(), 700);
+            })
+            .catch(err => {
+                document.getElementById('approveSmsError').style.display = 'block';
+                document.getElementById('approveSmsError').textContent = err.message || 'Something went wrong.';
+                btn.disabled = false;
+                btn.textContent = 'Yes, record transaction';
+            });
+        }
+
         document.querySelectorAll('[data-sms-manual-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();

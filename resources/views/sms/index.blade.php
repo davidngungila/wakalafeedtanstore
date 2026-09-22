@@ -42,6 +42,13 @@
             <div class="stat-value" data-stat-key="pending">{{ $today['pending'] }}</div>
             <div class="stat-label">Pending processing</div>
         </div>
+        <div class="stat-card" style="--stat-tint:var(--gold-100);--stat-fg:#8a6418;">
+            <div class="stat-top"><div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
+            </div></div>
+            <div class="stat-value" data-stat-key="approval">{{ $today['approval'] }}</div>
+            <div class="stat-label">Awaiting approval</div>
+        </div>
         <div class="stat-card" style="--stat-tint:var(--terracotta-100);--stat-fg:var(--terracotta-600);">
             <div class="stat-top"><div class="stat-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>
@@ -73,6 +80,7 @@
                         'all' => 'All',
                         'processed' => 'Processed',
                         'pending' => 'Pending',
+                        'approval' => 'Approval',
                         'stored' => 'Stored',
                         'failed' => 'Failed',
                         'duplicate' => 'Duplicates',
@@ -146,7 +154,11 @@
                             <td>
                                 <div style="display:flex; gap:6px;">
                                     <a href="{{ route('sms.show', $message) }}" class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="event.stopPropagation()">View</a>
-                                    @if(!$message->transaction_id)
+                                    @if($message->transaction_id)
+                                        <a href="{{ route('transactions.receipt', $message->transaction) }}" class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="event.stopPropagation()" title="View transaction receipt">Txn</a>
+                                    @elseif($message->processing_status === 'APPROVAL_PENDING')
+                                        <button type="button" class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="event.stopPropagation();openApproveModal({{ $message->id }})">Approve</button>
+                                    @else
                                         <a href="{{ route('sms.show', $message) }}" class="btn btn-primary" style="padding:6px 10px;font-size:12px;" onclick="event.stopPropagation()" title="Force compute">Force</a>
                                     @endif
                                 </div>
@@ -178,6 +190,29 @@
             </div>
             <div class="modal-foot" id="smsDetailsFoot" style="display:none;">
                 <button class="btn btn-primary" onclick="closeModal('smsDetailsDrawer')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approve transaction confirm modal (auto-popped by the live stream) -->
+    <div class="modal-backdrop" id="approveSmsModal">
+        <div class="modal" style="max-width:540px;">
+            <div class="modal-head">
+                <h3>Record this detected transaction?</h3>
+                <button class="modal-close" onclick="closeModal('approveSmsModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div id="approveSmsError" class="box-alert" style="display:none;"></div>
+                <p style="font-size:13px;color:var(--ink-soft);margin:0 0 10px;">This auto-detected message will be recorded as a full transaction with float/cash adjustments. Only approve it if the transaction is genuine.</p>
+                <div class="detail-grid" id="approveSmsGrid"></div>
+                <div class="receipt">
+                    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:8px;">Detected message</div>
+                    <pre id="approveSmsBody" style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:13.5px;line-height:1.6;margin:0;color:var(--coffee-700);max-height:140px;overflow:auto;"></pre>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="closeModal('approveSmsModal')">Cancel</button>
+                <button class="btn btn-primary" id="approveSmsBtn" onclick="submitApprove()">Yes, record transaction</button>
             </div>
         </div>
     </div>
@@ -278,9 +313,81 @@
             openModal('smsDetailsDrawer');
         }
 
+        let currentApproveId = null;
+        const poppedApproval = new Set();
+
+        function renderApproveGrid(row) {
+            const entries = [
+                ['Sender', row.sender],
+                ['Time (EAT)', row.datetime || row.time],
+                ['Network', row.network && row.network !== '—' ? {__html: '<span style="display:inline-flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:50%;background:' + row.network_color + ';display:inline-block;"></span>' + row.network + '</span>'} : '—'],
+                ['Type', row.type],
+                ['Amount', row.amount],
+                ['Customer', row.customer],
+                ['Phone', row.customer_phone || '—'],
+                ['Reference', row.reference],
+                ['Status', {__html: '<span class="tag ' + row.badge + '">' + row.label + '</span>'}],
+            ];
+
+            const grid = document.getElementById('approveSmsGrid');
+            grid.innerHTML = '';
+            entries.forEach(([label, value]) => {
+                const item = document.createElement('div');
+                item.className = 'detail-item';
+                const k = document.createElement('div');
+                k.className = 'dk';
+                k.textContent = label;
+                const v = document.createElement('div');
+                v.className = 'dv';
+                if (value && value.__html) v.innerHTML = value.__html;
+                else v.textContent = value == null || value === '' ? '—' : value;
+                item.appendChild(k);
+                item.appendChild(v);
+                grid.appendChild(item);
+            });
+            document.getElementById('approveSmsBody').textContent = row.body || '—';
+        }
+
+        function openApproveModal(id) {
+            const row = smsRowCache.get(Number(id));
+            if (!row) return;
+            currentApproveId = Number(id);
+            const btn = document.getElementById('approveSmsBtn');
+            btn.disabled = false;
+            btn.textContent = 'Yes, record transaction';
+            document.getElementById('approveSmsError').style.display = 'none';
+            renderApproveGrid(row);
+            openModal('approveSmsModal');
+        }
+
+        function submitApprove() {
+            if (currentApproveId == null) return;
+            const btn = document.getElementById('approveSmsBtn');
+            btn.disabled = true;
+            btn.textContent = 'Recording…';
+            fetch('{{ url('/sms') }}/' + currentApproveId + '/approve', {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF_TOKEN },
+                body: JSON.stringify({}),
+            })
+            .then(r => r.json().catch(() => ({})).then(d => ({ ok: r.ok, d })))
+            .then(({ ok, d }) => {
+                if (!ok || !d.success) throw new Error(d.message || 'Approval failed.');
+                toast(d.message, 'success');
+                closeModal('approveSmsModal');
+                setTimeout(() => window.location.reload(), 700);
+            })
+            .catch(err => {
+                document.getElementById('approveSmsError').style.display = 'block';
+                document.getElementById('approveSmsError').textContent = err.message || 'Something went wrong.';
+                btn.disabled = false;
+                btn.textContent = 'Yes, record transaction';
+            });
+        }
+
         const totalCounts = @json($counts);
         const todayCounts = @json($today);
-        const todayKeyMap = { processed: 'processed', pending: 'pending', stored: 'stored', failed: 'failed', duplicate: 'duplicates' };
+        const todayKeyMap = { processed: 'processed', pending: 'pending', approval: 'approval', stored: 'stored', failed: 'failed', duplicate: 'duplicates' };
 
         const liveStatus = {{ json_encode($filters['status'] ?? 'all') }};
         const liveDevice = {{ json_encode($filters['device'] ?? '') }};
@@ -331,6 +438,15 @@
             });
         }
 
+        function smsActionsCell(data) {
+            const view = '<button type="button" class="btn btn-ghost btn-sm" data-sms-view>View</button>';
+            if (data.status_key === 'approval') {
+                return smsTd('<div style="display:flex; gap:6px;">' + view
+                    + '<button type="button" class="btn btn-primary btn-sm" onclick="event.stopPropagation();openApproveModal(' + data.sms_id + ')">Approve</button></div>');
+            }
+            return smsTd(view);
+        }
+
         smsLiveStart({
             stream: '{{ route('sms.stream') }}',
             since: {{ $messages->first()?->id ?? 0 }},
@@ -347,11 +463,19 @@
                 smsTd(smsEsc(data.sender)),
                 smsNetworkCell(data),
                 smsStatusCell(data),
-                smsViewCell(),
+                smsActionsCell(data),
             ],
             onMessage: (data, prev) => {
                 adjustCounts(data, prev);
                 renderCounts();
+
+                // Live auto-detect: newly detected transactions pop the approve
+                // modal immediately, no page refresh needed.
+                if (data.status_key === 'approval' && !poppedApproval.has(data.sms_id) && (!prev || prev.status_key !== 'approval')) {
+                    poppedApproval.add(data.sms_id);
+                    openApproveModal(data.sms_id);
+                }
+
                 return liveFilter(data);
             },
         });

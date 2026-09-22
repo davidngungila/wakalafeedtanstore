@@ -9,12 +9,14 @@ use App\Models\Transaction;
 use App\Services\ExportService;
 use App\Services\Sms\SmsTransactionExtractor;
 use App\Services\SmsParser;
+use App\Services\SmsProcessor;
 use App\Services\TransactionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class SmsController extends Controller
@@ -71,6 +73,7 @@ class SmsController extends Controller
             'received' => (clone $todayBase)->count(),
             'processed' => (clone $todayBase)->where('processing_status', 'RECORDED')->count(),
             'pending' => (clone $todayBase)->whereIn('processing_status', ['RECEIVED', 'PARSED'])->count(),
+            'approval' => (clone $todayBase)->where('processing_status', 'APPROVAL_PENDING')->count(),
             'stored' => (clone $todayBase)->whereIn('processing_status', ['NEEDS_REVIEW', 'FAILED'])
                 ->where('processing_error', 'like', '%financial template%')->count(),
             'failed' => (clone $todayBase)->where('processing_status', 'FAILED')->where(function ($q) {
@@ -84,6 +87,7 @@ class SmsController extends Controller
             'all' => SmsMessage::count(),
             'processed' => SmsMessage::where('processing_status', 'RECORDED')->count(),
             'pending' => SmsMessage::whereIn('processing_status', ['RECEIVED', 'PARSED'])->count(),
+            'approval' => SmsMessage::where('processing_status', 'APPROVAL_PENDING')->count(),
             'stored' => SmsMessage::whereIn('processing_status', ['NEEDS_REVIEW', 'FAILED'])
                 ->where('processing_error', 'like', '%financial template%')->count(),
             'failed' => SmsMessage::where('processing_status', 'FAILED')->where(function ($q) {
@@ -158,7 +162,7 @@ class SmsController extends Controller
                 'txn_reference' => $m->transaction?->reference ?? '—',
                 'status' => ucfirst(sms_status_label($m->processing_status, $m->is_duplicate, $m->processing_error)),
                 'error' => $m->processing_error ?? '—',
-                'body' => \Illuminate\Support\Str::limit($m->message_body, 80),
+                'body' => Str::limit($m->message_body, 80),
             ];
         });
 
@@ -167,6 +171,7 @@ class SmsController extends Controller
             foreach ($columns as $col) {
                 $out[$col['key']] = $row[$col['key']] ?? '';
             }
+
             return $out;
         });
 
@@ -216,6 +221,9 @@ class SmsController extends Controller
                 break;
             case 'pending':
                 $query->whereIn('processing_status', ['RECEIVED', 'PARSED']);
+                break;
+            case 'approval':
+                $query->where('processing_status', 'APPROVAL_PENDING');
                 break;
             case 'stored':
                 $query->whereIn('processing_status', ['NEEDS_REVIEW', 'FAILED'])
@@ -481,6 +489,55 @@ class SmsController extends Controller
         }
 
         return back()->with('status', 'SMS processed to transaction '.$transaction->reference);
+    }
+
+    public function approve(Request $request, SmsMessage $smsMessage): JsonResponse|RedirectResponse
+    {
+        if ($smsMessage->transaction_id) {
+            $message = 'This SMS has already been processed into transaction '.($smsMessage->transaction?->reference ?? '#'.$smsMessage->transaction_id);
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['sms' => $message]);
+        }
+
+        if ($smsMessage->processing_status !== 'APPROVAL_PENDING') {
+            $message = 'This SMS is not waiting for approval ('.sms_status_label($smsMessage->processing_status, $smsMessage->is_duplicate, $smsMessage->processing_error).').';
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['sms' => $message]);
+        }
+
+        try {
+            $transaction = DB::transaction(fn () => app(SmsProcessor::class)->recordApproved($smsMessage, auth()->id()));
+        } catch (\Throwable $e) {
+            \Log::warning('SMS approval failed', ['error' => $e->getMessage(), 'sms_id' => $smsMessage->id]);
+
+            $message = 'Approval failed: '.$e->getMessage();
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['sms' => $message]);
+        }
+
+        $this->recordAudit('SMS approved and recorded to transaction', 'SmsMessage', $smsMessage->id, [
+            'sms_id' => $smsMessage->id,
+            'transaction_id' => $transaction->id,
+            'reference' => $transaction->reference,
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'SMS approved and recorded as transaction '.$transaction->reference, 'transaction_id' => $transaction->id]);
+        }
+
+        return back()->with('status', 'SMS approved and recorded as transaction '.$transaction->reference);
     }
 
     /**

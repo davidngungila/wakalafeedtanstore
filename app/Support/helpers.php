@@ -80,6 +80,11 @@ if (! function_exists('sms_status_label')) {
             return 'pending';
         }
 
+        // Detected transaction held for supervisor approval before recording.
+        if ($status === 'APPROVAL_PENDING') {
+            return 'approval';
+        }
+
         if ($status === 'NEEDS_REVIEW' || ($status === 'FAILED' && $error !== null && str_contains($error, 'financial template'))) {
             return 'stored';
         }
@@ -101,6 +106,7 @@ if (! function_exists('sms_status_badge')) {
         return match (sms_status_label($status, $isDuplicate, $error)) {
             'processed' => 'tag-green',
             'pending' => 'tag-gold',
+            'approval' => 'tag-gold',
             'stored' => 'tag-terracotta',
             'duplicate' => 'tag-terracotta',
             default => 'tag-red',

@@ -114,6 +114,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::get('/sms/{smsMessage}', [SmsController::class, 'show'])->name('sms.show');
     Route::post('/sms/{smsMessage}/process', [SmsController::class, 'process'])->name('sms.process');
     Route::post('/sms/{smsMessage}/force', [SmsController::class, 'forceProcess'])->name('sms.force');
+    Route::post('/sms/{smsMessage}/approve', [SmsController::class, 'approve'])->name('sms.approve');
 
     Route::middleware('role:supervisor,admin')->group(function () {
         Route::put('/transactions/{transaction}/reverse', [TransactionController::class, 'reverse'])->name('transactions.reverse');

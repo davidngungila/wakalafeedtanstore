@@ -7,7 +7,6 @@ use App\Models\DailyOpening;
 use App\Models\Device;
 use App\Models\FloatTransaction;
 use App\Models\Network;
-use App\Models\NetworkBalance;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
 use App\Services\Sms\SmsTransactionExtractor;
@@ -16,13 +15,16 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * The automatic ingestion pipeline: a connected Android device pushes an SMS
- * batch and each message is identified, parsed, de-duplicated, validated and
- * finally turned into a transaction with matching float/cash adjustments.
+ * batch and each message is identified, parsed, de-duplicated and validated.
+ * Detected financial transactions are held as APPROVAL_PENDING for a supervisor
+ * to approve (SmsController@approve) before being recorded as a transaction
+ * with matching float/cash adjustments.
  *
  * Duplicate protection has two layers:
  *   1. SMS-level: sha256(sender | body | received_at) unique per device.
- *   2. Transaction-level: an existing transaction for the same provider
- *      (network) + provider reference is never recorded twice.
+ *   2. Transaction-level: an existing transaction - or another held message -
+ *      for the same provider (network) + provider reference is never recorded
+ *      twice.
  */
 class SmsProcessor
 {
@@ -179,7 +181,14 @@ class SmsProcessor
             ->where('provider_reference', $parsed['reference'])
             ->exists();
 
-        if ($alreadyRecorded) {
+        $alreadyHeld = SmsMessage::query()
+            ->whereKeyNot($sms->id)
+            ->where('network_id', $network->id)
+            ->where('transaction_reference', $parsed['reference'])
+            ->where('processing_status', 'APPROVAL_PENDING')
+            ->exists();
+
+        if ($alreadyRecorded || $alreadyHeld) {
             $sms->update([
                 'is_duplicate' => true,
                 'processing_status' => 'DUPLICATE',
@@ -195,6 +204,62 @@ class SmsProcessor
             ];
         }
 
+        // Detected transactions are held for supervisor approval instead of being
+        // auto-recorded. The phone still gets a success ack; no transaction, float
+        // or journal entry is created until a user approves the message.
+        $sms->update([
+            'processing_status' => 'APPROVAL_PENDING',
+            'processing_error' => null,
+            'received_at' => $parsed['received_at'] ?? $sms->received_at,
+        ]);
+
+        $device->forceFill(['last_sms_at' => now()])->save();
+
+        return [
+            'ok' => true,
+            'sms_id' => $sms->id,
+            'status' => 'awaiting_approval',
+            'reference' => $sms->transaction_reference,
+            'type' => $sms->transaction_type,
+            'amount' => (float) $sms->amount,
+            'network' => $network->code,
+            'sim_slot' => $sms->sim_slot,
+            'line' => $line?->displayName(),
+            'transaction_reference' => null,
+        ];
+    }
+
+    /**
+     * Approve a detected (`APPROVAL_PENDING`) SMS and record it as a full
+     * transaction with matching float/cash adjustments, the same way ingest
+     * used to. Returns the created transaction.
+     */
+    public function recordApproved(SmsMessage $sms, ?int $performedBy = null): Transaction
+    {
+        $agent = $sms->agent ?? cash_point();
+
+        if ($agent === null) {
+            throw new \RuntimeException('Cash point not configured. An admin must set up the cash point in Settings before SMS can be recorded.');
+        }
+
+        $network = $sms->network;
+
+        if ($network === null) {
+            throw new \RuntimeException('SMS has no network assigned.');
+        }
+
+        // Re-run strict extraction to recover commission and any fields not stored on the SMS.
+        $extracted = $this->extractor->extract($sms->message_body, $sms->provider, $sms->sender, $network->code);
+
+        $parsed = $extracted ?? [
+            'type' => $sms->transaction_type,
+            'amount' => $sms->amount,
+            'reference' => $sms->transaction_reference,
+            'customer_name' => $sms->customer_name,
+            'customer_phone' => $sms->customer_phone,
+            'received_at' => $sms->received_at,
+        ];
+
         $commissionOverride = isset($parsed['commission']) && (float) $parsed['commission'] > 0 ? (float) $parsed['commission'] : null;
 
         $transaction = $this->transactions->process(
@@ -206,65 +271,62 @@ class SmsProcessor
                 'amount' => $parsed['amount'],
             ],
             $agent,
-            null,
-            'Via SMS ingest',
+            $performedBy,
+            'Via SMS approval (SMS #'.$sms->id.')',
             $parsed['reference'],
             $commissionOverride,
         );
 
-        // For float-related SMS (bank_to_wallet, float_topup, or any with UNION FINANCIAL / Kiasi:Tsh), also record as FloatTransaction
-        // User requested: ype Bank to Wallet in type the all add float transaction (all float types should add float)
-        $isFloatSms = in_array($parsed['type'], ['bank_to_wallet', 'float_topup', 'cash_in'], true) || str_contains(strtolower($body), 'union financial') || str_contains(strtolower($body), 'kiasi:tsh') || str_contains(strtolower($body), 'kiasi: tsh');
-        if ($isFloatSms) {
-            try {
-                $floatType = $parsed['type'] === 'bank_to_wallet' ? 'float_topup' : 'cash_in';
-                // Use same network and amount, create float transaction linked to daily opening
-                $dailyOpening = DailyOpening::forAgentAndDate($agent->id, today())->open()->first();
-                $balance = NetworkBalance::firstOrCreate(
-                    ['agent_id' => $agent->id, 'network_id' => $network->id],
-                    ['opening_balance' => 0, 'balance' => 0]
-                );
-                // bank_to_wallet is a float deposit/top-up: TransactionService already increased the per-network
-                // float by +amount, so nothing further to adjust here.
+        $isFloatSms = in_array($parsed['type'], ['bank_to_wallet', 'float_topup', 'cash_in'], true)
+            || str_contains(strtolower($sms->message_body), 'union financial')
+            || str_contains(strtolower($sms->message_body), 'kiasi:tsh')
+            || str_contains(strtolower($sms->message_body), 'kiasi: tsh');
 
-                FloatTransaction::create([
-                    'reference' => 'FLT-'.now()->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT),
-                    'agent_id' => $agent->id,
-                    'network_id' => $network->id,
-                    'type' => $floatType,
-                    'amount' => $parsed['amount'],
-                    'fee' => 0,
-                    'status' => 'completed',
-                    'performed_by' => null,
-                    'notes' => 'Via SMS ingest - float deposit from '.($parsed['customer_name'] ?? 'bank').' ('.$parsed['reference'].')',
-                    'daily_opening_id' => $dailyOpening?->id,
-                ]);
-            } catch (\Throwable $e) {
-                \Log::warning('Float dual recording failed', ['error' => $e->getMessage(), 'txn' => $transaction->id]);
-            }
-        }
+        $this->recordFloatDual($agent, $network, $parsed, $performedBy, 'Via SMS approval - ', $isFloatSms);
 
         $sms->update([
             'processing_status' => 'RECORDED',
             'processing_error' => null,
             'transaction_id' => $transaction->id,
+            'transaction_reference' => $parsed['reference'],
+            'amount' => $parsed['amount'],
+            'transaction_type' => $parsed['type'],
             'received_at' => $parsed['received_at'] ?? $sms->received_at,
         ]);
 
-        $device->forceFill(['last_sms_at' => now()])->save();
+        return $transaction;
+    }
 
-        return [
-            'ok' => true,
-            'sms_id' => $sms->id,
-            'status' => 'processed',
-            'reference' => $sms->transaction_reference,
-            'type' => $sms->transaction_type,
-            'amount' => (float) $sms->amount,
-            'network' => $network->code,
-            'sim_slot' => $sms->sim_slot,
-            'line' => $line?->displayName(),
-            'transaction_reference' => $transaction->reference,
-        ];
+    /**
+     * For float-related SMS (bank_to_wallet, float_topup, cash_in, or any with
+     * UNION FINANCIAL / Kiasi:Tsh), also record a matching FloatTransaction
+     * linked to the daily opening.
+     */
+    private function recordFloatDual(Agent $agent, Network $network, array $parsed, ?int $performedBy, string $notesPrefix, bool $isFloatSms): void
+    {
+        if (! $isFloatSms) {
+            return;
+        }
+
+        try {
+            $floatType = $parsed['type'] === 'bank_to_wallet' ? 'float_topup' : 'cash_in';
+            $dailyOpening = DailyOpening::forAgentAndDate($agent->id, today())->open()->first();
+
+            FloatTransaction::create([
+                'reference' => 'FLT-'.now()->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT),
+                'agent_id' => $agent->id,
+                'network_id' => $network->id,
+                'type' => $floatType,
+                'amount' => $parsed['amount'],
+                'fee' => 0,
+                'status' => 'completed',
+                'performed_by' => $performedBy,
+                'notes' => $notesPrefix.'float deposit from '.($parsed['customer_name'] ?? 'bank').' ('.$parsed['reference'].')',
+                'daily_opening_id' => $dailyOpening?->id,
+            ]);
+        } catch (\Throwable $e) {
+            \Log::warning('Float dual recording failed', ['error' => $e->getMessage()]);
+        }
     }
 
     private function normalizeReceivedAt(?string $value): ?Carbon
