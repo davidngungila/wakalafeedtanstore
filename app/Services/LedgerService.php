@@ -256,6 +256,7 @@ class LedgerService
             $rows[] = [
                 'date' => $line->entry->entry_date->toDateString(),
                 'reference' => $line->entry->reference,
+                'entry_id' => $line->entry->id,
                 'description' => $line->description ?: $line->entry->description,
                 'debit' => (float) $line->debit,
                 'credit' => (float) $line->credit,

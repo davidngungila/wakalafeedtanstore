@@ -7,6 +7,7 @@ use App\Models\Network;
 use App\Models\NetworkBalance;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
+use App\Services\ExportService;
 use App\Services\TransactionJournalService;
 use App\Services\TransactionService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -61,8 +62,106 @@ class TransactionController extends Controller
         ];
 
         $combos = $this->combos();
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('transactions.export');
 
-        return view('transactions.index', compact('transactions', 'todayTotals', 'combos') + ['filters' => $request->only(['status', 'type', 'network', 'q'])]);
+        return view('transactions.index', compact('transactions', 'todayTotals', 'combos', 'exportColumns', 'exportRoute') + ['filters' => $request->only(['status', 'type', 'network', 'q'])]);
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $query = Transaction::with(['network', 'agent', 'operator']);
+
+        if ($request->filled('status') && $request->input('status') !== 'all') {
+            $query->where('status', $request->input('status'));
+        }
+        if ($request->filled('type') && $request->input('type') !== 'all') {
+            $query->where('type', $request->input('type'));
+        }
+        if ($request->filled('network') && $request->input('network') !== 'all') {
+            $query->where('network_id', $request->input('network'));
+        }
+        if ($request->filled('q')) {
+            $needle = $request->input('q');
+            $query->where(function ($sub) use ($needle) {
+                $sub->where('reference', 'like', "%{$needle}%")
+                    ->orWhere('customer_name', 'like', "%{$needle}%")
+                    ->orWhere('customer_phone', 'like', "%{$needle}%")
+                    ->orWhere('provider_reference', 'like', "%{$needle}%");
+            });
+        }
+
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = $request->input('format', 'pdf');
+        $format = in_array($format, ['pdf', 'excel'], true) ? $format : 'pdf';
+
+        $rows = $query->latest()->limit(5000)->get()->map(function (Transaction $t) {
+            return [
+                'reference' => $t->reference,
+                'provider_reference' => $t->provider_reference ?? '—',
+                'date' => $t->created_at->format('d M Y H:i'),
+                'customer_name' => $t->customer_name ?? '—',
+                'customer_phone' => $t->customer_phone ?? '—',
+                'type' => txn_type_label($t->type),
+                'type_raw' => $t->type,
+                'network' => $t->network?->name ?? '—',
+                'amount' => money($t->amount),
+                'amount_raw' => (float) $t->amount,
+                'fee' => money($t->fee),
+                'commission' => money($t->commission),
+                'status' => ucfirst($t->status),
+                'agent' => $t->agent?->name ?? '—',
+                'operator' => $t->operator?->name ?? '—',
+                'running_cash' => $t->running_cash_balance !== null ? money($t->running_cash_balance) : '—',
+                'running_float' => $t->running_float_balance !== null ? money($t->running_float_balance) : '—',
+            ];
+        });
+
+        // Map to export rows with only selected columns
+        $exportRows = $rows->map(function (array $row) use ($columns) {
+            $out = [];
+            foreach ($columns as $col) {
+                $out[$col['key']] = $row[$col['key']] ?? '';
+            }
+            return $out;
+        });
+
+        $title = 'Transactions Report';
+        $subtitle = 'Filtered transactions — '.now()->format('d M Y H:i').' — '.count($exportRows).' records';
+        $meta = [
+            'filters' => array_filter($request->only(['status', 'type', 'network', 'q'])),
+            'totals' => [
+                'amount' => money($rows->sum('amount_raw')),
+            ],
+        ];
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $exportRows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $exportRows, $meta);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'reference', 'label' => 'Reference'],
+            ['key' => 'provider_reference', 'label' => 'Provider Ref'],
+            ['key' => 'date', 'label' => 'Date'],
+            ['key' => 'customer_name', 'label' => 'Customer'],
+            ['key' => 'customer_phone', 'label' => 'Phone'],
+            ['key' => 'type', 'label' => 'Type'],
+            ['key' => 'network', 'label' => 'Network'],
+            ['key' => 'amount', 'label' => 'Amount'],
+            ['key' => 'fee', 'label' => 'Fee'],
+            ['key' => 'commission', 'label' => 'Commission'],
+            ['key' => 'status', 'label' => 'Status'],
+            ['key' => 'agent', 'label' => 'Agent'],
+            ['key' => 'operator', 'label' => 'Operator'],
+            ['key' => 'running_cash', 'label' => 'Running Cash'],
+            ['key' => 'running_float', 'label' => 'Running Float'],
+        ];
     }
 
     public function create(Request $request): View

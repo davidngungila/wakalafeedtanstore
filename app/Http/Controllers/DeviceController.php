@@ -7,6 +7,7 @@ use App\Models\DeviceLine;
 use App\Models\Network;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
+use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -49,13 +50,85 @@ class DeviceController extends Controller
                 ];
             });
 
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('devices.export');
+
         return view('devices.index', [
             'devices' => $devices,
             'networks' => $networks,
             'todayStats' => $todayStats,
             'filters' => $request->only(['status', 'network']),
             'credentialsFlash' => session()->pull('credentials_flash'),
+            'exportColumns' => $exportColumns,
+            'exportRoute' => $exportRoute,
         ]);
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $query = Device::with(['agent', 'network', 'networks', 'lines.network']);
+
+        if ($request->filled('status') && $request->input('status') !== 'all') {
+            $query->where('status', $request->input('status'));
+        }
+        if ($request->filled('network') && $request->input('network') !== 'all') {
+            $query->where(function ($q) use ($request) {
+                $q->whereHas('networks', fn ($w) => $w->whereKey($request->input('network')))
+                    ->orWhere('network_id', $request->input('network'));
+            });
+        }
+
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = $request->input('format', 'pdf');
+        $format = in_array($format, ['pdf', 'excel'], true) ? $format : 'pdf';
+
+        $rows = $query->latest()->limit(5000)->get()->map(function (Device $d) {
+            return [
+                'name' => $d->name,
+                'device_code' => $d->device_code,
+                'status' => ucfirst($d->status),
+                'network' => $d->networks->pluck('name')->implode(', ') ?: ($d->network?->name ?? '—'),
+                'phone' => $d->phone_number ?? '—',
+                'branch' => $d->branch ?? '—',
+                'lines' => $d->lines->map(fn ($l) => 'SIM'.$l->sim_slot.':'.$l->network?->name.'('.($l->phone_number ?? '—').')')->implode('; ') ?: '—',
+                'last_sync' => $d->last_sync_at?->format('d M Y H:i') ?? '—',
+                'created_at' => $d->created_at->format('d M Y H:i'),
+            ];
+        });
+
+        $exportRows = $rows->map(function (array $row) use ($columns) {
+            $out = [];
+            foreach ($columns as $col) {
+                $out[$col['key']] = $row[$col['key']] ?? '';
+            }
+            return $out;
+        });
+
+        $title = 'Devices Report';
+        $subtitle = 'Filtered devices — '.now()->format('d M Y H:i').' — '.count($exportRows).' records';
+        $meta = ['filters' => array_filter($request->only(['status', 'network']))];
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $exportRows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $exportRows, $meta);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'name', 'label' => 'Device Name'],
+            ['key' => 'device_code', 'label' => 'Device Code'],
+            ['key' => 'status', 'label' => 'Status'],
+            ['key' => 'network', 'label' => 'Networks'],
+            ['key' => 'phone', 'label' => 'Phone'],
+            ['key' => 'branch', 'label' => 'Branch'],
+            ['key' => 'lines', 'label' => 'SIM Lines'],
+            ['key' => 'last_sync', 'label' => 'Last Sync'],
+            ['key' => 'created_at', 'label' => 'Created'],
+        ];
     }
 
     public function edit(Device $device): View

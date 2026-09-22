@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Crypt;
 
 #[Fillable([
     'code',
@@ -79,5 +80,25 @@ class Account extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    public function getRouteKey(): string
+    {
+        return Crypt::encryptString((string) $this->getKey());
+    }
+
+    public function resolveRouteBinding($value, $field = null): ?self
+    {
+        try {
+            $id = (int) Crypt::decryptString((string) $value);
+        } catch (\Throwable) {
+            if (is_numeric($value)) {
+                return static::find((int) $value);
+            }
+
+            return null;
+        }
+
+        return static::find($id);
     }
 }

@@ -18,8 +18,9 @@
     <form method="GET" action="{{ route('finance.ledger.index') }}">
         <div class="table-toolbar" style="background:var(--white);border:1px solid var(--line);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);margin-bottom:24px;">
             <select name="account_id" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:13px;font-weight:600;background:var(--white);color:var(--coffee-700);" onchange="this.form.submit()">
-                @forelse ($accounts as $option)
-                    <option value="{{ $option->id }}" {{ $option->id === $selectedAccountId ? 'selected' : '' }}>{{ $option->code }} — {{ $option->name }}</option>
+                @forelse (($accountsForView ?? $accounts) as $option)
+                    @php $optId = $option['encrypted'] ?? $option->id; $optRawId = $option['id'] ?? $option->id; @endphp
+                    <option value="{{ $optId }}" {{ $optRawId === $selectedAccountId ? 'selected' : '' }}>{{ $option['code'] ?? $option->code }} — {{ $option['name'] ?? $option->name }}</option>
                 @empty
                     <option value="">No accounts yet</option>
                 @endforelse
@@ -30,6 +31,9 @@
                 <option value="month" {{ $range === 'month' ? 'selected' : '' }}>This month</option>
                 <option value="all" {{ $range === 'all' ? 'selected' : '' }}>All time</option>
             </select>
+            @if($account)
+                <a href="{{ route('finance.ledger.index', ['account_id' => $account->getRouteKey(), 'range' => $range]) }}" class="btn btn-ghost" style="margin-left:auto;">View single</a>
+            @endif
         </div>
     </form>
 
@@ -80,9 +84,16 @@
                             <td class="cell-title">@money($ledgerReport['opening'])</td>
                         </tr>
                         @forelse ($ledgerReport['rows'] as $row)
-                            <tr>
+                            @php $entry = \App\Models\JournalEntry::where('reference', $row['reference'])->first(); @endphp
+                            <tr @if($entry) class="row-click" style="cursor:pointer;" onclick="window.location='{{ route('finance.journals.show', $entry) }}'" @endif>
                                 <td>{{ $row['date'] }}</td>
-                                <td class="cell-title">{{ $row['reference'] }}</td>
+                                <td class="cell-title">
+                                    @if($entry)
+                                        <a href="{{ route('finance.journals.show', $entry) }}" onclick="event.stopPropagation()" style="color:var(--terracotta-600);text-decoration:none;font-weight:700;">{{ $row['reference'] }}</a>
+                                    @else
+                                        {{ $row['reference'] }}
+                                    @endif
+                                </td>
                                 <td class="cell-sub">{{ Str::limit($row['description'], 60) }}</td>
                                 <td>{{ $row['debit'] > 0 ? money($row['debit']) : '—' }}</td>
                                 <td>{{ $row['credit'] > 0 ? money($row['credit']) : '—' }}</td>

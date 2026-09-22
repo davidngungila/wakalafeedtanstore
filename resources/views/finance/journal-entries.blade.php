@@ -87,12 +87,9 @@
                                         </form>
                                     @endif
                                     @if (is_admin() && $entry->status === 'posted')
-                                        <form method="POST" action="{{ route('finance.journals.reverse', $entry) }}" onsubmit="return confirm('Reverse {{ $entry->reference }} with an offsetting entry?')" onclick="event.stopPropagation()">
-                                            @csrf
-                                            <button class="danger" title="Reverse">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
-                                            </button>
-                                        </form>
+                                        <button type="button" class="danger" title="Reverse" onclick="event.stopPropagation(); openReverseModal('{{ $entry->getRouteKey() }}', '{{ $entry->reference }}')" >
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                                        </button>
                                     @endif
                                 </div>
                             </td>
@@ -109,6 +106,36 @@
                 <div class="pager-pages">{{ $entries->links() }}</div>
             </div>
         @endif
+    </div>
+
+    {{-- Reverse confirmation modal (popup, not browser confirm) --}}
+    <div class="modal-backdrop" id="reverseModal" onclick="if(event.target===this)closeModal('reverseModal')">
+        <div class="modal" style="max-width:480px;">
+            <div class="modal-head">
+                <h3>Reverse journal entry</h3>
+                <button type="button" class="modal-close" onclick="closeModal('reverseModal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex;gap:12px;align-items:flex-start;background:var(--danger-100);border:1px solid #FFCDD2;border-radius:10px;padding:14px;">
+                    <div style="width:36px;height:36px;border-radius:9px;background:var(--danger);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;color:var(--coffee-900);" id="reverseModalRef">—</div>
+                        <div class="cell-sub" style="margin-top:4px;">Reverse <strong id="reverseModalRefInline">—</strong> with an offsetting entry? This will create a reversal entry (RVS-…) and mark the original as reversed. This cannot be undone.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button type="button" class="btn btn-ghost" onclick="closeModal('reverseModal')">Cancel</button>
+                <form id="reverseForm" method="POST" action="">
+                    @csrf
+                    <button type="submit" class="btn btn-primary" style="background:var(--danger);border-color:var(--danger);">Reverse entry</button>
+                </form>
+            </div>
+        </div>
     </div>
 
     @if (is_admin())
@@ -253,6 +280,13 @@
                     alert('Enter at least two line items.');
                 }
             });
+
+            function openReverseModal(encryptedId, reference) {
+                document.getElementById('reverseModalRef').textContent = reference;
+                document.getElementById('reverseModalRefInline').textContent = reference;
+                document.getElementById('reverseForm').action = '/finance/journal-entries/' + encryptedId + '/reverse';
+                openModal('reverseModal');
+            }
         </script>
     @endif
 @endsection

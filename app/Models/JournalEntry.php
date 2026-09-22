@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Crypt;
 
 #[Fillable([
     'entry_date',
@@ -34,6 +35,27 @@ class JournalEntry extends Model
             'entry_date' => 'date',
             'posted_at' => 'datetime',
         ];
+    }
+
+    public function getRouteKey(): string
+    {
+        return Crypt::encryptString((string) $this->getKey());
+    }
+
+    public function resolveRouteBinding($value, $field = null): ?self
+    {
+        try {
+            $id = (int) Crypt::decryptString((string) $value);
+        } catch (\Throwable) {
+            // Fallback: support plain numeric id for backward compatibility (e.g. /finance/journal-entries/1)
+            if (is_numeric($value)) {
+                return static::find((int) $value);
+            }
+
+            return null;
+        }
+
+        return static::find($id);
     }
 
     /**

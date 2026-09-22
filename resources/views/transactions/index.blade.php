@@ -42,6 +42,7 @@
             <p class="sub">Deposits, withdrawals, send money, bills, airtime and bank transfers across all networks.</p>
         </div>
         <div class="view-actions">
+            @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Transactions', 'subtitle' => 'All filtered transactions', 'filters' => $filters])
             <a href="{{ route('transactions.create') }}" class="btn btn-primary">+ Record transaction</a>
         </div>
     </div>

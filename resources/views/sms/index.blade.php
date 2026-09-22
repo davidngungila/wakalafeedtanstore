@@ -15,6 +15,7 @@
             <p class="sub">Every SMS captured from all connected phones — live, automatic, no manual entry.</p>
         </div>
         <div class="view-actions">
+            @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Messages', 'subtitle' => 'SMS report', 'filters' => $filters])
             <span class="tag tag-green" id="liveBadge">● Live</span>
         </div>
     </div>

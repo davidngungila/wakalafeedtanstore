@@ -7,6 +7,7 @@ use App\Services\LedgerService;
 use App\Services\TransactionJournalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\View\View;
 
 class GeneralLedgerController extends Controller
@@ -15,8 +16,11 @@ class GeneralLedgerController extends Controller
     {
         app(TransactionJournalService::class)->ensureSynced();
 
-        $accountId = $request->integer('account_id');
-        $account = $accountId > 0 ? Account::find($accountId) : Account::query()->first();
+        $account = $this->resolveAccount($request->input('account_id'));
+
+        if ($account === null) {
+            $account = Account::query()->first();
+        }
 
         if ($account === null) {
             return view('finance.general-ledger', [
@@ -39,7 +43,19 @@ class GeneralLedgerController extends Controller
             ->orderBy('code')
             ->get(['id', 'code', 'name']);
 
-        return view('finance.general-ledger', compact('account', 'ledgerReport', 'accounts', 'range') + ['selectedAccountId' => $account->id]);
+        // Provide encrypted ids for the view so URLs stay encrypted
+        $accountsForView = $accounts->map(function (Account $a) {
+            return [
+                'id' => $a->id,
+                'encrypted' => $a->getRouteKey(),
+                'code' => $a->code,
+                'name' => $a->name,
+            ];
+        });
+
+        $selectedEncrypted = $account ? $account->getRouteKey() : '';
+
+        return view('finance.general-ledger', compact('account', 'ledgerReport', 'accounts', 'range', 'accountsForView', 'selectedEncrypted') + ['selectedAccountId' => $account->id]);
     }
 
     private function startOf(string $range): ?Carbon
@@ -60,5 +76,29 @@ class GeneralLedgerController extends Controller
             'month' => now(),
             default => null,
         };
+    }
+
+    private function resolveAccount(mixed $value): ?Account
+    {
+        if ($value === null || $value === '' || $value === 'all') {
+            return null;
+        }
+
+        // Try encrypted first
+        try {
+            $id = (int) Crypt::decryptString((string) $value);
+            $found = Account::find($id);
+            if ($found) {
+                return $found;
+            }
+        } catch (\Throwable) {
+            // fall through to numeric check
+        }
+
+        if (is_numeric($value)) {
+            return Account::find((int) $value);
+        }
+
+        return null;
     }
 }

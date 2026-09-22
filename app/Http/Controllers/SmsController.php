@@ -6,6 +6,7 @@ use App\Models\Device;
 use App\Models\Network;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
+use App\Services\ExportService;
 use App\Services\Sms\SmsTransactionExtractor;
 use App\Services\SmsParser;
 use App\Services\TransactionService;
@@ -92,6 +93,9 @@ class SmsController extends Controller
             'duplicate' => SmsMessage::where(fn ($q) => $q->where('is_duplicate', true)->orWhere('processing_status', 'DUPLICATE'))->count(),
         ];
 
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('sms.export');
+
         return view('sms.index', [
             'messages' => $messages,
             'today' => $today,
@@ -99,7 +103,105 @@ class SmsController extends Controller
             'devices' => Device::orderBy('name')->get(['id', 'name']),
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
             'filters' => $request->only(['status', 'network', 'device', 'q']),
+            'exportColumns' => $exportColumns,
+            'exportRoute' => $exportRoute,
         ]);
+    }
+
+    public function export(Request $request, ExportService $export)
+    {
+        $query = SmsMessage::with(['device', 'network', 'transaction', 'deviceLine.network']);
+
+        $status = $request->input('status', 'all');
+        $this->applyStatusFilter($query, $status);
+
+        if ($request->filled('network') && $request->input('network') !== 'all') {
+            $query->where('network_id', $request->input('network'));
+        }
+        if ($request->filled('device') && $request->input('device') !== 'all') {
+            $deviceId = $request->input('device');
+            $resolved = (new Device)->resolveRouteBinding($deviceId) ?? Device::find((int) $deviceId);
+            if ($resolved) {
+                $query->where('device_id', $resolved->id);
+            } else {
+                $query->where('device_id', $deviceId);
+            }
+        }
+        if ($request->filled('q')) {
+            $needle = $request->input('q');
+            $query->where(function ($sub) use ($needle) {
+                $sub->where('message_body', 'like', "%{$needle}%")
+                    ->orWhere('sender', 'like', "%{$needle}%")
+                    ->orWhere('transaction_reference', 'like', "%{$needle}%")
+                    ->orWhere('customer_phone', 'like', "%{$needle}%");
+            });
+        }
+
+        $available = $this->exportColumns();
+        $columns = $export->resolveColumns($available, $request->input('columns'));
+        $format = $request->input('format', 'pdf');
+        $format = in_array($format, ['pdf', 'excel'], true) ? $format : 'pdf';
+
+        $rows = $query->latest('server_received_at')->limit(5000)->get()->map(function (SmsMessage $m) {
+            return [
+                'date' => $m->server_received_at->format('d M Y'),
+                'time' => $m->server_received_at->format('H:i:s'),
+                'device' => $m->device?->name ?? '—',
+                'line' => $m->deviceLine?->displayName() ?? '—',
+                'sender' => $m->sender,
+                'network' => $m->network?->name ?? '—',
+                'type' => $m->transaction_type ? txn_type_label($m->transaction_type) : '—',
+                'amount' => $m->amount ? money($m->amount) : '—',
+                'customer' => $m->customer_name ?? '—',
+                'customer_phone' => $m->customer_phone ?? '—',
+                'reference' => $m->transaction_reference ?? '—',
+                'txn_reference' => $m->transaction?->reference ?? '—',
+                'status' => ucfirst(sms_status_label($m->processing_status, $m->is_duplicate, $m->processing_error)),
+                'error' => $m->processing_error ?? '—',
+                'body' => \Illuminate\Support\Str::limit($m->message_body, 80),
+            ];
+        });
+
+        $exportRows = $rows->map(function (array $row) use ($columns) {
+            $out = [];
+            foreach ($columns as $col) {
+                $out[$col['key']] = $row[$col['key']] ?? '';
+            }
+            return $out;
+        });
+
+        $title = 'Messages Report';
+        $subtitle = 'Filtered SMS messages — '.now()->format('d M Y H:i').' — '.count($exportRows).' records';
+        $meta = [
+            'filters' => array_filter($request->only(['status', 'network', 'device', 'q'])),
+        ];
+
+        if ($format === 'excel') {
+            return $export->excel($title, $columns, $exportRows);
+        }
+
+        return $export->pdf($title, $subtitle, $columns, $exportRows, $meta);
+    }
+
+    private function exportColumns(): array
+    {
+        return [
+            ['key' => 'date', 'label' => 'Date'],
+            ['key' => 'time', 'label' => 'Time'],
+            ['key' => 'device', 'label' => 'Device'],
+            ['key' => 'line', 'label' => 'Line'],
+            ['key' => 'sender', 'label' => 'Sender'],
+            ['key' => 'network', 'label' => 'Network'],
+            ['key' => 'type', 'label' => 'Type'],
+            ['key' => 'amount', 'label' => 'Amount'],
+            ['key' => 'customer', 'label' => 'Customer'],
+            ['key' => 'customer_phone', 'label' => 'Phone'],
+            ['key' => 'reference', 'label' => 'Reference'],
+            ['key' => 'txn_reference', 'label' => 'Transaction'],
+            ['key' => 'status', 'label' => 'Status'],
+            ['key' => 'error', 'label' => 'Error'],
+            ['key' => 'body', 'label' => 'Message'],
+        ];
     }
 
     /**

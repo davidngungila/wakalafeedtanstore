@@ -47,6 +47,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
+    Route::get('/daily-opening/export', [DailyOpeningController::class, 'export'])->name('daily-opening.export');
     Route::get('/daily-opening', [DailyOpeningController::class, 'index'])->name('daily-opening.index');
     Route::get('/daily-opening/create', [DailyOpeningController::class, 'create'])->name('daily-opening.create');
     Route::post('/daily-opening', [DailyOpeningController::class, 'store'])->name('daily-opening.store');
@@ -64,19 +65,23 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::get('/cash-point/{cashPoint}', [CashPointController::class, 'show'])->name('cash-point.show');
     Route::get('/cash-point/{cashPoint}/edit', [CashPointController::class, 'edit'])->name('cash-point.edit');
 
+    Route::get('/transactions/export', [TransactionController::class, 'export'])->name('transactions.export');
     Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
     Route::get('/transactions/create', [TransactionController::class, 'create'])->name('transactions.create');
     Route::get('/transactions/{transaction}/receipt', [TransactionController::class, 'receipt'])->name('transactions.receipt');
     Route::get('/transactions/{transaction}/receipt/pdf', [TransactionController::class, 'receiptPdf'])->name('transactions.receipt.pdf');
     Route::post('/transactions', [TransactionController::class, 'store'])->name('transactions.store');
 
+    Route::get('/networks/export', [NetworkController::class, 'export'])->name('networks.export');
     Route::get('/networks', [NetworkController::class, 'index'])->name('networks.index');
     Route::get('/networks/{network}', [NetworkController::class, 'show'])->name('networks.show');
 
+    Route::get('/float/export', [FloatController::class, 'export'])->name('float.export');
     Route::get('/float', [FloatController::class, 'index'])->name('float.index');
     Route::get('/float/create', [FloatController::class, 'create'])->name('float.create');
     Route::post('/float', [FloatController::class, 'store'])->name('float.store');
 
+    Route::get('/reconciliation/export', [ReconciliationController::class, 'export'])->name('reconciliation.export');
     Route::get('/reconciliation', [ReconciliationController::class, 'index'])->name('reconciliation.index');
     Route::get('/reconciliation/create', [ReconciliationController::class, 'create'])->name('reconciliation.create');
     Route::post('/reconciliation', [ReconciliationController::class, 'store'])->name('reconciliation.store');
@@ -86,6 +91,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 
     // Devices: allow cashier full access except deleting (delete stays admin-only)
+    Route::get('/devices/export', [DeviceController::class, 'export'])->name('devices.export');
     Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
     Route::get('/devices/register', [DeviceController::class, 'register'])->name('devices.register');
     Route::get('/devices/{device}', [DeviceController::class, 'show'])->name('devices.show');
@@ -97,6 +103,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke'])->name('devices.revoke');
 
     // Messages: live sync for all roles (cashier/supervisor/admin) — no refresh needed (SSE)
+    Route::get('/sms/export', [SmsController::class, 'export'])->name('sms.export');
     Route::get('/sms', [SmsController::class, 'index'])->name('sms.index');
     Route::get('/sms/view', [SmsController::class, 'showById'])->name('sms.view');
     Route::get('/sms/stream', [SmsController::class, 'stream'])->name('sms.stream');
@@ -106,15 +113,24 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
 
     Route::middleware('role:supervisor,admin')->group(function () {
         Route::put('/transactions/{transaction}/reverse', [TransactionController::class, 'reverse'])->name('transactions.reverse');
+        Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
         Route::get('/reports', ReportController::class)->name('reports.index');
         Route::get('/finance', FinanceController::class)->name('finance.index');
+        Route::get('/finance/export', [FinanceController::class, 'exportPdf'])->name('finance.export');
+        Route::get('/finance/chart-of-accounts/export', [ChartOfAccountsController::class, 'export'])->name('finance.accounts.export');
         Route::get('/finance/chart-of-accounts', [ChartOfAccountsController::class, 'index'])->name('finance.accounts.index');
+        Route::get('/finance/journal-entries/export', [JournalEntryController::class, 'export'])->name('finance.journals.export');
         Route::get('/finance/journal-entries', [JournalEntryController::class, 'index'])->name('finance.journals.index');
         Route::get('/finance/journal-entries/{journalEntry}', [JournalEntryController::class, 'show'])->name('finance.journals.show');
+        Route::get('/finance/general-ledger/export', [GeneralLedgerController::class, 'export'])->name('finance.ledger.export');
         Route::get('/finance/general-ledger', GeneralLedgerController::class)->name('finance.ledger.index');
+        Route::get('/finance/statements/income/export', [FinancialStatementController::class, 'exportIncome'])->name('finance.statements.income.export');
         Route::get('/finance/statements/income', [FinancialStatementController::class, 'income'])->name('finance.statements.income');
+        Route::get('/finance/statements/balance/export', [FinancialStatementController::class, 'exportBalance'])->name('finance.statements.balance.export');
         Route::get('/finance/statements/balance', [FinancialStatementController::class, 'balance'])->name('finance.statements.balance');
+        Route::get('/audit/export', [AuditLogController::class, 'export'])->name('audit.export');
         Route::get('/audit', AuditLogController::class)->name('audit.index');
+        Route::get('/users/export', [UserController::class, 'export'])->name('users.export');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
     });
