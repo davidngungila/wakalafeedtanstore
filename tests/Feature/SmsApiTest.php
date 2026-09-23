@@ -229,19 +229,13 @@ class SmsApiTest extends TestCase
         $this->assertSame(1, $response->json('summary.processed'));
         $this->assertSame(0, $response->json('summary.ignored_senders'));
         $this->assertArrayNotHasKey('ignored_sender', $response->json('results.0'));
+        $this->assertTrue($response->json('results.0.auto_recorded'));
 
         $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
-        $this->assertSame('APPROVAL_PENDING', $sms->processing_status);
+        $this->assertSame('RECORDED', $sms->processing_status);
         $this->assertSame('TATU BANK', $sms->sender);
         $this->assertSame('bank', $sms->provider);
         $this->assertSame('VODACOM', $sms->network?->code);
-        $this->assertNull($sms->transaction_id);
-        $this->assertSame(0, Transaction::count());
-
-        $this->approve($sms);
-
-        $sms->refresh();
-        $this->assertSame('RECORDED', $sms->processing_status);
         $this->assertNotNull($sms->transaction_id);
         $this->assertSame(1, Transaction::count());
     }
@@ -302,17 +296,11 @@ class SmsApiTest extends TestCase
         $this->assertSame(1, $response->json('summary.processed'));
 
         $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
-        $this->assertSame('APPROVAL_PENDING', $sms->processing_status);
+        $this->assertSame('RECORDED', $sms->processing_status);
         $this->assertSame('withdrawal', $sms->transaction_type);
         $this->assertSame(100_000.0, (float) $sms->amount);
         $this->assertSame('JUMA ATHUMANI', $sms->customer_name);
         $this->assertSame('0712345678', $sms->customer_phone);
-        $this->assertNull($sms->transaction_id);
-        $this->assertSame(0, Transaction::count());
-
-        $this->approve($sms);
-
-        $sms->refresh();
         $this->assertNotNull($sms->transaction_id);
         $this->assertSame(1, Transaction::count());
         $this->assertDatabaseHas('transactions', [
@@ -355,17 +343,13 @@ class SmsApiTest extends TestCase
         $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
         $this->assertSame('tigo', $sms->provider);
         $this->assertSame('TIGOPESA', $sms->network?->code);
-        $this->assertSame('APPROVAL_PENDING', $sms->processing_status);
+        $this->assertSame('RECORDED', $sms->processing_status);
         $this->assertSame('withdrawal', $sms->transaction_type);
         $this->assertSame('MP250920ABC123', $sms->transaction_reference);
         $this->assertSame(50_000.0, (float) $sms->amount);
         $this->assertSame('JOHN DOE', $sms->customer_name);
         $this->assertSame('0712345678', $sms->customer_phone);
         $this->assertSame(350_000.0, (float) $sms->balance);
-        $this->assertSame(0, Transaction::count());
-
-        $this->approve($sms);
-
         $this->assertSame(1, Transaction::count());
     }
 
@@ -380,11 +364,6 @@ class SmsApiTest extends TestCase
 
         $this->withHeaders($this->deviceHeaders($first))
             ->postJson('/api/v1/sms/ingest', ['sms' => [['sender' => 'MPESA', 'message' => $bodyA]]])
-            ->assertOk();
-
-        $held = SmsMessage::where('device_id', $first->id)->firstOrFail();
-        $this->actingAs($this->approver())
-            ->postJson(route('sms.approve', $held))
             ->assertOk();
         $this->assertSame(1, Transaction::count());
 
@@ -411,13 +390,14 @@ class SmsApiTest extends TestCase
         $this->withHeaders($this->deviceHeaders($first))
             ->postJson('/api/v1/sms/ingest', ['sms' => [['sender' => 'MPESA', 'message' => $body]]])
             ->assertOk();
+        $this->assertSame(1, Transaction::count());
 
         $response = $this->withHeaders($this->deviceHeaders($second))
             ->postJson('/api/v1/sms/ingest', ['sms' => [['sender' => 'MPESA', 'message' => $body, 'received_at' => '2026-09-14 11:00:00']]])
             ->assertOk();
 
         $this->assertTrue($response->json('results.0.duplicate'));
-        $this->assertSame(0, Transaction::count());
+        $this->assertSame(1, Transaction::count());
 
         $duplicate = SmsMessage::where('device_id', $second->id)->firstOrFail();
         $this->assertTrue($duplicate->is_duplicate);
@@ -449,23 +429,35 @@ class SmsApiTest extends TestCase
     public function test_approve_records_performed_by_and_rejects_second_approval(): void
     {
         $device = $this->makeDevice();
+        $approver = $this->approver();
+        $network = Network::firstOrFail();
 
-        $this->withHeaders($this->deviceHeaders($device))
-            ->postJson('/api/v1/sms/ingest', [
-                'sms' => [['sender' => 'MPESA', 'message' => 'P98765 confirmed. You have received TZS 100,000.00 from JUMA ATHUMANI 0712345678.']],
-            ])
-            ->assertOk();
+        $sms = SmsMessage::create([
+            'device_id' => $device->id,
+            'agent_id' => $this->cashPoint()->id,
+            'network_id' => $network->id,
+            'sender' => 'MPESA',
+            'provider' => 'mpesa',
+            'message_body' => 'P98765 confirmed. You have received TZS 100,000.00 from JUMA ATHUMANI 0712345678.',
+            'received_at' => now(),
+            'sms_hash' => hash('sha256', 'MPESA|P98765 test|'.now()->format('Y-m-d H:i:s')),
+            'processing_status' => 'APPROVAL_PENDING',
+            'transaction_reference' => 'P98765',
+            'amount' => 100_000.0,
+            'transaction_type' => 'withdrawal',
+            'customer_phone' => '0712345678',
+            'customer_name' => 'JUMA ATHUMANI',
+            'server_received_at' => now(),
+        ]);
 
-        $sms = SmsMessage::where('device_id', $device->id)->firstOrFail();
         $this->approve($sms);
 
         $this->assertDatabaseHas('transactions', [
             'provider_reference' => 'P98765',
-            'performed_by' => $this->approver()->id,
-            'notes' => 'Via SMS approval (SMS #'.$sms->id.')',
+            'performed_by' => $approver->id,
         ]);
 
-        $this->actingAs($this->approver())
+        $this->actingAs($approver)
             ->postJson(route('sms.approve', $sms))
             ->assertStatus(422)
             ->assertJsonPath('success', false);

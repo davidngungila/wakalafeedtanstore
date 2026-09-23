@@ -58,6 +58,108 @@
 
     <div class="table-card">
         <div class="panel-head" style="padding:16px 20px;border-bottom:1px solid var(--line);">
+            <h3>Reconciliation run</h3>
+            <span class="link">Opening → activity → expected closing</span>
+        </div>
+        <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Channel</th>
+                        <th>Opening</th>
+                        <th>Deposits</th>
+                        <th>Withdrawals</th>
+                        <th>= Expected closing</th>
+                        <th>Counted</th>
+                        <th>Variance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <div class="cell-title">Cash in Till</div>
+                            <div class="cell-sub">Opening + deposits − withdrawals</div>
+                        </td>
+                        <td>@money($run['openingCash'])</td>
+                        <td>+@money($run['cashDeposits'])</td>
+                        <td>−@money($run['cashWithdrawals'])</td>
+                        <td>@money($run['expectedCash'])</td>
+                        <td>@money($run['countedCash'])</td>
+                        <td>
+                            <span class="tag {{ abs($run['cashVariance']) < 0.005 ? 'tag-green' : ($run['cashVariance'] > 0 ? 'tag-gold' : 'tag-red') }}">
+                                {{ $run['cashVariance'] > 0 ? '+' : '' }}@money($run['cashVariance'])
+                            </span>
+                        </td>
+                    </tr>
+                    @forelse ($run['networks'] as $row)
+                        <tr>
+                            <td>
+                                <div class="cell-title">{{ $row['network'] }} Float</div>
+                                <div class="cell-sub">Opening − deposits + withdrawals</div>
+                            </td>
+                            <td>@money($row['opening'])</td>
+                            <td>−@money($row['deposits'])</td>
+                            <td>+@money($row['withdrawals'])</td>
+                            <td>@money($row['expected'])</td>
+                            <td>@money($row['counted'])</td>
+                            <td>
+                                <span class="tag {{ abs($row['variance']) < 0.005 ? 'tag-green' : ($row['variance'] > 0 ? 'tag-gold' : 'tag-red') }}">
+                                    {{ $row['variance'] > 0 ? '+' : '' }}@money($row['variance'])
+                                </span>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="7" class="empty-state"><p>No network float rows recorded for this session.</p></td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <h3>Tie-out check</h3>
+            <span class="link">Opening cash + opening float must equal counted closing cash + counted closing float</span>
+        </div>
+        <div class="panel-body">
+            <div class="balance-strip" style="margin-bottom:0;">
+                <div class="balance-box" style="--stat-tint:var(--sand-100);">
+                    <div class="bb-label">Opening cash on hand</div>
+                    <div class="bb-amount">@money($run['openingCash'])</div>
+                </div>
+                <div class="balance-box" style="--stat-tint:var(--sand-100);">
+                    <div class="bb-label">+ Opening float (total)</div>
+                    <div class="bb-amount">+@money($run['openingFloat'])</div>
+                </div>
+                <div class="balance-box" style="--stat-tint:var(--sand-100);">
+                    <div class="bb-label">= Opening total</div>
+                    <div class="bb-amount">@money($run['openingCash'] + $run['openingFloat'])</div>
+                </div>
+                <div class="balance-box">
+                    <div class="bb-label">Counted closing cash in hand</div>
+                    <div class="bb-amount">@money($run['countedCash'])</div>
+                </div>
+                <div class="balance-box">
+                    <div class="bb-label">+ Counted closing float</div>
+                    <div class="bb-amount">+@money($run['countedFloat'])</div>
+                </div>
+                <div class="balance-box" style="--stat-tint:{{ abs($run['tieOut']) < 0.005 ? 'var(--acacia-100)' : 'var(--gold-100)' }};">
+                    <div class="bb-label">Tie-out (must be 0)</div>
+                    <div class="bb-amount">
+                        @if (abs($run['tieOut']) < 0.005)
+                            <span style="color:var(--acacia-600);">@money(0) ✓</span>
+                        @else
+                            <span style="color:#8a6418;">{{ $run['tieOut'] > 0 ? '+' : '' }}@money($run['tieOut'])</span>
+                        @endif
+                    </div>
+                    <div class="bb-sub">Opening total minus counted closing total.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="panel-head" style="padding:16px 20px;border-bottom:1px solid var(--line);">
             <h3>Channels breakdown</h3>
             <span class="link">Settlement per channel</span>
         </div>

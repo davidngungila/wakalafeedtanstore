@@ -204,29 +204,55 @@ class SmsProcessor
             ];
         }
 
-        // Detected transactions are held for supervisor approval instead of being
-        // auto-recorded. The phone still gets a success ack; no transaction, float
-        // or journal entry is created until a user approves the message.
-        $sms->update([
-            'processing_status' => 'APPROVAL_PENDING',
-            'processing_error' => null,
-            'received_at' => $parsed['received_at'] ?? $sms->received_at,
-        ]);
-
         $device->forceFill(['last_sms_at' => now()])->save();
 
-        return [
-            'ok' => true,
-            'sms_id' => $sms->id,
-            'status' => 'awaiting_approval',
-            'reference' => $sms->transaction_reference,
-            'type' => $sms->transaction_type,
-            'amount' => (float) $sms->amount,
-            'network' => $network->code,
-            'sim_slot' => $sms->sim_slot,
-            'line' => $line?->displayName(),
-            'transaction_reference' => null,
-        ];
+        try {
+            $sms->update([
+                'processing_error' => null,
+                'received_at' => $parsed['received_at'] ?? $sms->received_at,
+            ]);
+
+            $transaction = $this->recordApproved($sms, null);
+
+            return [
+                'ok' => true,
+                'sms_id' => $sms->id,
+                'status' => 'recorded',
+                'reference' => $sms->transaction_reference,
+                'type' => $sms->transaction_type,
+                'amount' => (float) $sms->amount,
+                'network' => $network->code,
+                'sim_slot' => $sms->sim_slot,
+                'line' => $line?->displayName(),
+                'transaction_reference' => $transaction->reference,
+                'auto_recorded' => true,
+            ];
+        } catch (\Throwable $e) {
+            \Log::warning('SMS auto-record failed, marked for review', [
+                'error' => $e->getMessage(),
+                'sms_id' => $sms->id,
+                'reference' => $parsed['reference'],
+            ]);
+
+            $sms->update([
+                'processing_status' => 'NEEDS_REVIEW',
+                'processing_error' => 'Auto-record failed: '.$e->getMessage(),
+            ]);
+
+            return [
+                'ok' => false,
+                'sms_id' => $sms->id,
+                'status' => 'needs_review',
+                'reference' => $sms->transaction_reference,
+                'type' => $sms->transaction_type,
+                'amount' => (float) $sms->amount,
+                'network' => $network->code,
+                'sim_slot' => $sms->sim_slot,
+                'line' => $line?->displayName(),
+                'transaction_reference' => null,
+                'auto_record_error' => $e->getMessage(),
+            ];
+        }
     }
 
     /**

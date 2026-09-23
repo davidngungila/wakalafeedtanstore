@@ -13,15 +13,25 @@ return [
     'senders' => [
         'MPESA' => 'VODACOM',
         'VODACOM' => 'VODACOM',
+        'M-PESA' => 'VODACOM',
         'AIRTEL' => 'AIRTEL',
         'Airtel Money' => 'AIRTEL',
+        'AIRTELMONEY' => 'AIRTEL',
         'MIXX' => 'MIXX',
         'MIXT' => 'MIXX',
         'YAS' => 'MIXX',
         'HALOPESA' => 'HALOPESA',
         'HaloPesa' => 'HALOPESA',
+        'HALO PESA' => 'HALOPESA',
         'TIGO PESA' => 'TIGOPESA',
         'TIGO' => 'TIGOPESA',
+        'TIGOPESA' => 'TIGOPESA',
+        'TTCL' => 'TTCL',
+        'TTCL PESA' => 'TTCL',
+        'TTCLPESA' => 'TTCL',
+        'AZAM' => 'AZAM',
+        'AZAMPESA' => 'AZAM',
+        'AZAM PESA' => 'AZAM',
     ],
 
     /*
@@ -41,11 +51,11 @@ return [
         ],
         'airtel' => [
             'label' => 'Airtel Money',
-            'senders' => ['AIRTEL MONEY', 'AIRTEL'],
+            'senders' => ['AIRTEL MONEY', 'AIRTELMONEY', 'AIRTEL'],
         ],
         'tigo' => [
             'label' => 'Tigo Pesa',
-            'senders' => ['TIGO PESA', 'TIGO'],
+            'senders' => ['TIGO PESA', 'TIGOPESA', 'TIGO'],
         ],
         'halopesa' => [
             'label' => 'HaloPesa',
@@ -54,6 +64,14 @@ return [
         'mixx' => [
             'label' => 'Mixx by Yas',
             'senders' => ['MIXX BY YAS', 'MIXX', 'MIXT', 'YAS'],
+        ],
+        'ttcl' => [
+            'label' => 'TTCL Pesa',
+            'senders' => ['TTCL PESA', 'TTCLPESA', 'TTCL'],
+        ],
+        'azam' => [
+            'label' => 'AzamPesa',
+            'senders' => ['AZAMPESA', 'AZAM PESA', 'AZAM'],
         ],
         'bank' => [
             'label' => 'Bank SMS',

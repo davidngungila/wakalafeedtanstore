@@ -3,14 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\DailyOpening;
 use App\Models\Network;
-use App\Models\NetworkBalance;
 use App\Models\Reconciliation;
 use App\Models\ReconciliationCorrection;
+use App\Models\Transaction;
 use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -91,18 +93,11 @@ class ReconciliationController extends Controller
             return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before reconciling.');
         }
 
-        $openingCash = $this->previousClosingCash($agent, today()->toDateString());
-
-        $balances = $agent->balances()->with('network')->orderBy('network_id')->get()->mapWithKeys(
-            fn (NetworkBalance $balance): array => [$balance->network_id => (float) $balance->balance],
-        );
+        $run = $this->buildRun($agent, today()->toDateString());
 
         return view('reconciliation.create', [
             'agent' => $agent,
-            'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
-            'expectedCash' => (float) $agent->cash_balance,
-            'openingCash' => $openingCash,
-            'balances' => $balances,
+            'run' => $run,
         ]);
     }
 
@@ -127,36 +122,52 @@ class ReconciliationController extends Controller
             return redirect()->route('cash-point.index')->with('error', $message);
         }
 
-        $expectedCash = (float) $agent->cash_balance;
+        $run = $this->buildRun($agent, $validated['reconciliation_date']);
+
+        $expectedCash = $run['expectedCash'];
         $countedCash = (float) $validated['counted_cash'];
 
-        $networkBalances = $agent->balances()->with('network')->get()->map(function (NetworkBalance $balance) use ($validated) {
-            $counted = $validated['counted_floats'][$balance->network_id] ?? (float) $balance->balance;
+        $networkBalances = collect($run['networks'])->map(function (array $row) use ($validated): array {
+            $counted = (float) ($validated['counted_floats'][$row['id']] ?? $row['expected']);
 
             return [
-                'network' => $balance->network->name,
-                'system' => (float) $balance->balance,
-                'counted' => (float) $counted,
+                'network_id' => $row['id'],
+                'network' => $row['name'],
+                'opening' => $row['opening'],
+                'deposits' => $row['deposits'],
+                'withdrawals' => $row['withdrawals'],
+                'expected' => $row['expected'],
+                'system' => $row['expected'],
+                'counted' => $counted,
+                'variance' => round($counted - $row['expected'], 2),
             ];
-        });
+        })->values()->all();
 
-        $totalFloat = (float) $agent->balances()->sum('balance');
-        $countedFloatTotal = collect($validated['counted_floats'] ?? [])->sum();
+        $countedFloatTotal = (float) collect($networkBalances)->sum('counted');
 
-        $floatVariance = round($countedFloatTotal - $totalFloat, 2);
+        $cashVariance = round($countedCash - $expectedCash, 2);
+        $floatVariance = round($countedFloatTotal - $run['expectedFloat'], 2);
 
-        $status = $countedCash === $expectedCash && $floatVariance === 0.0 ? 'reconciled' : 'variance';
+        $tieOut = round(($run['openingCash'] + $run['openingFloat']) - ($countedCash + $countedFloatTotal), 2);
+
+        $status = abs($cashVariance) < 0.005 && abs($floatVariance) < 0.005 && abs($tieOut) < 0.005
+            ? 'reconciled'
+            : 'variance';
 
         $record = Reconciliation::create([
             'agent_id' => $agent->id,
             'reconciliation_date' => $validated['reconciliation_date'],
-            'opening_cash' => $this->previousClosingCash($agent, $validated['reconciliation_date']),
+            'opening_cash' => $run['openingCash'],
+            'cash_deposits' => $run['cashDeposits'],
+            'cash_withdrawals' => $run['cashWithdrawals'],
             'expected_cash' => $expectedCash,
+            'opening_float' => $run['openingFloat'],
             'counted_cash' => $countedCash,
-            'cash_variance' => round($countedCash - $expectedCash, 2),
-            'total_float' => $totalFloat,
+            'cash_variance' => $cashVariance,
+            'total_float' => $run['expectedFloat'],
             'float_variance' => $floatVariance,
-            'network_balances' => $networkBalances->toArray(),
+            'tie_out' => $tieOut,
+            'network_balances' => $networkBalances,
             'status' => $status,
             'notes' => $validated['notes'] ?? null,
             'reconciled_by' => auth()->id(),
@@ -164,11 +175,22 @@ class ReconciliationController extends Controller
 
         if ($status === 'reconciled') {
             $agent->update(['cash_balance' => $countedCash]);
+
+            foreach ($networkBalances as $row) {
+                $balance = $agent->balances()->where('network_id', $row['network_id'])->first();
+                if ($balance !== null) {
+                    $balance->update(['balance' => $row['counted']]);
+                }
+            }
         }
 
         $this->recordAudit('Reconciliation saved', 'Reconciliation', $record->id, [
             'agent' => $agent->code,
+            'opening_cash' => $run['openingCash'],
+            'deposits' => $run['cashDeposits'],
+            'withdrawals' => $run['cashWithdrawals'],
             'variance' => $record->cash_variance,
+            'tie_out' => $tieOut,
             'status' => $status,
         ]);
 
@@ -189,7 +211,9 @@ class ReconciliationController extends Controller
 
         $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
 
-        return view('reconciliation.show', compact('reconciliation', 'channels', 'networks'));
+        $run = $this->runFromRecord($reconciliation);
+
+        return view('reconciliation.show', compact('reconciliation', 'channels', 'networks', 'run'));
     }
 
     public function createCorrection(Reconciliation $reconciliation): View
@@ -246,6 +270,160 @@ class ReconciliationController extends Controller
         ]);
 
         return back()->with('status', 'Correction removed.');
+    }
+
+    /**
+     * Build the reconciliation run for an agent on a date.
+     *
+     * Float per network: expected closing = opening float + withdrawals − deposits.
+     * Cash: expected closing = opening cash + deposits − withdrawals (all networks).
+     *
+     * Opening values come from the day's Daily Opening when one exists, otherwise
+     * from the recorded opening balances / previous closing cash.
+     *
+     * @return array{
+     *     date: string,
+     *     openingCash: float,
+     *     cashDeposits: float,
+     *     cashWithdrawals: float,
+     *     expectedCash: float,
+     *     openingFloat: float,
+     *     expectedFloat: float,
+     *     networks: array<int, array{
+     *         id: int,
+     *         name: string,
+     *         color: string,
+     *         opening: float,
+     *         deposits: float,
+     *         withdrawals: float,
+     *         expected: float,
+     *     }>,
+     * }
+     */
+    private function buildRun(Agent $agent, string $date): array
+    {
+        $networks = Network::active()->orderBy('name')->get(['id', 'name', 'color']);
+
+        $dailyOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($date))->first();
+
+        $transactions = Transaction::query()
+            ->where('agent_id', $agent->id)
+            ->whereDate('created_at', $date)
+            ->where('status', 'completed')
+            ->whereIn('type', ['deposit', 'float_deposit', 'withdrawal'])
+            ->get();
+
+        $depositsByNetwork = $transactions
+            ->whereIn('type', ['deposit', 'float_deposit'])
+            ->groupBy('network_id')
+            ->map(fn ($group): float => (float) $group->sum('amount'));
+
+        $withdrawalsByNetwork = $transactions
+            ->where('type', 'withdrawal')
+            ->groupBy('network_id')
+            ->map(fn ($group): float => (float) $group->sum('amount'));
+
+        $balances = $agent->balances()->get()->keyBy('network_id');
+
+        $rows = $networks->map(function (Network $network) use ($dailyOpening, $balances, $depositsByNetwork, $withdrawalsByNetwork): array {
+            $balance = $balances->get($network->id);
+
+            $opening = $dailyOpening !== null
+                ? $dailyOpening->getFloatOpening($network->id)
+                : (float) ($balance?->opening_balance ?? 0);
+
+            if ($opening == 0.0) {
+                $opening = (float) ($balance?->balance ?? 0);
+            }
+
+            $deposits = (float) ($depositsByNetwork[$network->id] ?? 0);
+            $withdrawals = (float) ($withdrawalsByNetwork[$network->id] ?? 0);
+
+            return [
+                'id' => $network->id,
+                'name' => $network->name,
+                'color' => $network->color,
+                'opening' => $opening,
+                'deposits' => $deposits,
+                'withdrawals' => $withdrawals,
+                'expected' => round($opening - $deposits + $withdrawals, 2),
+            ];
+        })->values()->all();
+
+        $openingCash = $dailyOpening !== null
+            ? (float) $dailyOpening->cash_opening
+            : $this->previousClosingCash($agent, $date);
+
+        $cashDeposits = (float) $transactions->whereIn('type', ['deposit', 'float_deposit'])->sum('amount');
+        $cashWithdrawals = (float) $transactions->where('type', 'withdrawal')->sum('amount');
+
+        return [
+            'date' => $date,
+            'openingCash' => $openingCash,
+            'cashDeposits' => $cashDeposits,
+            'cashWithdrawals' => $cashWithdrawals,
+            'expectedCash' => round($openingCash + $cashDeposits - $cashWithdrawals, 2),
+            'openingFloat' => round(array_sum(array_column($rows, 'opening')), 2),
+            'expectedFloat' => round(array_sum(array_column($rows, 'expected')), 2),
+            'networks' => $rows,
+        ];
+    }
+
+    /**
+     * Rebuild the displayable run from a stored reconciliation record.
+     *
+     * @return array{
+     *     openingCash: float,
+     *     cashDeposits: float,
+     *     cashWithdrawals: float,
+     *     expectedCash: float,
+     *     countedCash: float,
+     *     cashVariance: float,
+     *     openingFloat: float,
+     *     expectedFloat: float,
+     *     countedFloat: float,
+     *     tieOut: float,
+     *     networks: array<int, array{
+     *         network: string,
+     *         opening: float,
+     *         deposits: float,
+     *         withdrawals: float,
+     *         expected: float,
+     *         counted: float,
+     *         variance: float,
+     *     }>,
+     * }
+     */
+    private function runFromRecord(Reconciliation $reconciliation): array
+    {
+        $rows = collect($reconciliation->network_balances ?? [])->map(function (array $row): array {
+            $expected = (float) ($row['expected'] ?? $row['system'] ?? 0);
+            $counted = (float) ($row['counted'] ?? 0);
+
+            return [
+                'network' => $row['network'] ?? 'Network',
+                'opening' => (float) ($row['opening'] ?? 0),
+                'deposits' => (float) ($row['deposits'] ?? 0),
+                'withdrawals' => (float) ($row['withdrawals'] ?? 0),
+                'expected' => $expected,
+                'counted' => $counted,
+                'variance' => round($counted - $expected, 2),
+            ];
+        })->values()->all();
+
+        return [
+            'openingCash' => (float) $reconciliation->opening_cash,
+            'cashDeposits' => (float) $reconciliation->cash_deposits,
+            'cashWithdrawals' => (float) $reconciliation->cash_withdrawals,
+            'expectedCash' => (float) $reconciliation->expected_cash,
+            'countedCash' => (float) $reconciliation->counted_cash,
+            'cashVariance' => (float) $reconciliation->cash_variance,
+            'openingFloat' => (float) $reconciliation->opening_float,
+            'expectedFloat' => (float) $reconciliation->total_float,
+            'countedFloat' => (float) collect($reconciliation->network_balances ?? [])->sum('counted'),
+            'tieOut' => (float) $reconciliation->tie_out,
+            'networks' => $rows,
+        ];
     }
 
     /**

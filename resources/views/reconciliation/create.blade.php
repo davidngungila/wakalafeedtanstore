@@ -6,98 +6,172 @@
     <div class="view-head">
         <div>
             <h2>New Reconciliation</h2>
-            <p class="sub">Compare counted till cash and network floats against the system balances for {{ today()->format('l, j F Y') }}.</p>
+            <p class="sub">Reconcile {{ \Illuminate\Support\Carbon::parse($run['date'])->format('l, j F Y') }} — opening balances plus the day's customer activity must tie to the closing balances you count.</p>
         </div>
         <div class="view-actions">
             <a href="{{ route('reconciliation.index') }}" class="btn btn-ghost">← Back to reconciliation</a>
         </div>
     </div>
 
-    <div class="balance-strip">
-        <div class="balance-box" style="--stat-tint:var(--sand-100);">
-            <div class="bb-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--coffee-500);"><path d="M3 9l9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-                Opening cash
-            </div>
-            <div class="bb-amount">@money($openingCash)</div>
-            <div class="bb-sub">Closing cash from the last reconciliation.</div>
-        </div>
-        <div class="balance-box" style="--stat-tint:var(--terracotta-100);">
-            <div class="bb-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--terracotta-600);"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                Expected cash
-            </div>
-            <div class="bb-amount">@money($expectedCash)</div>
-            <div class="bb-sub">System cash balance after today's transactions.</div>
-        </div>
-        <div class="balance-box" style="--stat-tint:var(--acacia-100);">
-            <div class="bb-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--acacia-600);"><path d="M3 17l9-9 5 5 4-4"></path><path d="m16 8 2-2"></path></svg>
-                Expected total float
-            </div>
-            <div class="bb-amount">@money($balances->sum())</div>
-            <div class="bb-sub">Sum of all network float balances in the system.</div>
-        </div>
-    </div>
+    <form action="{{ route('reconciliation.store') }}" method="POST" data-recon-form>
+        @csrf
 
-    <div class="panel" style="max-width:880px;">
-        <div class="panel-head">
-            <h3>Counted balances</h3>
-            <span class="link">{{ $agent->name }}</span>
-        </div>
-        <form action="{{ route('reconciliation.store') }}" method="POST" data-recon-form>
-            @csrf
+        <div class="panel" style="max-width:980px;">
+            <div class="panel-head">
+                <h3>Cash reconciliation</h3>
+                <span class="link">Opening cash + customer deposits − customer withdrawals = closing cash</span>
+            </div>
             <div class="panel-body">
                 <div class="form-row">
                     <div class="field">
                         <label>Reconciliation date</label>
-                        <input type="date" name="reconciliation_date" value="{{ old('reconciliation_date', date('Y-m-d')) }}" required>
+                        <input type="date" name="reconciliation_date" value="{{ old('reconciliation_date', $run['date']) }}" required>
                     </div>
                     <div class="field">
-                        <label>Counted cash in till (TZS)</label>
-                        <input type="number" name="counted_cash" id="countedCash" min="0" step="0.01" value="{{ old('counted_cash') }}" class="cash-counted" placeholder="0.00" required>
+                        <label>Counted closing cash in till (TZS)</label>
+                        <input type="number" name="counted_cash" id="countedCash" min="0" step="0.01" value="{{ old('counted_cash', $run['expectedCash']) }}" class="cash-counted" placeholder="0.00" required>
                     </div>
                 </div>
 
-                <div class="settings-section"><h4>Counted float per network</h4></div>
-                <p class="sub" style="margin-bottom:18px;font-size:13px;color:var(--ink-soft);">Enter the wallet / float balance you physically see on each network. System balance is prefilled — adjust to what you counted.</p>
-
-                @foreach ($networks as $network)
-                    @php
-                        $system = $balances[$network->id] ?? 0;
-                        $suggested = old('counted_floats.'.$network->id, $system);
-                    @endphp
-                    <div class="field">
-                        <label>
-                            <span class="net-dot" style="background:{{ $network->color }};margin-right:7px;vertical-align:middle;"></span>
-                            {{ $network->name }} Float
-                            <span style="font-weight:400;color:var(--ink-soft);font-size:12px;margin-left:6px;">System: <b data-system-float="{{ $network->id }}">@money($system)</b></span>
-                        </label>
-                        <input type="number" name="counted_floats[{{ $network->id }}]" min="0" step="0.01" value="{{ $suggested }}" class="float-counted" data-network="{{ $network->id }}" placeholder="0.00">
+                <div class="balance-strip" style="margin-bottom:0;">
+                    <div class="balance-box" style="--stat-tint:var(--sand-100);">
+                        <div class="bb-label">Opening cash</div>
+                        <div class="bb-amount">@money($run['openingCash'])</div>
+                        <div class="bb-sub">Cash on hand at the start of the day.</div>
                     </div>
-                @endforeach
-
-                <div class="field" style="margin-top:8px;">
-                    <label>Notes (optional)</label>
-                    <textarea name="notes" rows="2" maxlength="255" placeholder="Shift handover notes, variance explanations, etc.">{{ old('notes') }}</textarea>
+                    <div class="balance-box" style="--stat-tint:var(--acacia-100);">
+                        <div class="bb-label">+ Customer deposits (all networks)</div>
+                        <div class="bb-amount" data-goes-in-amount>+@money($run['cashDeposits'])</div>
+                        <div class="bb-sub">Money received into the till.</div>
+                    </div>
+                    <div class="balance-box" style="--stat-tint:var(--terracotta-100);">
+                        <div class="bb-label">− Customer withdrawals (all networks)</div>
+                        <div class="bb-amount">−@money($run['cashWithdrawals'])</div>
+                        <div class="bb-sub">Cash paid out of the till.</div>
+                    </div>
+                    <div class="balance-box" style="--stat-tint:var(--gold-100);--stat-fg:#8a6418;">
+                        <div class="bb-label">= Expected closing cash</div>
+                        <div class="bb-amount" id="expectedCashDisplay">@money($run['expectedCash'])</div>
+                        <div class="bb-sub">Chargeable expected in the till.</div>
+                    </div>
                 </div>
+            </div>
+        </div>
 
-                <div class="balance-strip" style="margin-top:20px;margin-bottom:0;">
+        <div class="panel" style="max-width:980px;">
+            <div class="panel-head">
+                <h3>Float reconciliation per network</h3>
+                <span class="link">Opening float + customer withdrawals − customer deposits = closing float</span>
+            </div>
+            <div class="panel-body">
+                <div class="table-card">
+                    <div class="table-scroll">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Network</th>
+                                    <th>Opening float</th>
+                                    <th>+ Withdrawals</th>
+                                    <th>− Deposits</th>
+                                    <th>= Expected closing</th>
+                                    <th>Counted closing</th>
+                                    <th>Variance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($run['networks'] as $row)
+                                    <tr data-net-row data-net-id="{{ $row['id'] }}">
+                                        <td>
+                                            <span class="cell-title">
+                                                <span class="net-dot" style="background:{{ $row['color'] }};margin-right:7px;vertical-align:middle;"></span>
+                                                {{ $row['name'] }} Float
+                                            </span>
+                                        </td>
+                                        <td data-run-opening="@money($row['opening'])">@money($row['opening'])</td>
+                                        <td data-run-withdrawals="@money($row['withdrawals'])">+@money($row['withdrawals'])</td>
+                                        <td data-run-deposits="@money($row['deposits'])">−@money($row['deposits'])</td>
+                                        <td data-run-expected="@money($row['expected'])">@money($row['expected'])</td>
+                                        <td>
+                                            <input type="number" name="counted_floats[{{ $row['id'] }}]" min="0" step="0.01"
+                                                value="{{ old('counted_floats.'.$row['id'], $row['expected']) }}"
+                                                class="float-counted" data-network="{{ $row['id'] }}" placeholder="0.00"
+                                                style="max-width:160px;">
+                                        </td>
+                                        <td data-net-var class="cell-sub" style="white-space:nowrap;color:var(--coffee-700);">TZS 0</td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="7" class="empty-state"><h4>No active networks</h4><p>Enable at least one network to reconcile its float.</p></td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" style="max-width:980px;">
+            <div class="panel-head">
+                <h3>Tie-out check</h3>
+                <span class="link">Opening cash on hand + opening float must equal counted closing cash in hand + counted closing float</span>
+            </div>
+            <div class="panel-body">
+                <div class="balance-strip" style="margin-bottom:0;">
+                    <div class="balance-box" style="--stat-tint:var(--sand-100);">
+                        <div class="bb-label">Opening cash on hand</div>
+                        <div class="bb-amount">@money($run['openingCash'])</div>
+                    </div>
+                    <div class="balance-box" style="--stat-tint:var(--sand-100);">
+                        <div class="bb-label">+ Opening float (total)</div>
+                        <div class="bb-amount">+@money($run['openingFloat'])</div>
+                    </div>
+                    <div class="balance-box" style="--stat-tint:var(--sand-100);">
+                        <div class="bb-label">= Opening total</div>
+                        <div class="bb-amount" id="openingTotalDisplay">@money($run['openingCash'] + $run['openingFloat'])</div>
+                    </div>
+                    <div class="balance-box">
+                        <div class="bb-label">Counted closing cash in hand</div>
+                        <div class="bb-amount" id="countedCashTotal">@money($run['expectedCash'])</div>
+                    </div>
+                    <div class="balance-box">
+                        <div class="bb-label">+ Counted closing float</div>
+                        <div class="bb-amount" id="countedFloatTotal">@money($run['expectedFloat'])</div>
+                    </div>
+                    <div class="balance-box" style="--stat-tint:var(--acacia-100);">
+                        <div class="bb-label">Tie-out (must be 0)</div>
+                        <div class="bb-amount" id="tieOutDisplay">TZS 0</div>
+                        <div class="bb-sub">Opening total minus counted closing total.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" style="max-width:980px;">
+            <div class="panel-head">
+                <h3>Results</h3>
+                <span class="link">{{ $agent->name }}</span>
+            </div>
+            <div class="panel-body">
+                <div class="balance-strip" style="margin-bottom:0;">
                     <div class="balance-box">
                         <div class="bb-label">Cash variance</div>
                         <div class="bb-amount" id="cashVarDisplay">TZS 0</div>
-                        <div class="bb-sub">Counted cash minus expected cash.</div>
+                        <div class="bb-sub">Counted cash minus expected closing cash.</div>
                     </div>
                     <div class="balance-box">
                         <div class="bb-label">Float variance</div>
                         <div class="bb-amount" id="floatVarDisplay">TZS 0</div>
-                        <div class="bb-sub">Counted float minus expected float.</div>
+                        <div class="bb-sub">Counted closing float minus expected closing float.</div>
                     </div>
                     <div class="balance-box" style="--stat-tint:var(--sand-100);">
                         <div class="bb-label">Overall result</div>
                         <div class="bb-amount" id="resultDisplay">Perfect match</div>
-                        <div class="bb-sub">Reconciled when both variances are zero.</div>
+                        <div class="bb-sub">Reconciled when all variances and the tie-out are zero.</div>
                     </div>
+                </div>
+
+                <div class="field" style="margin-top:16px;">
+                    <label>Notes (optional)</label>
+                    <textarea name="notes" rows="2" maxlength="255" placeholder="Shift handover notes, variance explanations, etc.">{{ old('notes') }}</textarea>
                 </div>
             </div>
             <div class="modal-foot">
@@ -106,40 +180,67 @@
                     Save reconciliation
                 </button>
             </div>
-        </form>
-    </div>
+        </div>
+    </form>
 @endsection
 
 @section('scripts')
     <script>
         (function () {
-            const expectedCash = {{ $expectedCash }};
-            const systemFloats = {!! json_encode($balances) !!};
+            const run = {!! json_encode($run) !!};
+
             const cashInput = document.getElementById('countedCash');
             const floatInputs = document.querySelectorAll('.float-counted');
 
             function fmt(n) {
-                return 'TZS ' + Math.round(n).toLocaleString('en-US');
+                const rounded = Math.round(Math.abs(n) * 100) / 100;
+                return 'TZS ' + Number(rounded).toLocaleString('en-US', { maximumFractionDigits: 2 });
             }
 
-            function display(el, value, hash) {
-                el.textContent = fmt(value);
-                el.style.color = hash > 0 ? '#8a6418' : (hash < 0 ? 'var(--danger)' : 'var(--coffee-900)');
+            function sign(n) {
+                return n > 0 ? '+' : (n < 0 ? '-' : '');
+            }
+
+            function setDisplay(el, n) {
+                el.textContent = sign(n) + fmt(n);
+                el.style.color = Math.abs(n) < 0.005 ? 'var(--coffee-900)' : (n < 0 ? 'var(--danger)' : '#8a6418');
             }
 
             function recalc() {
+                const expectedCash = run.expectedCash;
                 const countedCash = parseFloat(cashInput.value || 0);
                 const cashVar = countedCash - expectedCash;
-                display(document.getElementById('cashVarDisplay'), Math.abs(cashVar), cashVar === 0 ? 0 : (cashVar > 0 ? 1 : -1));
+                setDisplay(document.getElementById('cashVarDisplay'), cashVar);
 
                 let countedFloat = 0;
-                floatInputs.forEach(i => { countedFloat += parseFloat(i.value || 0); });
-                const expectedFloat = floatInputs.length ? Object.values(systemFloats).reduce((a, b) => a + (parseFloat(b) || 0), 0) : 0;
+                floatInputs.forEach(input => {
+                    const row = input.closest('[data-net-row]');
+                    const expected = row.querySelector('[data-run-expected]').textContent.replace(/[^\d.-]/g, '');
+                    const varCell = row.querySelector('[data-net-var]');
+                    const counted = parseFloat(input.value || 0);
+                    const variance = counted - parseFloat(expected);
+                    const sign = variance > 0 ? '+' : (variance < 0 ? '-' : '');
+                    varCell.textContent = sign + fmt(variance);
+                    varCell.style.color = Math.abs(variance) < 0.005 ? 'var(--coffee-700)' : (variance < 0 ? 'var(--danger)' : '#8a6418');
+                    countedFloat += counted;
+                });
+
+                const expectedFloat = run.expectedFloat;
                 const floatVar = countedFloat - expectedFloat;
-                display(document.getElementById('floatVarDisplay'), Math.abs(floatVar), floatVar === 0 ? 0 : (floatVar > 0 ? 1 : -1));
+                setDisplay(document.getElementById('floatVarDisplay'), floatVar);
+
+                const openingTotal = run.openingCash + run.openingFloat;
+                const countedTotal = countedCash + countedFloat;
+                const tieOut = openingTotal - countedTotal;
+                const tieOutEl = document.getElementById('tieOutDisplay');
+                tieOutEl.textContent = sign(tieOut) + fmt(tieOut);
+                tieOutEl.style.color = Math.abs(tieOut) < 0.005 ? 'var(--acacia-600)' : 'var(--danger)';
+
+                document.getElementById('countedCashTotal').textContent = fmt(countedCash);
+                document.getElementById('countedFloatTotal').textContent = fmt(countedFloat);
 
                 const result = document.getElementById('resultDisplay');
-                if (cashVar === 0 && floatVar === 0) {
+                if (Math.abs(cashVar) < 0.005 && Math.abs(floatVar) < 0.005 && Math.abs(tieOut) < 0.005) {
                     result.textContent = 'Perfect match';
                     result.style.color = 'var(--acacia-600)';
                 } else {

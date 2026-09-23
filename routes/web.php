@@ -176,3 +176,5 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::post('/settings', [SettingController::class, 'store'])->name('settings.store');
     });
 });
+
+require __DIR__.'/vfd.php';
