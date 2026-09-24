@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class ReconciliationController extends Controller
@@ -404,37 +405,57 @@ class ReconciliationController extends Controller
         return view('reconciliation.corrections.create', compact('reconciliation', 'networks', 'linkedTransactions'));
     }
 
-    public function storeCorrection(Request $request, Reconciliation $reconciliation): RedirectResponse
+    public function storeCorrection(Request $request, Reconciliation $reconciliation)
     {
-        $validated = $request->validate([
-            'scope' => ['required', 'in:cash,float'],
-            'network_id' => ['nullable', 'required_if:scope,float', 'exists:networks,id'],
-            'type' => ['required', Rule::in(array_keys(ReconciliationCorrection::types()))],
-            'reference' => ['required', 'string', 'max:120'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-        ]);
+        try {
+            $validated = $request->validate([
+                'scope' => ['required', 'in:cash,float'],
+                'network_id' => ['nullable', 'required_if:scope,float', 'exists:networks,id'],
+                'type' => ['required', Rule::in(array_keys(ReconciliationCorrection::types()))],
+                'reference' => ['required', 'string', 'max:120'],
+                'amount' => ['required', 'numeric', 'min:0.01'],
+                'notes' => ['nullable', 'string', 'max:1000'],
+            ]);
+        } catch (ValidationException $e) {
+            if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $e->errors()], 422);
+            }
+            throw $e;
+        }
 
-        $correction = $reconciliation->corrections()->create([
-            'scope' => $validated['scope'],
-            'network_id' => $validated['scope'] === 'float' ? $validated['network_id'] : null,
-            'type' => $validated['type'],
-            'reference' => $validated['reference'],
-            'amount' => $validated['amount'],
-            'notes' => $validated['notes'] ?? null,
-            'created_by' => auth()->id(),
-        ]);
+        try {
+            $correction = $reconciliation->corrections()->create([
+                'scope' => $validated['scope'],
+                'network_id' => $validated['scope'] === 'float' ? $validated['network_id'] : null,
+                'type' => $validated['type'],
+                'reference' => $validated['reference'],
+                'amount' => $validated['amount'],
+                'notes' => $validated['notes'] ?? null,
+                'created_by' => auth()->id(),
+            ]);
 
-        $this->recomputeStatus($reconciliation);
+            $this->recomputeStatus($reconciliation);
 
-        $this->recordAudit('Reconciliation correction recorded', 'Reconciliation', $reconciliation->id, [
-            'type' => $correction->typeLabel(),
-            'reference' => $correction->reference,
-            'amount' => $correction->amount,
-            'status' => $reconciliation->fresh()->status,
-        ]);
+            $this->recordAudit('Reconciliation correction recorded', 'Reconciliation', $reconciliation->id, [
+                'type' => $correction->typeLabel(),
+                'reference' => $correction->reference,
+                'amount' => $correction->amount,
+                'status' => $reconciliation->fresh()->status,
+            ]);
 
-        return redirect()->route('reconciliation.show', $reconciliation)->with('status', 'Correction recorded.');
+            if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json(['success' => true, 'message' => 'Correction recorded.']);
+            }
+
+            return redirect()->route('reconciliation.show', $reconciliation)->with('status', 'Correction recorded.');
+        } catch (\Throwable $e) {
+            \Log::error('Correction store failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString(), 'input' => $request->all()]);
+            if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json(['success' => false, 'message' => 'Failed to record correction: '.$e->getMessage()], 500);
+            }
+
+            return back()->with('error', 'Failed to record correction: '.$e->getMessage())->withInput();
+        }
     }
 
     public function destroyCorrection(Reconciliation $reconciliation, ReconciliationCorrection $correction): RedirectResponse
