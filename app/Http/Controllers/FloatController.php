@@ -585,6 +585,61 @@ class FloatController extends Controller
     }
 
     /**
+     * Admin: delete a single day opening (full single day) — removes DailyOpening for that date
+     */
+    public function destroyOpening(Request $request, DailyOpening $dailyOpening): JsonResponse|RedirectResponse
+    {
+        $agent = cash_point();
+        if ($agent === null || (int) $dailyOpening->agent_id !== (int) $agent->id) {
+            abort(403);
+        }
+
+        $dateStr = $dailyOpening->opening_date instanceof Carbon ? $dailyOpening->opening_date->format('Y-m-d') : (string) $dailyOpening->opening_date;
+
+        // Optional: also delete dated FloatTransactions and Transactions for that day if requested
+        $deleteRelated = $request->boolean('with_transactions');
+
+        DB::transaction(function () use ($dailyOpening, $agent, $dateStr, $deleteRelated) {
+            if ($deleteRelated) {
+                $fts = FloatTransaction::where('agent_id', $agent->id)->whereDate('created_at', $dateStr)->get();
+                foreach ($fts as $ft) {
+                    $bal = NetworkBalance::where('agent_id', $agent->id)->where('network_id', $ft->network_id)->first();
+                    if ($bal) {
+                        match ($ft->type) {
+                            'cash_in' => $bal->balance -= (float) $ft->amount,
+                            'cash_out' => $bal->balance += (float) $ft->amount,
+                            'float_topup' => $bal->balance -= (float) $ft->amount,
+                            'float_pull' => $bal->balance += (float) $ft->amount,
+                            default => null,
+                        };
+                        $bal->save();
+                    }
+                    if (in_array($ft->type, ['cash_out', 'float_pull'], true)) {
+                        $agent->cash_balance = (float) $agent->cash_balance + (float) $ft->amount;
+                    } elseif ($ft->type === 'cash_in') {
+                        $agent->cash_balance = (float) $agent->cash_balance - (float) $ft->amount;
+                    }
+                    $ft->delete();
+                }
+                $agent->save();
+
+                // Also delete customer transactions for that date (optional, soft revert of volumes)
+                Transaction::where('agent_id', $agent->id)->whereDate('created_at', $dateStr)->delete();
+            }
+
+            $dailyOpening->delete();
+        });
+
+        $this->recordAudit('Daily opening deleted (full single day)', 'DailyOpening', $dailyOpening->id, ['date' => $dateStr, 'with_transactions' => $deleteRelated]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Opening for '.$dateStr.($deleteRelated ? ' and its transactions' : '').' deleted.']);
+        }
+
+        return back()->with('status', 'Day '.$dateStr.' deleted.');
+    }
+
+    /**
      * Admin: directly update current float balances (NetworkBalance)
      */
     public function updateBalances(Request $request): JsonResponse|RedirectResponse

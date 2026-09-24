@@ -110,6 +110,81 @@
             </div>
         </div>
 
+        {{-- Each Day Added — table with edit/delete for full single day --}}
+        @if($isAdmin && $openings->isNotEmpty())
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Each Day Added — Manage Full Single Day</h3>
+                <span class="tag tag-terracotta">{{ $openings->count() }} days</span>
+            </div>
+            <div class="panel-body" style="padding:0;">
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Cash Opening</th>
+                                <th>Float Total</th>
+                                <th>Txs / Vol</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($openings as $op)
+                            <tr @if($op->opening_date->toDateString() === $selectedDate) style="background:var(--gold-100);" @endif>
+                                <td>
+                                    <span class="cell-title">{{ $op->opening_date->format('Y-m-d') }}</span>
+                                    <span class="cell-sub">{{ $op->opening_date->format('l') }}</span>
+                                </td>
+                                <td class="cell-title">@money($op->cash_opening)</td>
+                                <td>@money($op->totalFloatOpening())</td>
+                                <td>{{ $op->total_transactions }} txs<br><span class="cell-sub">@money($op->total_volume)</span></td>
+                                <td><span class="tag {{ $op->is_closed ? 'tag-grey' : 'tag-green' }}">{{ $op->is_closed ? 'Closed' : 'Open' }}</span>@if($op->opening_date->toDateString() === $selectedDate) <span class="tag tag-gold">Viewing</span> @endif</td>
+                                <td style="white-space:nowrap;">
+                                    <a href="{{ route('float.index', ['date' => $op->opening_date->toDateString()]) }}" class="btn btn-ghost btn-sm">View</a>
+                                    <a href="{{ route('float.opening.edit', ['date' => $op->opening_date->toDateString()]) }}" class="btn btn-ghost btn-sm">Edit</a>
+                                    <button type="button" onclick="deleteDay('{{ $op->opening_date->toDateString() }}', '{{ $op->opening_date->format('Y-m-d') }}', false)" class="btn btn-ghost btn-sm" style="color:var(--danger);">Delete</button>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <div style="padding:10px 12px; background:var(--sand-50); border-top:1px solid var(--line); font-size:12px; color:var(--ink-soft);">
+                    Viewing <strong>{{ $selectedDate }}</strong> — Click <em>View</em> to load that day’s balances, <em>Edit</em> to change opening cash/float, <em>Delete</em> to remove full single day (opening only). For 2026-09-24 full management, use View then Edit/Delete below.
+                </div>
+            </div>
+        </div>
+
+        {{-- Manage Selected Single Day — focused edit/delete for 2026-09-24 etc --}}
+        <div class="panel" style="border-left:3px solid var(--acacia-600);">
+            <div class="panel-head">
+                <h3>Manage Day {{ $viewDate->format('Y-m-d') }} — Full Single Day</h3>
+                <span class="link">Edit or delete this day’s opening & activity</span>
+            </div>
+            <div class="panel-body">
+                @if($todayOpening)
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-primary btn-sm">✏️ Edit Opening</a>
+                        <a href="{{ route('daily-opening.show', $todayOpening) }}" class="btn btn-ghost btn-sm">View Daily Opening</a>
+                        <button type="button" onclick="deleteDay('{{ $selectedDate }}', '{{ $viewDate->format('Y-m-d') }}', false)" class="btn btn-danger btn-sm">🗑️ Delete Day (opening only)</button>
+                        <button type="button" onclick="if(confirm('Delete opening + ALL transactions & float for {{ $selectedDate }}? This reverts balances!')) deleteDay('{{ $selectedDate }}', '{{ $viewDate->format('Y-m-d') }}', true)" class="btn btn-ghost btn-sm" style="color:var(--danger); border-color:var(--danger);">Delete Day + Transactions</button>
+                    </div>
+                    <div style="margin-top:8px; font-size:12px; color:var(--ink-soft);">
+                        Edit = change cash/float opening for this date · Delete Day = removes DailyOpening · Delete + Transactions = also deletes all customer transactions & float for this date and reverts balances.
+                    </div>
+                @else
+                    <div style="padding:10px; background:var(--sand-100); border-radius:6px; font-size:13px;">
+                        No opening for <strong>{{ $selectedDate }}</strong> —
+                        <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-primary btn-sm">Create Opening</a>
+                        <span style="color:var(--ink-soft);"> then add float/cash for this day.</span>
+                    </div>
+                @endif
+            </div>
+        </div>
+        @endif
+
         @if($viewDate->isSameDay(today()))
         <div class="panel">
             <div class="panel-head">
@@ -364,6 +439,24 @@
                     setTimeout(() => location.reload(), 400);
                 } else {
                     toast(data.message || 'Failed to delete', 'error');
+                }
+            } catch (e) { toast('Network error', 'error'); }
+        }
+
+        async function deleteDay(dateStr, display, withTransactions) {
+            if (!confirm('Delete opening for ' + display + (withTransactions ? ' + ALL transactions & float for that day?' : ' (opening only)?') + ' This cannot be undone.')) return;
+            try {
+                const url = '/float/opening/' + encodeURIComponent(dateStr) + (withTransactions ? '?with_transactions=1' : '');
+                const resp = await fetch(url, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data.success) {
+                    toast(data.message || 'Day deleted', 'success');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    toast(data.message || 'Failed to delete day', 'error');
                 }
             } catch (e) { toast('Network error', 'error'); }
         }
