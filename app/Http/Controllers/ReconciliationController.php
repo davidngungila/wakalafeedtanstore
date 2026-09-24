@@ -537,30 +537,32 @@ class ReconciliationController extends Controller
         $balances = $agent->balances()->get()->keyBy('network_id');
         $prevDateForFloat = Carbon::parse($date)->subDay()->toDateString();
         $prevReconciliationForFloat = $agent->reconciliations()->where('reconciliation_date', $prevDateForFloat)->latest()->first();
-        $prevCountedMap = collect();
-        if ($prevReconciliationForFloat && ! empty($prevReconciliationForFloat->network_balances)) {
-            $prevCountedMap = collect($prevReconciliationForFloat->network_balances)->mapWithKeys(fn (array $r) => [($r['network_id'] ?? $r['network'] ?? null) => (float) ($r['counted'] ?? $r['expected'] ?? 0)]);
-            $byName = collect($prevReconciliationForFloat->network_balances)->mapWithKeys(fn (array $r) => isset($r['network']) ? [$r['network'] => (float) ($r['counted'] ?? 0)] : []);
-            $prevCountedMap = $prevCountedMap->merge($byName);
-        }
 
-        $rows = $networks->map(function (Network $network) use ($dailyOpening, $balances, $depositsByNetwork, $withdrawalsByNetwork, $floatTopupsByNetwork, $bankToWalletByNetwork, $floatTxTopupsByNetwork, $prevCountedMap): array {
+        $rows = $networks->map(function (Network $network) use ($dailyOpening, $balances, $depositsByNetwork, $withdrawalsByNetwork, $floatTopupsByNetwork, $bankToWalletByNetwork, $floatTxTopupsByNetwork, $prevReconciliationForFloat): array {
             $balance = $balances->get($network->id);
+
+            // Direct search for previous day Counted to avoid id/name map mismatches (Vodacom 0 vs HaloPesa 1,086,000)
+            $prevCounted = null;
+            if ($prevReconciliationForFloat && ! empty($prevReconciliationForFloat->network_balances)) {
+                $prevRow = collect($prevReconciliationForFloat->network_balances)->firstWhere('network_id', $network->id);
+                if (! $prevRow) {
+                    $prevRow = collect($prevReconciliationForFloat->network_balances)->firstWhere('network', $network->name);
+                }
+                if ($prevRow) {
+                    $prevCounted = (float) ($prevRow['counted'] ?? $prevRow['expected'] ?? $prevRow['system'] ?? 0);
+                }
+            }
 
             $opening = null;
             if ($dailyOpening !== null) {
                 $opening = $dailyOpening->getFloatOpening($network->id);
-                if ($opening == 0.0 && $prevCountedMap->has($network->id)) {
-                    $opening = (float) $prevCountedMap[$network->id];
-                } elseif ($opening == 0.0 && $prevCountedMap->has($network->name)) {
-                    $opening = (float) $prevCountedMap[$network->name];
+                if ($opening == 0.0 && $prevCounted !== null) {
+                    $opening = $prevCounted;
                 }
             } else {
-                // No opening for this date — use previous day reconciled Counted (not live) to avoid showing same live -356,500 for every historical date
-                if ($prevCountedMap->has($network->id)) {
-                    $opening = (float) $prevCountedMap[$network->id];
-                } elseif ($prevCountedMap->has($network->name)) {
-                    $opening = (float) $prevCountedMap[$network->name];
+                // No opening for this date — use previous day reconciled Counted (not live -356,500) so Vodacom 0 not HaloPesa 1,086,000
+                if ($prevCounted !== null) {
+                    $opening = $prevCounted;
                 } else {
                     $opening = (float) ($balance?->opening_balance ?? 0);
                     if ($opening == 0.0) {
