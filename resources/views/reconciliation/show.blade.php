@@ -15,9 +15,18 @@
             </p>
         </div>
         <div class="view-actions" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-            <a href="{{ route('reconciliation.export.single', $reconciliation) }}?format=pdf" class="btn btn-primary btn-sm" target="_blank">📄 Export PDF (Full Report)</a>
-            <a href="{{ route('reconciliation.export.single', $reconciliation) }}?format=excel" class="btn btn-ghost btn-sm">📊 Export Excel</a>
-            <a href="{{ route('reconciliation.index') }}" class="btn btn-ghost">← Back to list</a>
+            <a href="{{ route('reconciliation.export.single', $reconciliation) }}?format=pdf" class="btn btn-primary btn-sm" target="_blank">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                Export PDF (Full Report)
+            </a>
+            <a href="{{ route('reconciliation.export.single', $reconciliation) }}?format=excel" class="btn btn-ghost btn-sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M8 17V9"></path><path d="M12 17V12"></path><path d="M16 17V14"></path></svg>
+                Export Excel
+            </a>
+            <a href="{{ route('reconciliation.index') }}" class="btn btn-ghost">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+                Back to list
+            </a>
             @if(is_admin())
                 <button type="button" onclick="openModal('deleteReconShowModal')" class="btn btn-danger">Delete reconciled</button>
             @endif
