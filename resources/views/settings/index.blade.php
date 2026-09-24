@@ -8,6 +8,7 @@
         $comm = $settings['commissions'] ?? [];
         $sec = $settings['security'] ?? [];
         $notif = $settings['notifications'] ?? [];
+        $email = $settings['email'] ?? [];
     @endphp
     <div class="view-head">
         <div>
@@ -40,6 +41,10 @@
             <a href="{{ route('settings.index') }}?pane=cashpoint" class="{{ $pane === 'cashpoint' ? 'active' : '' }}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l1.5-2.5h17L22 7z"></path><path d="M3 7h18v13H3z"></path><path d="M9 13h6"></path></svg>
                 Cash Point
+            </a>
+            <a href="{{ route('settings.index') }}?pane=email" class="{{ $pane === 'email' ? 'active' : '' }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                Email
             </a>
         </nav>
 
@@ -119,6 +124,65 @@
                     @endif
                     @include('cash_point._fields')
                     <button type="submit" class="btn btn-primary">Save cash point</button>
+                </form>
+            @elseif ($pane === 'email')
+                <h3>Email — OTP & Reports</h3>
+                <p style="font-size:13px; color:var(--ink-soft); margin-bottom:16px;">Configure SMTP to send OTP codes and report emails. These settings override <code>.env</code> <code>MAIL_*</code> when saved.</p>
+                <form method="POST" action="{{ route('settings.store') }}" data-settings-form>
+                    @csrf
+                    <div class="form-row">
+                        <div class="field"><label>Mailer</label>
+                            <select name="email[mail_mailer]" style="padding:12px 14px; border:1.5px solid var(--line); border-radius:8px; background:var(--white);">
+                                <option value="smtp" {{ ($email['mail_mailer'] ?? 'smtp') === 'smtp' ? 'selected' : '' }}>smtp</option>
+                                <option value="log" {{ ($email['mail_mailer'] ?? '') === 'log' ? 'selected' : '' }}>log (for testing)</option>
+                                <option value="ses" {{ ($email['mail_mailer'] ?? '') === 'ses' ? 'selected' : '' }}>ses</option>
+                            </select>
+                        </div>
+                        <div class="field"><label>Encryption</label>
+                            <select name="email[mail_encryption]" style="padding:12px 14px; border:1.5px solid var(--line); border-radius:8px; background:var(--white);">
+                                <option value="tls" {{ ($email['mail_encryption'] ?? 'tls') === 'tls' ? 'selected' : '' }}>tls</option>
+                                <option value="ssl" {{ ($email['mail_encryption'] ?? '') === 'ssl' ? 'selected' : '' }}>ssl</option>
+                                <option value="" {{ ($email['mail_encryption'] ?? '') === '' ? 'selected' : '' }}>none</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="field"><label>SMTP Host</label><input type="text" name="email[mail_host]" value="{{ $email['mail_host'] ?? '' }}" placeholder="smtp.mailtrap.io"></div>
+                        <div class="field"><label>Port</label><input type="number" name="email[mail_port]" value="{{ $email['mail_port'] ?? '' }}" placeholder="587"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="field"><label>Username</label><input type="text" name="email[mail_username]" value="{{ $email['mail_username'] ?? '' }}" placeholder="your_username"></div>
+                        <div class="field"><label>Password</label><input type="password" name="email[mail_password]" value="{{ $email['mail_password'] ?? '' }}" placeholder="••••••••"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="field"><label>From Address</label><input type="email" name="email[mail_from_address]" value="{{ $email['mail_from_address'] ?? '' }}" placeholder="noreply@wakala.com"></div>
+                        <div class="field"><label>From Name</label><input type="text" name="email[mail_from_name]" value="{{ $email['mail_from_name'] ?? '' }}" placeholder="Wakala Feedtan Store"></div>
+                    </div>
+                    <div style="height:1px; background:var(--line); margin:18px 0;"></div>
+                    <div class="toggle-row">
+                        <div class="toggle-text"><strong>OTP via Email</strong><span>Send OTP codes by email for 2FA and verification.</span></div>
+                        <select name="email[otp_via_email]" style="padding:8px 10px; border:1.5px solid var(--line); border-radius:9px; font-weight:600; background:var(--white);">
+                            <option value="1" {{ ($email['otp_via_email'] ?? '1') == 1 ? 'selected' : '' }}>On</option>
+                            <option value="0" {{ ($email['otp_via_email'] ?? '1') == 0 ? 'selected' : '' }}>Off</option>
+                        </select>
+                    </div>
+                    <div class="toggle-row">
+                        <div class="toggle-text"><strong>OTP Enabled</strong><span>Master switch for OTP generation.</span></div>
+                        <select name="email[otp_enabled]" style="padding:8px 10px; border:1.5px solid var(--line); border-radius:9px; font-weight:600; background:var(--white);">
+                            <option value="1" {{ ($email['otp_enabled'] ?? '1') == 1 ? 'selected' : '' }}>On</option>
+                            <option value="0" {{ ($email['otp_enabled'] ?? '1') == 0 ? 'selected' : '' }}>Off</option>
+                        </select>
+                    </div>
+                    <div class="toggle-row">
+                        <div class="toggle-text"><strong>Reports via Email</strong><span>Send daily/weekly/monthly reports by email.</span></div>
+                        <select name="email[reports_via_email]" style="padding:8px 10px; border:1.5px solid var(--line); border-radius:9px; font-weight:600; background:var(--white);">
+                            <option value="1" {{ ($email['reports_via_email'] ?? '1') == 1 ? 'selected' : '' }}>On</option>
+                            <option value="0" {{ ($email['reports_via_email'] ?? '1') == 0 ? 'selected' : '' }}>Off</option>
+                        </select>
+                    </div>
+                    <div class="field" style="margin-top:12px;"><label>Reports Recipients (comma separated emails)</label><input type="text" name="email[reports_recipients]" value="{{ $email['reports_recipients'] ?? '' }}" placeholder="manager@company.com, audit@company.com"></div>
+                    <button type="submit" class="btn btn-primary" style="margin-top:16px;">Save email settings</button>
+                    <button type="button" class="btn btn-ghost" style="margin-left:8px;" onclick="fetch('{{ route('settings.store') }}', {method:'POST', headers:{'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'X-Requested-With':'XMLHttpRequest','Accept':'application/json'}, body: new FormData(event.target.closest('form'))}).then(r=>r.json()).then(d=>toast(d.message||'Saved','success')).catch(()=>toast('Error','error'))">Test</button>
                 </form>
             @else
                 <h3>Notifications</h3>
