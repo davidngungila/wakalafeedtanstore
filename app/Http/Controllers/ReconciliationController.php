@@ -472,7 +472,7 @@ class ReconciliationController extends Controller
         return back()->with('status', 'Correction removed.');
     }
 
-    public function destroy(Reconciliation $reconciliation): RedirectResponse
+    public function destroy(Request $request, Reconciliation $reconciliation): JsonResponse|RedirectResponse
     {
         $agent = cash_point();
         if ($agent && (int) $reconciliation->agent_id !== (int) $agent->id && ! is_admin()) {
@@ -480,13 +480,27 @@ class ReconciliationController extends Controller
         }
 
         $date = $reconciliation->reconciliation_date;
-        $reconciliation->delete();
 
-        $this->recordAudit('Reconciliation deleted', 'Reconciliation', $reconciliation->id, [
-            'date' => $date,
-        ]);
+        try {
+            $reconciliation->delete();
 
-        return redirect()->route('reconciliation.index')->with('status', 'Reconciliation for '.$date.' deleted.');
+            $this->recordAudit('Reconciliation deleted', 'Reconciliation', $reconciliation->id, [
+                'date' => $date,
+            ]);
+
+            if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json(['success' => true, 'message' => 'Reconciliation for '.$date.' deleted.']);
+            }
+
+            return redirect()->route('reconciliation.index')->with('status', 'Reconciliation for '.$date.' deleted.');
+        } catch (\Throwable $e) {
+            \Log::error('Reconciliation delete failed', ['error' => $e->getMessage(), 'id' => $reconciliation->id, 'date' => $date]);
+            if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json(['success' => false, 'message' => 'Failed to delete: '.$e->getMessage()], 500);
+            }
+
+            return back()->with('error', 'Failed to delete: '.$e->getMessage());
+        }
     }
 
     /**
