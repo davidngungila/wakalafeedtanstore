@@ -59,15 +59,82 @@ class FloatController extends Controller
             $viewDate = today();
         }
 
-        $balances = $cashPoint->balances()->with('network')->orderBy('network_id')->get();
+        // For admin with selected date, compute per-network current as of that day's end (opening + day's net)
+        if ($isAdmin && ! $viewDate->isSameDay(today())) {
+            $networksAll = Network::orderBy('name')->get(['id', 'name', 'color']);
+            $balancesForDate = collect();
+            foreach ($networksAll as $net) {
+                $bal = $cashPoint->balances()->where('network_id', $net->id)->first();
+                $openingVal = $todayOpening ? $todayOpening->getFloatOpening($net->id) : (float) ($bal?->opening_balance ?? 0);
+                if ($openingVal == 0.0 && $bal) {
+                    $openingVal = (float) $bal->opening_balance;
+                }
+                // Float delta for Transactions on that date for this network
+                $txsForNet = Transaction::where('agent_id', $cashPoint->id)->where('network_id', $net->id)->whereDate('created_at', $viewDate)->where('status', 'completed')->get();
+                $netTxFloat = 0.0;
+                foreach ($txsForNet as $t) {
+                    $netTxFloat += match ($t->type) {
+                        'deposit' => -(float) $t->amount,
+                        'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => (float) $t->amount,
+                        default => -(float) $t->amount,
+                    };
+                }
+                // Float delta for FloatTransactions on that date for this network
+                $ftsForNet = FloatTransaction::where('agent_id', $cashPoint->id)->where('network_id', $net->id)->whereDate('created_at', $viewDate)->get();
+                $netFloatTx = 0.0;
+                foreach ($ftsForNet as $ft) {
+                    $netFloatTx += match ($ft->type) {
+                        'cash_in', 'float_topup' => (float) $ft->amount,
+                        'cash_out', 'float_pull' => -(float) $ft->amount,
+                        default => 0.0,
+                    };
+                }
+                $currentForDate = $openingVal + $netTxFloat + $netFloatTx;
+                $balancesForDate->push((object) [
+                    'network' => $net,
+                    'network_id' => $net->id,
+                    'opening_balance' => $openingVal,
+                    'balance' => $currentForDate,
+                ]);
+            }
+            // Map to expected structure for view (has network relation)
+            $balances = $balancesForDate->map(function ($b) {
+                $b->network = $b->network;
 
-        $summary = [
-            'totalFloat' => (float) $balances->sum('balance'),
-            'floatOut' => (float) $balances->sum('balance') + (float) $balances->sum('opening_balance'),
-            'totalCash' => (float) $cashPoint->cash_balance,
-            'networks' => Network::count(),
-        ];
-        $summary['floatCapacity'] = $summary['floatOut'] + $summary['totalCash'];
+                return $b;
+            });
+            // Summary for that date
+            $summary = [
+                'totalFloat' => (float) $balances->sum('balance'),
+                'floatOut' => (float) $balances->sum('balance'),
+                'totalCash' => (float) ($todayOpening ? $todayOpening->cash_opening : $cashPoint->cash_balance),
+                'networks' => Network::count(),
+            ];
+            $summary['floatCapacity'] = $summary['totalFloat'] + $summary['totalCash'];
+            // Override cash summary for that date: opening + net cash for that date
+            $dayTxCash = Transaction::where('agent_id', $cashPoint->id)->whereDate('created_at', $viewDate)->where('status', 'completed')->get();
+            $cashIn = 0.0;
+            $cashOut = 0.0;
+            foreach ($dayTxCash as $t) {
+                $d = in_array($t->type, ['deposit', 'airtime'], true) ? (float) $t->amount : (in_array($t->type, ['withdrawal', 'wallet_to_bank', 'float_deposit', 'float_topup'], true) ? -(float) $t->amount : 0);
+                if ($d > 0) {
+                    $cashIn += $d;
+                } elseif ($d < 0) {
+                    $cashOut += abs($d);
+                }
+            }
+            $summary['totalCash'] = (float) ($todayOpening ? $todayOpening->cash_opening : 0) + $cashIn - $cashOut;
+        } else {
+            $balances = $cashPoint->balances()->with('network')->orderBy('network_id')->get();
+
+            $summary = [
+                'totalFloat' => (float) $balances->sum('balance'),
+                'floatOut' => (float) $balances->sum('balance') + (float) $balances->sum('opening_balance'),
+                'totalCash' => (float) $cashPoint->cash_balance,
+                'networks' => Network::count(),
+            ];
+            $summary['floatCapacity'] = $summary['floatOut'] + $summary['totalCash'];
+        }
 
         $floatQuery = FloatTransaction::with(['network', 'operator'])
             ->where('agent_id', $cashPoint->id);
