@@ -33,12 +33,12 @@ class FloatController extends Controller
         $decrypted = $this->decryptDateParam($rawDate);
         $maybePlain = $rawDate ? $this->isPlainDate($rawDate) : false;
 
-        // If admin passed plain Y-m-d, redirect to encrypted URL so header never shows plain (except today fallback)
+        // If admin passed plain Y-m-d, redirect to encrypted dedicated day page so index stays as table
         if ($isAdmin && $rawDate !== null && $decrypted === null && $maybePlain) {
             try {
                 Carbon::parse($rawDate)->toDateString();
 
-                return redirect()->route('float.index', ['date' => $this->encryptDateParam($rawDate)]);
+                return redirect()->route('float.day', ['date' => $this->encryptDateParam($rawDate)]);
             } catch (\Throwable) {
             }
         }
@@ -49,6 +49,11 @@ class FloatController extends Controller
                 $selectedDate = Carbon::parse($selectedDate)->toDateString();
             } catch (\Throwable) {
                 $selectedDate = today()->toDateString();
+            }
+            // Admin single-day must be via dedicated page /float/day/{encrypted} — keep index as all-days table
+            $viewDateTmp = Carbon::parse($selectedDate);
+            if (! $viewDateTmp->isSameDay(today())) {
+                return redirect()->route('float.day', ['date' => $this->encryptDateParam($selectedDate)]);
             }
         } else {
             $selectedDate = today()->toDateString();
@@ -218,15 +223,19 @@ class FloatController extends Controller
         $exportColumns = $this->exportColumns();
         $exportRoute = route('float.export');
 
-        // For admin: also load openings for manage-all link (not for single-day table anymore)
+        // For admin: load all days for index table (now index shows all days table)
+        $openings = collect();
         $openingsCount = 0;
         if ($isAdmin) {
+            $openings = DailyOpening::where('agent_id', $cashPoint->id)->orderByDesc('opening_date')->limit(30)->get();
+            $openingsCount = $openings->count();
+            // For accurate total count, also get full count
             $openingsCount = DailyOpening::where('agent_id', $cashPoint->id)->count();
         }
 
         $selectedDateEncrypted = $isAdmin ? $this->encryptDateParam($selectedDate) : $selectedDate;
 
-        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'allNetworks', 'summary', 'todayOpening', 'exportColumns', 'exportRoute', 'selectedDate', 'selectedDateEncrypted', 'viewDate', 'openingsCount', 'isAdmin'));
+        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'allNetworks', 'summary', 'todayOpening', 'exportColumns', 'exportRoute', 'selectedDate', 'selectedDateEncrypted', 'viewDate', 'openings', 'openingsCount', 'isAdmin'));
     }
 
     public function days(Request $request): View|RedirectResponse

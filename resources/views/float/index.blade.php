@@ -38,92 +38,58 @@
     </div>
 
     @if($isAdmin)
-        <div class="panel" style="border-left:3px solid var(--terracotta-600);">
+        <div class="panel">
             <div class="panel-head">
-                <h3>Admin — Select Day & Opening Balances</h3>
-                <span class="tag tag-terracotta">Edit any date</span>
+                <h3>All Days — Table</h3>
+                <span class="tag tag-terracotta">{{ $openingsCount ?? 0 }} days</span>
             </div>
-            <div class="panel-body">
-                <form method="GET" action="{{ route('float.index') }}" style="display:flex; gap:10px; align-items:end; flex-wrap:wrap;">
-                    <div class="field" style="margin-bottom:0;">
-                        <label>Selected date</label>
-                        <input type="date" name="date" value="{{ $selectedDate }}" max="{{ today()->toDateString() }}">
-                    </div>
-                    <button type="submit" class="btn btn-primary">Load day</button>
-                    <a href="{{ route('float.index') }}" class="btn btn-ghost">Today</a>
-                    <a href="{{ route('float.opening.edit', ['date' => $selectedDateEncrypted]) }}" class="btn btn-ghost" style="border:1.5px solid var(--line);">Edit opening for {{ $viewDate->format('d M Y') }}</a>
-                </form>
-                @if($todayOpening)
-                    <div style="margin-top:14px; padding:12px; background:var(--sand-100); border:1px solid var(--line); border-radius:8px; font-size:13px; line-height:1.6;">
-                        <strong>Opening for {{ $viewDate->format('Y-m-d') }}:</strong> Cash <strong>@money($todayOpening->cash_opening)</strong> · Float total <strong>@money($todayOpening->totalFloatOpening())</strong> · Status <span class="tag {{ $todayOpening->is_closed ? 'tag-grey' : 'tag-green' }}">{{ $todayOpening->is_closed ? 'Closed' : 'Open' }}</span> · {{ $todayOpening->total_transactions }} txs · Vol @money($todayOpening->total_volume)
-                        @if($todayOpening->notes)<br><span style="color:var(--ink-soft);">{{ $todayOpening->notes }}</span>@endif
-                        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-                            @foreach($allNetworks as $net)
-                                @php $amt = $todayOpening->float_openings[$net->id] ?? 0; @endphp
-                                <span class="tag" style="background:var(--white); border:1px solid var(--line);"><span class="net-dot" style="background:{{ $net->color }};"></span> {{ $net->name }}: @money($amt)</span>
-                            @endforeach
-                        </div>
-                    </div>
-                @else
-                    <div style="margin-top:14px; padding:12px; background:var(--danger-100); border-radius:8px; font-size:13px;">No Daily Opening for <strong>{{ $viewDate->format('Y-m-d') }}</strong> — <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-sm btn-primary" style="margin-left:8px;">Create / Add opening</a> <span style="color:var(--ink-soft);">You can still add float entries for this date; they will be counted via <code>created_at</code> for reports/reconciliation.</span></div>
-                @endif
-                {{-- Cash at till must reference previous day closing --}}
-                @if(isset($summary['previousClosingCash']) || isset($summary['resolvedCashOpening']))
-                    @php
-                        $prevClosing = $summary['previousClosingCash'] ?? null;
-                        $resolvedOpening = $summary['resolvedCashOpening'] ?? ($todayOpening ? $todayOpening->cash_opening : 0);
-                        $prevDateStr = $viewDate->copy()->subDay()->format('Y-m-d');
-                    @endphp
-                    <div style="margin-top:12px; padding:12px; background:var(--white); border:1px solid var(--line); border-radius:8px; font-size:13px; line-height:1.6;">
-                        <strong>Cash at till — references previous closing:</strong><br>
-                        @if($prevClosing !== null)
-                            <span style="color:var(--ink-soft);">Previous day {{ $prevDateStr }} closing: <strong>@money($prevClosing)</strong></span>
-                            <span style="margin:0 6px;">→</span>
-                            <span>Opening {{ $viewDate->format('Y-m-d') }}: <strong>@money($resolvedOpening)</strong></span>
-                            @if(isset($summary['cashIn']) || isset($summary['cashOut']))
-                                <span style="color:var(--ink-soft);"> (Cash in +@money($summary['cashIn'] ?? 0) − Out @money($summary['cashOut'] ?? 0) → Closing <strong>@money($summary['totalCash'])</strong>)</span>
-                            @endif
-                        @else
-                            <span style="color:var(--ink-soft);">No previous closing found — opening defaults to <strong>@money($resolvedOpening)</strong> (set via Daily Opening or Agent balance)</span>
-                        @endif
-                        <div style="margin-top:8px; font-size:12px; color:var(--ink-soft);">Edit opening to change base, or add additional cash below (creates cash_in for this date, updates opening + live balance if today).</div>
-                    </div>
-                @endif
-                {{-- Allow to add additional cash for this date --}}
-                <div style="margin-top:12px; padding:12px; background:var(--acacia-50); border:1px solid var(--line); border-radius:8px;">
-                    <strong style="font-size:13px;">Add additional cash at till for {{ $viewDate->format('Y-m-d') }}</strong>
-                    <p style="font-size:12px; color:var(--ink-soft); margin:4px 0 8px;">References previous closing above — amount will be added to Daily Opening cash_opening for this date and booked as Float cash_in (visible in balance & reconciliation).</p>
-                    <form method="POST" action="{{ route('float.cash.add') }}" data-cash-add style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
-                        @csrf
-                        <input type="hidden" name="date" value="{{ $viewDate->toDateString() }}">
-                        <div class="field" style="margin-bottom:0; min-width:160px;">
-                            <label>Amount (TZS) *</label>
-                            <input type="number" name="amount" min="1" step="0.01" required placeholder="e.g. 50000">
-                        </div>
-                        <div class="field" style="margin-bottom:0; flex:1; min-width:200px;">
-                            <label>Notes (optional)</label>
-                            <input type="text" name="notes" maxlength="255" placeholder="Additional cash from bank / owner">
-                        </div>
-                        <button type="submit" class="btn btn-primary">+ Add cash</button>
-                    </form>
+            <div class="panel-body" style="padding:0;">
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Cash Opening</th>
+                                <th>Float Total</th>
+                                <th>Txs / Vol</th>
+                                <th>Status</th>
+                                <th style="text-align:center;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @php $openingsTable = $openings ?? collect(); @endphp
+                            @forelse($openingsTable as $op)
+                            <tr>
+                                <td>
+                                    <span class="cell-title">{{ $op->opening_date->format('Y-m-d') }}</span>
+                                    <span class="cell-sub">{{ $op->opening_date->format('l') }}</span>
+                                </td>
+                                <td class="cell-title">@money($op->cash_opening)</td>
+                                <td>@money($op->totalFloatOpening())</td>
+                                <td>{{ $op->total_transactions }} txs<br><span class="cell-sub">@money($op->total_volume)</span></td>
+                                <td><span class="tag {{ $op->is_closed ? 'tag-grey' : 'tag-green' }}">{{ $op->is_closed ? 'Closed' : 'Open' }}</span></td>
+                                <td style="white-space:nowrap; text-align:center;">
+                                    <a href="{{ route('float.day', ['date' => \Illuminate\Support\Facades\Crypt::encryptString($op->opening_date->toDateString())]) }}" title="View day — only its page" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--ink);margin-right:4px;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    </a>
+                                    <a href="{{ route('float.opening.edit', ['date' => \Illuminate\Support\Facades\Crypt::encryptString($op->opening_date->toDateString())]) }}" title="Edit opening" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--acacia-600);margin-right:4px;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 1 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                    </a>
+                                    <button type="button" onclick="deleteDay('{{ $op->opening_date->toDateString() }}', '{{ $op->opening_date->format('Y-m-d') }}', false)" title="Delete day" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--danger);">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    </button>
+                                </td>
+                            </tr>
+                            @empty
+                            <tr><td colspan="6" class="empty-state">No days added yet — <a href="{{ route('float.opening.edit', ['date' => \Illuminate\Support\Facades\Crypt::encryptString(today()->toDateString())]) }}">Create opening</a></td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
-            </div>
-        </div>
-
-        {{-- Single day page now only shows its own day — all days moved to dedicated manage page --}}
-        @if($isAdmin)
-        <div class="panel" style="border-left:3px solid var(--terracotta-600);">
-            <div class="panel-head">
-                <h3>All Days — Full Management</h3>
-                <span class="tag tag-terracotta">{{ $openingsCount }} days total</span>
-            </div>
-            <div class="panel-body">
-                <p style="font-size:13px; color:var(--ink-soft);">This page shows only <strong>{{ $viewDate->format('Y-m-d') }}</strong> — cash, float, and activity for that date alone. To manage all added days in a table (edit/delete any day), use the dedicated page.</p>
-                <a href="{{ route('float.days') }}" class="btn btn-primary btn-sm">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V4"></path></svg>
-                    Manage All Days (table)
-                </a>
-                <span style="font-size:12px; color:var(--ink-soft); margin-left:8px;">Same table previously shown here is now at <code>/float/days</code> — keeps single-day page clean.</span>
+                <div style="padding:10px 12px; background:var(--sand-50); border-top:1px solid var(--line); font-size:12px; color:var(--ink-soft);">
+                    This is the <strong>index</strong> — all days list. Click <span style="display:inline-flex; vertical-align:middle; width:18px; height:18px; border:1px solid var(--line); border-radius:4px; align-items:center; justify-content:center;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></span> to enter single-day page (only that day opened, no other day details).
+                    <a href="{{ route('float.days') }}" style="margin-left:8px; color:var(--terracotta-600); font-weight:700;">View dedicated Manage All Days page →</a>
+                </div>
             </div>
         </div>
         @endif
@@ -168,6 +134,7 @@
     @endif
     @endif
 
+    @if(!$isAdmin)
     <div class="table-card">
         <div class="table-scroll">
             <table>
@@ -206,7 +173,9 @@
             </table>
         </div>
     </div>
+    @endif
 
+    @if(!$isAdmin)
     <div class="panel">
         <div class="panel-head">
             <h3>Float activity — filter by dates</h3>
@@ -288,6 +257,7 @@
             </table>
         </div>
     </div>
+    @endif
 
     @if($isAdmin)
         <div class="modal-backdrop" id="deleteFloatModal">
