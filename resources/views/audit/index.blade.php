@@ -77,7 +77,7 @@
                             </td>
                             <td>
                                 @forelse ($log->details ?? [] as $key => $value)
-                                    <span class="tag tag-grey" style="margin:1px 2px 1px 0;">{{ $key }}: {{ (is_array($value) || is_object($value)) ? implode(',', array_map('String', (array) $value)) : $value }}</span>
+                                    <span class="tag tag-grey" style="margin:1px 2px 1px 0;">{{ $key }}: {{ is_array($value) ? implode(',', $value) : ($value instanceof \Illuminate\Support\Collection ? $value->implode(',') : $value) }}</span>
                                 @empty
                                     <span class="cell-sub">—</span>
                                 @endforelse
