@@ -114,7 +114,7 @@
                         <th>Type</th>
                         <th>Network</th>
                         <th>Amount</th>
-                        <th>Running Float</th>
+                        <th>Running Float<br><span style="font-size:10px; font-weight:400; text-transform:none; letter-spacing:0; color:var(--ink-soft);">per network</span></th>
                         <th>Status</th>
                         <th></th>
                     </tr>
@@ -139,7 +139,17 @@
                                 {{ $txn->network?->name }}
                             </td>
                             <td class="cell-title">@money($txn->amount)</td>
-                            <td style="font-weight:600;">{{ $txn->running_float_balance !== null ? money($txn->running_float_balance) : '—' }}</td>
+                            <td style="font-weight:600;">
+                                @if($txn->running_network_balance !== null)
+                                    {{ money($txn->running_network_balance) }}
+                                    <div class="cell-sub" style="font-size:10px; color:var(--ink-soft);">{{ $txn->network?->name }} float · total {{ money($txn->running_float_balance ?? 0) }}</div>
+                                @elseif($txn->running_float_balance !== null)
+                                    {{ money($txn->running_float_balance) }}
+                                    <div class="cell-sub" style="font-size:10px; color:var(--ink-soft);">{{ $txn->network?->name }} (total legacy)</div>
+                                @else
+                                    —
+                                @endif
+                            </td>
                             <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
                             <td>
                                 <div class="row-actions">
@@ -228,6 +238,7 @@
                 'unusual_reason' => $t->unusual_reason,
                 'running_cash_balance' => $t->running_cash_balance !== null ? (float) $t->running_cash_balance : null,
                 'running_float_balance' => $t->running_float_balance !== null ? (float) $t->running_float_balance : null,
+                'running_network_balance' => $t->running_network_balance !== null ? (float) $t->running_network_balance : null,
                 'network' => $t->network?->name,
                 'network_color' => $t->network?->color,
                 'created_at' => $t->created_at->format('d M Y H:i'),
@@ -285,7 +296,8 @@
                         <div class="rc-row"><span>Fee</span><b>${fmt(t.fee ?? 0)}</b></div>
                         <div class="rc-row"><span>Commission</span><b>${fmt(t.commission ?? 0)}</b></div>
                         <div class="rc-row"><span>Running Cash</span><b>${t.running_cash_balance === null || t.running_cash_balance === undefined ? '—' : fmt(t.running_cash_balance)}</b></div>
-                        <div class="rc-row"><span>Running Float</span><b>${t.running_float_balance === null || t.running_float_balance === undefined ? '—' : fmt(t.running_float_balance)}</b></div>
+                        <div class="rc-row"><span>Running Float (${safe(t.network) || 'network'})</span><b>${t.running_network_balance !== null && t.running_network_balance !== undefined ? fmt(t.running_network_balance) : (t.running_float_balance !== null && t.running_float_balance !== undefined ? fmt(t.running_float_balance) + ' (total)' : '—')}</b></div>
+                        ${t.running_network_balance !== null && t.running_float_balance !== null ? `<div class="rc-row"><span>Total Float (all)</span><b>${fmt(t.running_float_balance)}</b></div>` : ''}
                         <div class="rc-row"><span>Status</span><b>${String(t.status || 'unknown').toUpperCase()}</b></div>
                         ${t.reversal_reason ? `<div class="rc-row"><span>Reason</span><b>${t.reversal_reason}</b></div>` : ''}
                         ${t.notes ? `<div class="rc-row"><span>Notes</span><b>${t.notes}</b></div>` : ''}
@@ -354,6 +366,9 @@
                 ['Amount', fmt(t.amount)],
                 ['Fee', fmt(t.fee)],
                 ['Commission', fmt(t.commission)],
+                ['Running Float (' + (t.network || 'network') + ')', t.running_network_balance !== null && t.running_network_balance !== undefined ? fmt(t.running_network_balance) : (t.running_float_balance !== null ? fmt(t.running_float_balance) + ' (total)' : '—')],
+                ...(t.running_network_balance !== null && t.running_float_balance !== null && t.running_network_balance !== t.running_float_balance ? [['Total Float (all)', fmt(t.running_float_balance)]] : []),
+                ['Running Cash', t.running_cash_balance !== null ? fmt(t.running_cash_balance) : '—'],
                 ['Status', { __html: statusBadgeHtml(t.status) }],
                 ...(t.reversal_reason ? [['Reversal reason', t.reversal_reason]] : []),
                 ...(t.notes ? [['Notes', t.notes]] : []),

@@ -55,7 +55,8 @@
     <div class="row"><span>Fee</span><b>{{ money($transaction->fee) }}</b></div>
     <div class="row"><span>Commission (agent)</span><b>{{ money($transaction->commission) }}</b></div>
     <div class="row"><span>Running Cash Balance</span><b>{{ $transaction->running_cash_balance !== null ? money($transaction->running_cash_balance) : '—' }}</b></div>
-    <div class="row"><span>Running Float Balance</span><b>{{ $transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—' }}</b></div>
+    <div class="row"><span>Running Float — {{ $transaction->network?->name ?? 'Network' }} (per network)</span><b>{{ $transaction->running_network_balance !== null ? money($transaction->running_network_balance) : ($transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—') }}</b></div>
+    <div class="row"><span>Running Float — Total (all networks)</span><b>{{ $transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—' }}</b></div>
 
     <div class="section">Operator & Audit</div>
     <div class="row"><span>Operator</span><b>{{ $transaction->operator?->name ?? '—' }} ({{ $transaction->operator?->email ?? '' }})</b></div>

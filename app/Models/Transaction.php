@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Crypt;
     'notes',
     'running_cash_balance',
     'running_float_balance',
+    'running_network_balance',
     'is_unusual',
     'unusual_reason',
 ])]
@@ -44,6 +45,7 @@ class Transaction extends Model
             'commission' => 'decimal:2',
             'running_cash_balance' => 'decimal:2',
             'running_float_balance' => 'decimal:2',
+            'running_network_balance' => 'decimal:2',
             'reversed_at' => 'datetime',
             'is_unusual' => 'boolean',
         ];

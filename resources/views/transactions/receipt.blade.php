@@ -52,7 +52,8 @@
                     <div class="detail-item"><div class="dk">Fee</div><div class="dv">@money($transaction->fee)</div></div>
                     <div class="detail-item"><div class="dk">Commission (agent)</div><div class="dv">@money($transaction->commission)</div></div>
                     <div class="detail-item"><div class="dk">Running Cash Balance</div><div class="dv">{{ $transaction->running_cash_balance !== null ? money($transaction->running_cash_balance) : '—' }}</div></div>
-                    <div class="detail-item"><div class="dk">Running Float Balance</div><div class="dv">{{ $transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—' }}</div></div>
+                    <div class="detail-item"><div class="dk">Running Float — {{ $transaction->network?->name ?? 'Network' }} (per network)</div><div class="dv">{{ $transaction->running_network_balance !== null ? money($transaction->running_network_balance) : ($transaction->running_float_balance !== null ? money($transaction->running_float_balance).' <small style="color:var(--ink-soft);">(total legacy)</small>' : '—') }}</div></div>
+                    <div class="detail-item"><div class="dk">Running Float — Total (all networks)</div><div class="dv">{{ $transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—' }}</div></div>
                     <div class="detail-item"><div class="dk">Operator</div><div class="dv">{{ $transaction->operator?->name ?? auth()->user()->name }}</div></div>
                 </div>
                 @if($transaction->status === 'reversed')

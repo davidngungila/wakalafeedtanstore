@@ -48,7 +48,11 @@
             <td style="padding:8px 12px;">{{ $transaction->running_cash_balance !== null ? money($transaction->running_cash_balance) : '—' }}</td>
         </tr>
         <tr>
-            <td style="padding:8px 12px;background:#F5EFE4;color:#6B5A48;">Running float</td>
+            <td style="padding:8px 12px;background:#F5EFE4;color:#6B5A48;">Running float — {{ $transaction->network?->name ?? 'Network' }} (per network)</td>
+            <td style="padding:8px 12px;">{{ $transaction->running_network_balance !== null ? money($transaction->running_network_balance) : ($transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—') }}</td>
+        </tr>
+        <tr>
+            <td style="padding:8px 12px;background:#F5EFE4;color:#6B5A48;">Running float — Total (all)</td>
             <td style="padding:8px 12px;">{{ $transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—' }}</td>
         </tr>
         <tr>

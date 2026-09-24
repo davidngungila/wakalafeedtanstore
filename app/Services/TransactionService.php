@@ -95,6 +95,7 @@ class TransactionService
                 'notes' => $notes,
                 'running_cash_balance' => $agent->cash_balance,
                 'running_float_balance' => $agent->totalFloat(),
+                'running_network_balance' => $balance->balance,
             ]);
 
             if ($dailyOpening !== null) {

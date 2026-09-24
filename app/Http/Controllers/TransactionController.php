@@ -120,6 +120,7 @@ class TransactionController extends Controller
                 'operator' => $t->operator?->name ?? '—',
                 'running_cash' => $t->running_cash_balance !== null ? money($t->running_cash_balance) : '—',
                 'running_float' => $t->running_float_balance !== null ? money($t->running_float_balance) : '—',
+                'running_network' => $t->running_network_balance !== null ? money($t->running_network_balance) : ($t->running_float_balance !== null ? money($t->running_float_balance) : '—'),
                 'is_unusual' => $t->is_unusual ? 'Yes' : 'No',
                 'unusual_reason' => $t->unusual_reason ?? '—',
             ];
@@ -168,7 +169,8 @@ class TransactionController extends Controller
             ['key' => 'agent', 'label' => 'Agent'],
             ['key' => 'operator', 'label' => 'Operator'],
             ['key' => 'running_cash', 'label' => 'Running Cash'],
-            ['key' => 'running_float', 'label' => 'Running Float'],
+            ['key' => 'running_float', 'label' => 'Running Float (Total)'],
+            ['key' => 'running_network', 'label' => 'Running Float (Per Network)'],
             ['key' => 'is_unusual', 'label' => 'Unusual'],
             ['key' => 'unusual_reason', 'label' => 'Unusual Reason'],
         ];
@@ -532,10 +534,12 @@ class TransactionController extends Controller
                     // This branch is now covered by needsFinancialAdjustment above; kept for safety but no-op
                 }
 
-                // Refresh assigned agent for running balances after adjustments
+                // Refresh assigned agent for running balances after adjustments — per-network for float
                 $agentForRunning = Agent::find($oldAgentId);
                 $runningCash = $agentForRunning ? (float) $agentForRunning->cash_balance : $transaction->running_cash_balance;
                 $runningFloat = $agentForRunning ? (float) $agentForRunning->totalFloat() : $transaction->running_float_balance;
+                $networkBalForRunning = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $newNetworkId)->first();
+                $runningNetwork = $networkBalForRunning ? (float) $networkBalForRunning->balance : ($runningFloat);
 
                 $updates = [
                     'network_id' => $newNetworkId,
@@ -549,6 +553,7 @@ class TransactionController extends Controller
                     'notes' => $validated['notes'] ?? $transaction->notes,
                     'running_cash_balance' => $runningCash,
                     'running_float_balance' => $runningFloat,
+                    'running_network_balance' => $runningNetwork,
                 ];
 
                 if ($isDateChange) {

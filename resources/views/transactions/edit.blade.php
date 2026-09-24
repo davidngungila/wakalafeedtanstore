@@ -223,7 +223,8 @@
                 <div class="detail-item"><div class="dk">Fee</div><div class="dv">@money($transaction->fee)</div></div>
                 <div class="detail-item"><div class="dk">Commission</div><div class="dv">@money($transaction->commission)</div></div>
                 <div class="detail-item"><div class="dk">Running Cash</div><div class="dv">{{ $transaction->running_cash_balance !== null ? money($transaction->running_cash_balance) : '—' }}</div></div>
-                <div class="detail-item"><div class="dk">Running Float</div><div class="dv">{{ $transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—' }}</div></div>
+                <div class="detail-item"><div class="dk">Running Float — {{ $transaction->network?->name ?? 'Network' }} (per network)</div><div class="dv">{{ $transaction->running_network_balance !== null ? money($transaction->running_network_balance) : ($transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—') }}</div></div>
+                <div class="detail-item"><div class="dk">Running Float — Total (all)</div><div class="dv">{{ $transaction->running_float_balance !== null ? money($transaction->running_float_balance) : '—' }}</div></div>
                 <div class="detail-item"><div class="dk">Operator</div><div class="dv">{{ $transaction->operator?->name ?? '—' }}</div></div>
                 <div class="detail-item"><div class="dk">Created</div><div class="dv">{{ $transaction->created_at->format('d M Y H:i:s') }}</div></div>
                 <div class="detail-item"><div class="dk">Provider Ref</div><div class="dv">{{ $transaction->provider_reference ?? '—' }}</div></div>
