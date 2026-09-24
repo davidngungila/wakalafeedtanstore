@@ -18,9 +18,15 @@
     </div>
 
     <div style="background:#F4ECDC; border:1px solid #E5DDD0; border-radius:10px; padding:12px 14px; font-size:12.5px; color:#6B5A48; line-height:1.6;">
-        <strong style="color:#2A1B10;">System format — Wakala Feedtan Store</strong><br>
-        This code was sent from <strong>{{ config('app.name', 'Wakala Feedtan Store') }}</strong> using your saved database email config (SMTP for OTP & Reports). If you did not request this, you can safely ignore this email. The code expires in {{ $minutes }} minutes.
+        <strong style="color:#2A1B10;">Wakala Feedtan Store</strong><br>
+        Your OTP code for account verification. If you did not request this, please ignore this email.
     </div>
 
-    <p style="margin:16px 0 0; font-size:11.5px; color:#A98968; text-align:center;">Need help? Contact support at {{ \App\Models\Setting::where('key','general')->value('value')['contact_email'] ?? config('mail.from.address') }}</p>
+    <p style="margin:16px 0 0; font-size:11.5px; color:#A98968; text-align:center;">
+        Need help? Reply to this email or contact <strong>{{ \App\Models\Setting::where('key','general')->value('value')['contact_email'] ?? 'your administrator' }}</strong>
+    </p>
+
+    <p style="margin:8px 0 0; font-size:11.5px; color:#A98968; text-align:center;">
+        This code is valid for <strong>{{ $minutes }}</strong> minutes. Our support team is available during business hours.
+    </p>
 @endsection
