@@ -9,7 +9,7 @@
             <p class="sub">Manage mobile-money float on your networks and track cash moving in and out of the till.</p>
         </div>
         <div class="view-actions">
-            <a href="{{ $isAdmin ? route('float.create', ['date' => $selectedDate]) : route('float.create') }}" class="btn btn-primary">+ New float / cash entry</a>
+            <a href="{{ $isAdmin ? route('float.create', ['date' => $selectedDateEncrypted]) : route('float.create') }}" class="btn btn-primary">+ New float / cash entry</a>
         </div>
         @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Float Transactions'])
     </div>
@@ -51,7 +51,7 @@
                     </div>
                     <button type="submit" class="btn btn-primary">Load day</button>
                     <a href="{{ route('float.index') }}" class="btn btn-ghost">Today</a>
-                    <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-ghost" style="border:1.5px solid var(--line);">Edit opening for {{ $viewDate->format('d M Y') }}</a>
+                    <a href="{{ route('float.opening.edit', ['date' => $selectedDateEncrypted]) }}" class="btn btn-ghost" style="border:1.5px solid var(--line);">Edit opening for {{ $viewDate->format('d M Y') }}</a>
                 </form>
                 @if($todayOpening)
                     <div style="margin-top:14px; padding:12px; background:var(--sand-100); border:1px solid var(--line); border-radius:8px; font-size:13px; line-height:1.6;">
@@ -142,10 +142,10 @@
                                 <td>{{ $op->total_transactions }} txs<br><span class="cell-sub">@money($op->total_volume)</span></td>
                                 <td><span class="tag {{ $op->is_closed ? 'tag-grey' : 'tag-green' }}">{{ $op->is_closed ? 'Closed' : 'Open' }}</span>@if($op->opening_date->toDateString() === $selectedDate) <span class="tag tag-gold">Viewing</span> @endif</td>
                                 <td style="white-space:nowrap; text-align:center;">
-                                    <a href="{{ route('float.index', ['date' => $op->opening_date->toDateString()]) }}" title="View day" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--ink);margin-right:4px;">
+                                    <a href="{{ route('float.index', ['date' => \Illuminate\Support\Facades\Crypt::encryptString($op->opening_date->toDateString())]) }}" title="View day" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--ink);margin-right:4px;">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                     </a>
-                                    <a href="{{ route('float.opening.edit', ['date' => $op->opening_date->toDateString()]) }}" title="Edit opening" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--acacia-600);margin-right:4px;">
+                                    <a href="{{ route('float.opening.edit', ['date' => \Illuminate\Support\Facades\Crypt::encryptString($op->opening_date->toDateString())]) }}" title="Edit opening" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--acacia-600);margin-right:4px;">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                                     </a>
                                     <button type="button" onclick="deleteDay('{{ $op->opening_date->toDateString() }}', '{{ $op->opening_date->format('Y-m-d') }}', false)" title="Delete day" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--danger);">
@@ -247,7 +247,7 @@
         </div>
         <form method="GET" action="{{ route('float.index') }}" style="padding:12px 16px; border-bottom:1px solid var(--line); display:flex; gap:8px; flex-wrap:wrap; align-items:end; background:var(--sand-50);">
             @if($isAdmin)
-                <input type="hidden" name="date" value="{{ $selectedDate }}">
+                <input type="hidden" name="date" value="{{ $selectedDateEncrypted }}">
             @endif
             <div class="field" style="margin-bottom:0;">
                 <label style="font-size:11px;">From</label>
@@ -262,7 +262,7 @@
                 <input type="date" name="date_filter" value="{{ request('date_filter') }}" style="padding:8px 10px; border:1.5px solid var(--line); border-radius:8px; font-size:13px;">
             </div>
             <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-            <a href="{{ route('float.index', $isAdmin ? ['date' => $selectedDate] : []) }}" class="btn btn-ghost btn-sm">Clear dates</a>
+            <a href="{{ route('float.index', $isAdmin ? ['date' => $selectedDateEncrypted] : []) }}" class="btn btn-ghost btn-sm">Clear dates</a>
             @if(request('from') || request('to') || request('date_filter'))
                 <span style="font-size:12px; color:var(--ink-soft);">Filtering {{ $floatTransactions->count() }} transactions</span>
             @endif

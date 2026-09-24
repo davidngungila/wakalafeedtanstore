@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -26,11 +27,24 @@ class FloatController extends Controller
             return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before managing float.');
         }
 
-        // Admin can pick any date; cashiers always see today
-        $selectedDate = $request->input('date');
+        // Admin can pick any date; cashiers always see today — date param is encrypted in URL header
+        $rawDate = $request->input('date');
         $isAdmin = is_admin();
+        $decrypted = $this->decryptDateParam($rawDate);
+        $maybePlain = $rawDate ? $this->isPlainDate($rawDate) : false;
 
-        if ($isAdmin && $selectedDate) {
+        // If admin passed plain Y-m-d, redirect to encrypted URL so header never shows plain (except today fallback)
+        if ($isAdmin && $rawDate !== null && $decrypted === null && $maybePlain) {
+            try {
+                Carbon::parse($rawDate)->toDateString();
+
+                return redirect()->route('float.index', ['date' => $this->encryptDateParam($rawDate)]);
+            } catch (\Throwable) {
+            }
+        }
+
+        if ($isAdmin && $rawDate !== null) {
+            $selectedDate = $decrypted ?? $rawDate;
             try {
                 $selectedDate = Carbon::parse($selectedDate)->toDateString();
             } catch (\Throwable) {
@@ -210,7 +224,9 @@ class FloatController extends Controller
             $openings = DailyOpening::where('agent_id', $cashPoint->id)->orderByDesc('opening_date')->limit(30)->get();
         }
 
-        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'allNetworks', 'summary', 'todayOpening', 'exportColumns', 'exportRoute', 'selectedDate', 'viewDate', 'openings', 'isAdmin'));
+        $selectedDateEncrypted = $isAdmin ? $this->encryptDateParam($selectedDate) : $selectedDate;
+
+        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'allNetworks', 'summary', 'todayOpening', 'exportColumns', 'exportRoute', 'selectedDate', 'selectedDateEncrypted', 'viewDate', 'openings', 'isAdmin'));
     }
 
     public function export(Request $request, ExportService $export)
@@ -277,7 +293,12 @@ class FloatController extends Controller
         }
 
         $isAdmin = is_admin();
-        $selectedDate = $isAdmin ? ($request->input('date', today()->toDateString())) : today()->toDateString();
+        $rawDate = $request->input('date');
+        $decrypted = $this->decryptDateParam($rawDate);
+        if ($isAdmin && $rawDate !== null && $decrypted === null && $this->isPlainDate($rawDate)) {
+            return redirect()->route('float.create', ['date' => $this->encryptDateParam($rawDate)]);
+        }
+        $selectedDate = $isAdmin ? ($decrypted ?? $rawDate ?? today()->toDateString()) : today()->toDateString();
         try {
             $viewDate = Carbon::parse($selectedDate);
         } catch (\Throwable) {
@@ -347,14 +368,20 @@ class FloatController extends Controller
         $isAdmin = is_admin();
         $targetDate = today();
         if ($isAdmin && $request->filled('float_date')) {
+            $raw = $request->input('float_date');
+            $dec = $this->decryptDateParam($raw);
+            $use = $dec ?? $raw;
             try {
-                $targetDate = Carbon::parse($request->input('float_date'));
+                $targetDate = Carbon::parse($use);
             } catch (\Throwable) {
                 $targetDate = today();
             }
         } elseif ($isAdmin && $request->filled('date')) {
+            $raw = $request->input('date');
+            $dec = $this->decryptDateParam($raw);
+            $use = $dec ?? $raw;
             try {
-                $targetDate = Carbon::parse($request->input('date'));
+                $targetDate = Carbon::parse($use);
             } catch (\Throwable) {
                 $targetDate = today();
             }
@@ -477,7 +504,13 @@ class FloatController extends Controller
             return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first.');
         }
 
-        $dateStr = $request->input('date', today()->toDateString());
+        $rawDate = $request->input('date', today()->toDateString());
+        $decrypted = $this->decryptDateParam($rawDate);
+        if ($decrypted === null && $this->isPlainDate($rawDate) && $rawDate !== today()->toDateString()) {
+            // Redirect to encrypted if plain was passed (except today which can stay plain for convenience)
+            return redirect()->route('float.opening.edit', ['date' => $this->encryptDateParam($rawDate)]);
+        }
+        $dateStr = $decrypted ?? $rawDate ?? today()->toDateString();
         try {
             $viewDate = Carbon::parse($dateStr);
         } catch (\Throwable) {
@@ -581,7 +614,7 @@ class FloatController extends Controller
             return response()->json(['success' => true, 'message' => 'Opening balances for '.$viewDate->format('d M Y').' saved.']);
         }
 
-        return redirect()->route('float.index', ['date' => $viewDate->toDateString()])->with('status', 'Opening balances for '.$viewDate->format('d M Y').' saved.');
+        return redirect()->route('float.index', ['date' => $this->encryptDateParam($viewDate->toDateString())])->with('status', 'Opening balances for '.$viewDate->format('d M Y').' saved.');
     }
 
     /**
@@ -942,5 +975,39 @@ class FloatController extends Controller
         }
 
         return back()->with('status', 'Additional cash '.money($amount).' added for '.$targetDate->toDateString());
+    }
+
+    private function encryptDateParam(string $date): string
+    {
+        try {
+            return Crypt::encryptString($date);
+        } catch (\Throwable) {
+            return $date;
+        }
+    }
+
+    private function decryptDateParam(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        try {
+            $dec = Crypt::decryptString($value);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dec)) {
+                return $dec;
+            }
+        } catch (\Throwable) {
+        }
+
+        return null;
+    }
+
+    private function isPlainDate(?string $value): bool
+    {
+        if (! $value) {
+            return false;
+        }
+
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1;
     }
 }
