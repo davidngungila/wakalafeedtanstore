@@ -8,6 +8,7 @@ use App\Models\DailyOpening;
 use App\Models\NetworkBalance;
 use App\Models\Transaction;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class TransactionService
 {
@@ -56,23 +57,19 @@ class TransactionService
                 $balance->save();
             };
 
-            // Agent perspective: customer deposit / float deposit -> agent receives cash (+cash) and gives float (-float)
-            // customer withdrawal / float withdrawal -> agent gives cash (-cash) and receives float (+float)
-            // bank_to_wallet / float top-up -> money moves FROM the bank INTO the wallet: float +amount, cash unchanged
+            // Agent perspective: customer deposit -> +cash, -float; withdrawal -> -cash, +float
+            // float_topup / float_deposit (topping up float) -> -cash, +float (pay cash to get float) — must be added to float for the day
+            // bank_to_wallet -> +float, cash unchanged
             match ($data['type']) {
-                'deposit', 'float_deposit', 'float_topup' => $adjustFloat(-(float) $data['amount']),
-                'withdrawal', 'bank_to_wallet' => $adjustFloat((float) $data['amount']),
+                'deposit' => $adjustFloat(-(float) $data['amount']),
+                'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $adjustFloat((float) $data['amount']),
                 default => $adjustFloat(-(float) $data['amount']),
             };
 
             $cashDelta = 0;
 
             if (in_array($data['type'], ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
-                $direction = in_array($data['type'], ['deposit', 'float_deposit', 'float_topup', 'airtime'], true) ? 1 : -1;
-                // wallet_to_bank is opposite of bank_to_wallet
-                if ($data['type'] === 'wallet_to_bank') {
-                    $direction = -1;
-                }
+                $direction = in_array($data['type'], ['deposit', 'airtime'], true) ? 1 : -1;
                 $cashDelta = $direction * (float) $data['amount'];
                 $agent->cash_balance = ((float) $agent->cash_balance) + $cashDelta;
                 $agent->save();
@@ -96,7 +93,7 @@ class TransactionService
                 'running_cash_balance' => $agent->cash_balance,
                 'running_float_balance' => $agent->totalFloat(),
             ];
-            if (\Illuminate\Support\Facades\Schema::hasColumn('transactions', 'running_network_balance')) {
+            if (Schema::hasColumn('transactions', 'running_network_balance')) {
                 $payload['running_network_balance'] = $balance->balance;
             }
             $txn = Transaction::create($payload);

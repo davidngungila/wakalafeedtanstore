@@ -1004,10 +1004,10 @@ class TransactionController extends Controller
                 ->first();
 
             if ($balance) {
-                // Reverse is opposite of process(): deposit/float_deposit -amount -> reverse +amount; withdrawal/bank_to_wallet +amount -> reverse -amount
+                // Reverse is opposite of process(): deposit -amount -> +amount; withdrawal/float_topup/float_deposit/bank_to_wallet +amount -> -amount
                 $delta = match ($transaction->type) {
-                    'deposit', 'float_deposit', 'float_topup' => $amount,
-                    'withdrawal', 'bank_to_wallet' => -$amount,
+                    'deposit' => $amount,
+                    'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => -$amount,
                     default => $amount,
                 };
                 $balance->balance += $delta;
@@ -1015,10 +1015,7 @@ class TransactionController extends Controller
             }
 
             if (in_array($transaction->type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
-                $direction = in_array($transaction->type, ['deposit', 'float_deposit', 'float_topup', 'airtime'], true) ? -1 : 1;
-                if ($transaction->type === 'wallet_to_bank') {
-                    $direction = -1;
-                }
+                $direction = in_array($transaction->type, ['deposit', 'airtime'], true) ? -1 : 1;
                 $agent = $transaction->agent;
                 $agent->cash_balance = ((float) $agent->cash_balance) + $direction * $amount;
                 $agent->save();
@@ -1112,8 +1109,8 @@ class TransactionController extends Controller
     private function floatDelta(string $type, float $amount): float
     {
         return match ($type) {
-            'deposit', 'float_deposit', 'float_topup' => -$amount,
-            'withdrawal', 'bank_to_wallet' => $amount,
+            'deposit' => -$amount,
+            'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $amount,
             default => -$amount,
         };
     }
@@ -1124,10 +1121,7 @@ class TransactionController extends Controller
             return 0;
         }
 
-        $direction = in_array($type, ['deposit', 'float_deposit', 'float_topup', 'airtime'], true) ? 1 : -1;
-        if ($type === 'wallet_to_bank') {
-            $direction = -1;
-        }
+        $direction = in_array($type, ['deposit', 'airtime'], true) ? 1 : -1;
 
         return $direction * $amount;
     }

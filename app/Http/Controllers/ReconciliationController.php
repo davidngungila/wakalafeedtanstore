@@ -460,10 +460,8 @@ class ReconciliationController extends Controller
         if (! in_array($type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
             return 0;
         }
-        $direction = in_array($type, ['deposit', 'float_deposit', 'float_topup', 'airtime'], true) ? 1 : -1;
-        if ($type === 'wallet_to_bank') {
-            $direction = -1;
-        }
+
+        $direction = in_array($type, ['deposit', 'airtime'], true) ? 1 : -1;
 
         return $direction * $amount;
     }
@@ -471,8 +469,8 @@ class ReconciliationController extends Controller
     private function floatDelta(string $type, float $amount): float
     {
         return match ($type) {
-            'deposit', 'float_deposit', 'float_topup' => -$amount,
-            'withdrawal', 'bank_to_wallet' => $amount,
+            'deposit' => -$amount,
+            'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $amount,
             default => -$amount,
         };
     }
