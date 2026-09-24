@@ -194,7 +194,7 @@
                                 {{ $txn->network?->name }}
                             </td>
                             <td class="cell-title">@money($txn->amount)</td>
-                            <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
+                            <td><span class="tag {{ status_badge($txn->status ?? 'completed') }}">{{ ucfirst($txn->status ?? 'completed') }}</span></td>
                             <td>
                                 <div class="row-actions">
                                     <a href="{{ route('transactions.receipt', $txn) }}" title="View receipt" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
