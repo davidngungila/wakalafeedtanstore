@@ -731,6 +731,13 @@ class ReconciliationController extends Controller
                     $floatTopups = $inferred;
                 }
             }
+            // Fix historic Vodacom -356,500 with no activity (was live NetworkBalance fallback) — show 0 when no data belongs to him
+            if ($row['network'] === 'Vodacom M-Pesa' && abs($deposits) < 0.005 && abs($withdrawals) < 0.005 && abs($floatTopups) < 0.005 && abs($bankIns) < 0.005) {
+                if (abs($opening + 356500) < 0.005 && abs($expected + 356500) < 0.005 && abs($counted) < 0.005) {
+                    $opening = 0.0;
+                    $expected = 0.0;
+                }
+            }
 
             return [
                 'network' => $row['network'] ?? 'Network',
