@@ -110,19 +110,20 @@
             </div>
         </div>
 
+        @if($viewDate->isSameDay(today()))
         <div class="panel">
             <div class="panel-head">
-                <h3>Current Float Balances — Admin Direct Edit (Global)</h3>
-                <span class="tag tag-gold">NetworkBalance</span>
+                <h3>Current Float Balances — Admin Direct Edit (Global Live)</h3>
+                <span class="tag tag-gold">NetworkBalance · Live</span>
             </div>
             <div class="panel-body">
-                <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:12px;">Edit live float per network and cash at till. This changes <code>NetworkBalance.balance</code> and <code>Agent.cash_balance</code> immediately — use for corrections. For opening balances on a selected day, use “Edit opening” above.</p>
+                <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:12px;">Edit <strong>live</strong> float per network and cash at till (Agent <code>cash_balance</code>). This changes <code>NetworkBalance.balance</code> and <code>Agent.cash_balance</code> immediately — use for corrections. For opening balances on a selected historical day, use “Edit opening” above or “Add additional cash” — live edit is hidden when viewing past dates.</p>
                 <form method="POST" action="{{ route('float.balances.update') }}" data-float-balances>
                     @csrf
                     @method('PUT')
                     <div class="form-row">
                         <div class="field">
-                            <label>Cash at till (Agent cash_balance)</label>
+                            <label>Cash at till (Agent cash_balance) — Live</label>
                             <input type="number" name="cash_balance" value="{{ $summary['totalCash'] }}" step="0.01">
                         </div>
                     </div>
