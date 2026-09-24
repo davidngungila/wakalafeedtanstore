@@ -16,10 +16,18 @@
     <div class="panel">
         <div class="panel-head">
             <h3>Float Entry Details</h3>
+            <span class="link">{{ $isAdmin ? 'Admin — any date' : 'Today' }} · {{ $viewDate->format('d M Y') }}</span>
         </div>
         <div class="panel-body">
             <form action="{{ route('float.store') }}" method="POST" data-float-form>
                 @csrf
+                @if($isAdmin)
+                    <div class="field">
+                        <label>Float date (admin — for selected day)</label>
+                        <input type="date" name="float_date" value="{{ old('float_date', $selectedDate) }}" max="{{ today()->toDateString() }}">
+                        <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Pick the day this float movement actually happened. It will be counted for that day's reports/reconciliation and use that day's opening if exists. Leave as today for live float.</p>
+                    </div>
+                @endif
                 <div class="form-row">
                     <div class="field">
                         <label>Network</label>
@@ -47,9 +55,12 @@
                     <label>Notes</label>
                     <textarea name="notes" rows="2" placeholder="Optional reference…">{{ old('notes') }}</textarea>
                 </div>
+                @if($todayOpening)
+                    <div style="margin-top:12px; padding:8px 10px; background:var(--sand-100); border:1px solid var(--line); border-radius:6px; font-size:12px; color:var(--ink-soft);">Opening for {{ $viewDate->format('Y-m-d') }}: Cash @money($todayOpening->cash_opening) · Float total @money($todayOpening->totalFloatOpening())</div>
+                @endif
                 <div style="display:flex; gap:10px; margin-top:18px;">
                     <button type="submit" class="btn btn-primary">Save entry</button>
-                    <a href="{{ route('float.index') }}" class="btn btn-ghost">Cancel</a>
+                    <a href="{{ route('float.index', $isAdmin ? ['date' => $selectedDate] : []) }}" class="btn btn-ghost">Cancel</a>
                 </div>
             </form>
         </div>

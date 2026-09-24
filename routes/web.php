@@ -145,6 +145,10 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::put('/transactions/{transaction}', [TransactionController::class, 'update'])->name('transactions.update');
         Route::delete('/transactions/{transaction}', [TransactionController::class, 'destroy'])->name('transactions.destroy');
 
+        Route::get('/float/opening/edit', [FloatController::class, 'editOpening'])->name('float.opening.edit');
+        Route::put('/float/opening', [FloatController::class, 'updateOpening'])->name('float.opening.update');
+        Route::put('/float/balances', [FloatController::class, 'updateBalances'])->name('float.balances.update');
+
         Route::put('/cash-point', [CashPointController::class, 'update'])->name('cash-point.update');
         Route::put('/cash-point/{cashPoint}', [CashPointController::class, 'update'])->name('cash-point.update.id');
 

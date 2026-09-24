@@ -6,16 +6,18 @@ use App\Models\DailyOpening;
 use App\Models\FloatTransaction;
 use App\Models\Network;
 use App\Models\NetworkBalance;
+use App\Models\Transaction;
 use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class FloatController extends Controller
 {
-    public function index(): View|RedirectResponse
+    public function index(Request $request): View|RedirectResponse
     {
         $cashPoint = cash_point();
 
@@ -23,14 +25,37 @@ class FloatController extends Controller
             return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before managing float.');
         }
 
-        $todayOpening = DailyOpening::forAgentAndDate($cashPoint->id, today())->first();
+        // Admin can pick any date; cashiers always see today
+        $selectedDate = $request->input('date');
+        $isAdmin = is_admin();
 
-        if (! $todayOpening) {
-            return redirect()->route('daily-opening.create')->with('error', 'Record daily opening first before managing float.');
+        if ($isAdmin && $selectedDate) {
+            try {
+                $selectedDate = Carbon::parse($selectedDate)->toDateString();
+            } catch (\Throwable) {
+                $selectedDate = today()->toDateString();
+            }
+        } else {
+            $selectedDate = today()->toDateString();
         }
 
-        if ($todayOpening->is_closed) {
-            return redirect()->route('daily-opening.show', $todayOpening)->with('error', 'Daily session is already closed. Cannot manage float.');
+        $viewDate = Carbon::parse($selectedDate);
+
+        $todayOpening = DailyOpening::forAgentAndDate($cashPoint->id, $viewDate)->first();
+
+        // For non-admin, keep original guard (must have today opening and not closed)
+        if (! $isAdmin) {
+            $todayOpeningCheck = DailyOpening::forAgentAndDate($cashPoint->id, today())->first();
+            if (! $todayOpeningCheck) {
+                return redirect()->route('daily-opening.create')->with('error', 'Record daily opening first before managing float.');
+            }
+            if ($todayOpeningCheck->is_closed) {
+                return redirect()->route('daily-opening.show', $todayOpeningCheck)->with('error', 'Daily session is already closed. Cannot manage float.');
+            }
+            // Non-admin sees today's opening only
+            $todayOpening = $todayOpeningCheck;
+            $selectedDate = today()->toDateString();
+            $viewDate = today();
         }
 
         $balances = $cashPoint->balances()->with('network')->orderBy('network_id')->get();
@@ -49,12 +74,19 @@ class FloatController extends Controller
             ->limit(50)
             ->get();
 
-        $networks = Network::active()->pluck('name', 'id');
+        $networks = Network::active()->orderBy('name')->get(['id', 'name', 'color']);
+        $allNetworks = Network::orderBy('name')->get(['id', 'name', 'color']);
 
         $exportColumns = $this->exportColumns();
         $exportRoute = route('float.export');
 
-        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'summary', 'todayOpening', 'exportColumns', 'exportRoute'));
+        // For admin: also load openings for date picker and the selected opening's details
+        $openings = collect();
+        if ($isAdmin) {
+            $openings = DailyOpening::where('agent_id', $cashPoint->id)->orderByDesc('opening_date')->limit(30)->get();
+        }
+
+        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'allNetworks', 'summary', 'todayOpening', 'exportColumns', 'exportRoute', 'selectedDate', 'viewDate', 'openings', 'isAdmin'));
     }
 
     public function export(Request $request, ExportService $export)
@@ -112,7 +144,7 @@ class FloatController extends Controller
         ];
     }
 
-    public function create(): View|RedirectResponse
+    public function create(Request $request): View|RedirectResponse
     {
         $cashPoint = cash_point();
 
@@ -120,19 +152,30 @@ class FloatController extends Controller
             return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before managing float.');
         }
 
-        $todayOpening = DailyOpening::forAgentAndDate($cashPoint->id, today())->first();
-
-        if (! $todayOpening) {
-            return redirect()->route('daily-opening.create')->with('error', 'Record daily opening first before managing float.');
+        $isAdmin = is_admin();
+        $selectedDate = $isAdmin ? ($request->input('date', today()->toDateString())) : today()->toDateString();
+        try {
+            $viewDate = Carbon::parse($selectedDate);
+        } catch (\Throwable) {
+            $viewDate = today();
+            $selectedDate = $viewDate->toDateString();
         }
 
-        if ($todayOpening->is_closed) {
-            return redirect()->route('daily-opening.show', $todayOpening)->with('error', 'Daily session is already closed. Cannot manage float.');
+        $todayOpening = DailyOpening::forAgentAndDate($cashPoint->id, $viewDate)->first();
+
+        if (! $isAdmin) {
+            if (! $todayOpening) {
+                return redirect()->route('daily-opening.create')->with('error', 'Record daily opening first before managing float.');
+            }
+
+            if ($todayOpening->is_closed) {
+                return redirect()->route('daily-opening.show', $todayOpening)->with('error', 'Daily session is already closed. Cannot manage float.');
+            }
         }
 
         $networks = Network::active()->pluck('name', 'id');
 
-        return view('float.create', compact('networks'));
+        return view('float.create', compact('networks', 'selectedDate', 'viewDate', 'isAdmin', 'todayOpening'));
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse
@@ -142,6 +185,7 @@ class FloatController extends Controller
             'type' => ['required', 'in:cash_in,cash_out,float_topup,float_pull'],
             'amount' => ['required', 'numeric', 'min:1'],
             'notes' => ['nullable', 'string', 'max:255'],
+            'float_date' => ['nullable', 'date'],
         ]);
 
         $agent = cash_point();
@@ -153,6 +197,22 @@ class FloatController extends Controller
             }
 
             return redirect()->route('cash-point.index')->with('error', $message);
+        }
+
+        $isAdmin = is_admin();
+        $targetDate = today();
+        if ($isAdmin && $request->filled('float_date')) {
+            try {
+                $targetDate = Carbon::parse($request->input('float_date'));
+            } catch (\Throwable) {
+                $targetDate = today();
+            }
+        } elseif ($isAdmin && $request->filled('date')) {
+            try {
+                $targetDate = Carbon::parse($request->input('date'));
+            } catch (\Throwable) {
+                $targetDate = today();
+            }
         }
 
         $todayOpening = null;
@@ -177,8 +237,8 @@ class FloatController extends Controller
                 return back()->with('error', $message);
             }
         } else {
-            // For supervisor/admin, get today's opening if exists
-            $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())->first();
+            // For supervisor/admin, get opening for target date if exists (do not block if closed/missing when admin)
+            $todayOpening = DailyOpening::forAgentAndDate($agent->id, $targetDate)->first();
         }
 
         $balance = NetworkBalance::firstOrCreate(
@@ -188,7 +248,7 @@ class FloatController extends Controller
 
         $reference = 'FLT-'.now()->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
 
-        DB::transaction(function () use ($agent, $balance, $validated, $reference) {
+        DB::transaction(function () use ($agent, $balance, $validated, $reference, $targetDate, $todayOpening) {
             $amount = (float) $validated['amount'];
 
             match ($validated['type']) {
@@ -199,15 +259,18 @@ class FloatController extends Controller
             };
 
             if (in_array($validated['type'], ['cash_out', 'float_pull'], true)) {
-                $agent->cash_balance -= $amount;
+                $agent->cash_balance = (float) $agent->cash_balance - $amount;
             } elseif ($validated['type'] === 'cash_in') {
-                $agent->cash_balance += $amount;
+                $agent->cash_balance = (float) $agent->cash_balance + $amount;
             }
 
             $balance->save();
             $agent->save();
 
-            FloatTransaction::create([
+            // For admin with past date, set created_at to that date for correct reporting
+            $now = $targetDate->isSameDay(today()) ? now() : $targetDate->copy()->setTime(now()->hour, now()->minute, now()->second);
+
+            $ft = FloatTransaction::create([
                 'reference' => $reference,
                 'agent_id' => $agent->id,
                 'network_id' => $balance->network_id,
@@ -219,18 +282,194 @@ class FloatController extends Controller
                 'notes' => $validated['notes'] ?? null,
                 'daily_opening_id' => $todayOpening?->id,
             ]);
+
+            if (! $targetDate->isSameDay(today())) {
+                $ft->timestamps = false;
+                $ft->created_at = $now;
+                $ft->updated_at = $now;
+                $ft->save();
+            }
         });
 
         $this->recordAudit('Float transaction processed', 'FloatTransaction', null, [
             'reference' => $reference,
             'type' => $validated['type'],
             'amount' => $validated['amount'],
+            'date' => $targetDate->toDateString(),
         ]);
 
         if ($request->expectsJson()) {
             return response()->json(['success' => true, 'message' => 'Float transaction completed successfully.']);
         }
 
-        return back()->with('status', 'Float transaction completed successfully.');
+        return back()->with('status', 'Float transaction for '.$targetDate->toDateString().' completed successfully.');
+    }
+
+    /**
+     * Admin: show edit opening for selected day
+     */
+    public function editOpening(Request $request): View|RedirectResponse
+    {
+        $agent = cash_point();
+        if ($agent === null) {
+            return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first.');
+        }
+
+        $dateStr = $request->input('date', today()->toDateString());
+        try {
+            $viewDate = Carbon::parse($dateStr);
+        } catch (\Throwable) {
+            $viewDate = today();
+            $dateStr = $viewDate->toDateString();
+        }
+
+        $opening = DailyOpening::forAgentAndDate($agent->id, $viewDate)->first();
+        $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
+        $currentBalances = $agent->balances()->with('network')->get()->keyBy('network_id');
+
+        return view('float.edit-opening', compact('agent', 'networks', 'currentBalances', 'opening', 'viewDate', 'dateStr'));
+    }
+
+    /**
+     * Admin: update or create opening balances for selected day
+     */
+    public function updateOpening(Request $request): JsonResponse|RedirectResponse
+    {
+        $agent = cash_point();
+        if ($agent === null) {
+            $message = 'Set up the cash point first.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return redirect()->route('cash-point.index')->with('error', $message);
+        }
+
+        $validated = $request->validate([
+            'opening_date' => ['required', 'date'],
+            'cash_opening' => ['required', 'numeric', 'min:0'],
+            'float_openings' => ['required', 'array'],
+            'float_openings.*' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $viewDate = Carbon::parse($validated['opening_date']);
+
+        $opening = DailyOpening::forAgentAndDate($agent->id, $viewDate)->first();
+
+        DB::transaction(function () use ($agent, $validated, $viewDate, &$opening) {
+            $floatOpenings = $validated['float_openings'];
+
+            if ($opening) {
+                $opening->update([
+                    'cash_opening' => $validated['cash_opening'],
+                    'float_openings' => $floatOpenings,
+                    'notes' => $validated['notes'] ?? $opening->notes,
+                ]);
+            } else {
+                $opening = DailyOpening::create([
+                    'agent_id' => $agent->id,
+                    'user_id' => auth()->id(),
+                    'opening_date' => $viewDate->toDateString(),
+                    'cash_opening' => $validated['cash_opening'],
+                    'float_openings' => $floatOpenings,
+                    'notes' => $validated['notes'] ?? null,
+                    'is_closed' => false,
+                    'total_volume' => 0,
+                    'total_commission' => 0,
+                    'total_transactions' => 0,
+                ]);
+            }
+
+            // Sync NetworkBalance opening_balance and current balance to match opening
+            foreach ($floatOpenings as $networkId => $amount) {
+                $balance = NetworkBalance::firstOrCreate(
+                    ['agent_id' => $agent->id, 'network_id' => $networkId],
+                    ['opening_balance' => 0, 'balance' => 0]
+                );
+                $balance->opening_balance = (float) $amount;
+                // If this is today or future, also set current balance to opening if balance is 0 or if admin explicitly wants
+                // For past dates, we keep current balance as is but update opening_balance for historical accuracy
+                if ($viewDate->isSameDay(today()) || $viewDate->isFuture()) {
+                    // For today, set balance to opening + net of that day's transactions (let transactions drive later)
+                    // Keep simple: set balance to opening if no transactions yet that day
+                    $dayTxCount = Transaction::where('agent_id', $agent->id)->whereDate('created_at', $viewDate)->count() +
+                        FloatTransaction::where('agent_id', $agent->id)->whereDate('created_at', $viewDate)->count();
+                    if ($dayTxCount === 0) {
+                        $balance->balance = (float) $amount;
+                    }
+                }
+                $balance->save();
+            }
+
+            // Update agent cash_balance if editing today
+            if ($viewDate->isSameDay(today())) {
+                $agent->cash_balance = (float) $validated['cash_opening'];
+                $agent->save();
+            }
+        });
+
+        $this->recordAudit('Opening balances updated for '.$viewDate->toDateString(), 'DailyOpening', $opening->id, [
+            'cash_opening' => $validated['cash_opening'],
+            'float_total' => array_sum($validated['float_openings']),
+            'date' => $viewDate->toDateString(),
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Opening balances for '.$viewDate->format('d M Y').' saved.']);
+        }
+
+        return redirect()->route('float.index', ['date' => $viewDate->toDateString()])->with('status', 'Opening balances for '.$viewDate->format('d M Y').' saved.');
+    }
+
+    /**
+     * Admin: directly update current float balances (NetworkBalance)
+     */
+    public function updateBalances(Request $request): JsonResponse|RedirectResponse
+    {
+        $agent = cash_point();
+        if ($agent === null) {
+            $message = 'Set up the cash point first.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return redirect()->route('cash-point.index')->with('error', $message);
+        }
+
+        $validated = $request->validate([
+            'balances' => ['required', 'array'],
+            'balances.*.network_id' => ['required', 'exists:networks,id'],
+            'balances.*.opening_balance' => ['nullable', 'numeric', 'min:0'],
+            'balances.*.balance' => ['required', 'numeric'],
+            'cash_balance' => ['nullable', 'numeric'],
+        ]);
+
+        DB::transaction(function () use ($agent, $validated) {
+            foreach ($validated['balances'] as $row) {
+                $balance = NetworkBalance::firstOrCreate(
+                    ['agent_id' => $agent->id, 'network_id' => $row['network_id']],
+                    ['opening_balance' => 0, 'balance' => 0]
+                );
+                if (array_key_exists('opening_balance', $row) && $row['opening_balance'] !== null) {
+                    $balance->opening_balance = (float) $row['opening_balance'];
+                }
+                $balance->balance = (float) $row['balance'];
+                $balance->save();
+            }
+
+            if (array_key_exists('cash_balance', $validated) && $validated['cash_balance'] !== null) {
+                $agent->cash_balance = (float) $validated['cash_balance'];
+                $agent->save();
+            }
+        });
+
+        $this->recordAudit('Float balances directly updated', 'NetworkBalance', null, $validated);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Float balances updated.']);
+        }
+
+        return back()->with('status', 'Float balances updated.');
     }
 }

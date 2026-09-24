@@ -9,7 +9,7 @@
             <p class="sub">Manage mobile-money float on your networks and track cash moving in and out of the till.</p>
         </div>
         <div class="view-actions">
-            <a href="{{ route('float.create') }}" class="btn btn-primary">+ New float / cash entry</a>
+            <a href="{{ $isAdmin ? route('float.create', ['date' => $selectedDate]) : route('float.create') }}" class="btn btn-primary">+ New float / cash entry</a>
         </div>
         @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Float Transactions'])
     </div>
@@ -36,6 +36,77 @@
             <div class="stat-label">Combined float capacity</div>
         </div>
     </div>
+
+    @if($isAdmin)
+        <div class="panel" style="border-left:3px solid var(--terracotta-600);">
+            <div class="panel-head">
+                <h3>Admin — Select Day & Opening Balances</h3>
+                <span class="tag tag-terracotta">Edit any date</span>
+            </div>
+            <div class="panel-body">
+                <form method="GET" action="{{ route('float.index') }}" style="display:flex; gap:10px; align-items:end; flex-wrap:wrap;">
+                    <div class="field" style="margin-bottom:0;">
+                        <label>Selected date</label>
+                        <input type="date" name="date" value="{{ $selectedDate }}" max="{{ today()->toDateString() }}">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Load day</button>
+                    <a href="{{ route('float.index') }}" class="btn btn-ghost">Today</a>
+                    <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-ghost" style="border:1.5px solid var(--line);">Edit opening for {{ $viewDate->format('d M Y') }}</a>
+                </form>
+                @if($todayOpening)
+                    <div style="margin-top:14px; padding:12px; background:var(--sand-100); border:1px solid var(--line); border-radius:8px; font-size:13px; line-height:1.6;">
+                        <strong>Opening for {{ $viewDate->format('Y-m-d') }}:</strong> Cash <strong>@money($todayOpening->cash_opening)</strong> · Float total <strong>@money($todayOpening->totalFloatOpening())</strong> · Status <span class="tag {{ $todayOpening->is_closed ? 'tag-grey' : 'tag-green' }}">{{ $todayOpening->is_closed ? 'Closed' : 'Open' }}</span> · {{ $todayOpening->total_transactions }} txs · Vol @money($todayOpening->total_volume)
+                        @if($todayOpening->notes)<br><span style="color:var(--ink-soft);">{{ $todayOpening->notes }}</span>@endif
+                        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+                            @foreach($allNetworks as $net)
+                                @php $amt = $todayOpening->float_openings[$net->id] ?? 0; @endphp
+                                <span class="tag" style="background:var(--white); border:1px solid var(--line);"><span class="net-dot" style="background:{{ $net->color }};"></span> {{ $net->name }}: @money($amt)</span>
+                            @endforeach
+                        </div>
+                    </div>
+                @else
+                    <div style="margin-top:14px; padding:12px; background:var(--danger-100); border-radius:8px; font-size:13px;">No Daily Opening for <strong>{{ $viewDate->format('Y-m-d') }}</strong> — <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-sm btn-primary" style="margin-left:8px;">Create / Add opening</a> <span style="color:var(--ink-soft);">You can still add float entries for this date; they will be counted via <code>created_at</code> for reports/reconciliation.</span></div>
+                @endif
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Current Float Balances — Admin Direct Edit (Global)</h3>
+                <span class="tag tag-gold">NetworkBalance</span>
+            </div>
+            <div class="panel-body">
+                <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:12px;">Edit live float per network and cash at till. This changes <code>NetworkBalance.balance</code> and <code>Agent.cash_balance</code> immediately — use for corrections. For opening balances on a selected day, use “Edit opening” above.</p>
+                <form method="POST" action="{{ route('float.balances.update') }}" data-float-balances>
+                    @csrf
+                    @method('PUT')
+                    <div class="form-row">
+                        <div class="field">
+                            <label>Cash at till (Agent cash_balance)</label>
+                            <input type="number" name="cash_balance" value="{{ $summary['totalCash'] }}" step="0.01">
+                        </div>
+                    </div>
+                    @foreach($allNetworks as $network)
+                        @php $bal = $balances->where('network_id', $network->id)->first(); @endphp
+                        <div class="form-row">
+                            <div class="field">
+                                <label><span class="net-dot" style="background:{{ $network->color }};"></span> {{ $network->name }} — Opening (for reference)</label>
+                                <input type="number" name="balances[{{ $loop->index }}][opening_balance]" value="{{ $bal?->opening_balance ?? 0 }}" step="0.01">
+                                <input type="hidden" name="balances[{{ $loop->index }}][network_id]" value="{{ $network->id }}">
+                            </div>
+                            <div class="field">
+                                <label>{{ $network->name }} — Current Balance *</label>
+                                <input type="number" name="balances[{{ $loop->index }}][balance]" value="{{ $bal?->balance ?? 0 }}" step="0.01" required>
+                            </div>
+                        </div>
+                    @endforeach
+                    <div style="display:flex; gap:10px; margin-top:12px;">
+                        <button type="submit" class="btn btn-primary">Save balances</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    @endif
 
     <div class="table-card">
         <div class="table-scroll">
@@ -168,5 +239,12 @@
                 ['Status', { __html: '<span class="tag tag-green">Completed</span>' }],
             ];
         }, 'Float transaction');
+
+        document.querySelectorAll('[data-float-balances]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitForm(form, { method: 'PUT', done: () => setTimeout(() => location.reload(), 600) });
+            });
+        });
     </script>
 @endsection
