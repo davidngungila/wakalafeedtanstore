@@ -426,7 +426,7 @@ class TransactionController extends Controller
         $newDateStr = $newCreatedAt->format('Y-m-d');
 
         try {
-            DB::transaction(function () use ($transaction, $oldAmount, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldCommission, $oldStatus, $newAmount, $newType, $newNetworkId, $newFee, $newCommission, $validated, $isFinancialChange, $isDateChange, $isDateDayChange, $oldCreatedAt, $newCreatedAt, $oldDateStr, $newDateStr): void {
+            DB::transaction(function () use ($transaction, $oldAmount, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldCommission, $oldStatus, $newAmount, $newType, $newNetworkId, $newFee, $newCommission, $validated, $isFinancialChange, $isDateChange, $isDateDayChange, $oldCreatedAt, $newCreatedAt, $oldDateStr, $newDateStr, $oldProviderReference): void {
                 $needsFinancialAdjustment = $oldStatus === 'completed' && ($isFinancialChange || $isDateDayChange);
                 // Revert old financial effects if needed (amount/type/network or date day moved)
                 if ($needsFinancialAdjustment) {
