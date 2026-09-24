@@ -277,7 +277,27 @@ class ReconciliationController extends Controller
 
         $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
 
-        return view('reconciliation.corrections.create', compact('reconciliation', 'networks'));
+        // Transactions with linked SMS messages for this reconciliation's date and agent — for autofill
+        $linkedTransactions = Transaction::with(['network', 'smsMessages'])
+            ->where('agent_id', $reconciliation->agent_id)
+            ->whereDate('created_at', $reconciliation->reconciliation_date)
+            ->whereHas('smsMessages')
+            ->latest()
+            ->limit(50)
+            ->get();
+
+        // Also include transactions for same date that have provider_reference linking to SMS even if transaction_id not set (via smsMessages relation already handles)
+        // Fallback: also load recent transactions for that date regardless, to allow selection
+        if ($linkedTransactions->isEmpty()) {
+            $linkedTransactions = Transaction::with(['network', 'smsMessages'])
+                ->where('agent_id', $reconciliation->agent_id)
+                ->whereDate('created_at', $reconciliation->reconciliation_date)
+                ->latest()
+                ->limit(50)
+                ->get();
+        }
+
+        return view('reconciliation.corrections.create', compact('reconciliation', 'networks', 'linkedTransactions'));
     }
 
     public function storeCorrection(Request $request, Reconciliation $reconciliation): RedirectResponse
@@ -325,6 +345,23 @@ class ReconciliationController extends Controller
         ]);
 
         return back()->with('status', 'Correction removed.');
+    }
+
+    public function destroy(Reconciliation $reconciliation): RedirectResponse
+    {
+        $agent = cash_point();
+        if ($agent && (int) $reconciliation->agent_id !== (int) $agent->id && ! is_admin()) {
+            abort(403);
+        }
+
+        $date = $reconciliation->reconciliation_date;
+        $reconciliation->delete();
+
+        $this->recordAudit('Reconciliation deleted', 'Reconciliation', $reconciliation->id, [
+            'date' => $date,
+        ]);
+
+        return redirect()->route('reconciliation.index')->with('status', 'Reconciliation for '.$date.' deleted.');
     }
 
     /**

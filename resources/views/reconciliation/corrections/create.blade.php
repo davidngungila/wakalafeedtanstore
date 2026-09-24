@@ -24,11 +24,23 @@
     <div class="panel">
         <div class="panel-head">
             <h3>Record a correction</h3>
-            <span class="link">Reconciliation #{{ $reconciliation->code }}</span>
+            <span class="link">Reconciliation #{{ $reconciliation->code }} · {{ $reconciliation->reconciliation_date->format('Y-m-d') }}</span>
         </div>
         <form method="POST" action="{{ route('reconciliation.corrections.store', $reconciliation) }}" data-correction-form>
             @csrf
             <div class="panel-body">
+                @if(isset($linkedTransactions) && $linkedTransactions->isNotEmpty())
+                    <div class="field" style="background:var(--sand-50); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:12px;">
+                        <label>Pick transaction with linked message (optional — autofill)</label>
+                        <select id="correctionTxnSelect" style="width:100%; padding:10px 12px; border:1.5px solid var(--line); border-radius:8px; background:var(--white);">
+                            <option value="">— No transaction — manual entry —</option>
+                            @foreach($linkedTransactions as $t)
+                                <option value="{{ $t->id }}" data-network="{{ $t->network_id }}" data-amount="{{ $t->amount }}" data-ref="{{ $t->provider_reference ?? $t->reference }}" data-customer="{{ $t->customer_name ?? $t->customer_phone }}" data-sms="{{ Str::limit($t->smsMessages->first()?->message_body ?? $t->provider_reference ?? '', 80) }}" data-network-name="{{ $t->network?->name }}" data-type="{{ $t->type }}">{{ $t->created_at->format('H:i') }} · {{ $t->reference }} · {{ $t->network?->name }} · @money($t->amount) · {{ Str::limit($t->customer_name ?? $t->customer_phone, 18) }} · {{ $t->smsMessages->first()?->sender ?? 'no sms' }} — {{ Str::limit($t->smsMessages->first()?->message_body ?? $t->provider_reference ?? '', 50) }}</option>
+                            @endforeach
+                        </select>
+                        <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Select a transaction done on {{ $reconciliation->reconciliation_date->format('Y-m-d') }} that has a linked SMS ({{ $linkedTransactions->filter(fn($t)=>$t->smsMessages->isNotEmpty())->count() }} with message) — will autofill Reference/Amount/Network and add the SMS to Notes.</p>
+                    </div>
+                @endif
                 <div class="form-row">
                     <div class="field">
                         <label>Applies to</label>
@@ -109,6 +121,42 @@
             document.getElementById('corrNetworkWrap').style.display = v === 'float' ? 'block' : 'none';
             document.getElementById('corrNetwork').removeAttribute('required');
             if (v === 'float') document.getElementById('corrNetwork').setAttribute('required', 'required');
+        }
+
+        const corrTxnSelect = document.getElementById('correctionTxnSelect');
+        if (corrTxnSelect) {
+            corrTxnSelect.addEventListener('change', () => {
+                const opt = corrTxnSelect.options[corrTxnSelect.selectedIndex];
+                if (!opt || !opt.value) return;
+                const ref = opt.dataset.ref;
+                const amount = opt.dataset.amount;
+                const network = opt.dataset.network;
+                const sms = opt.dataset.sms;
+                const form = corrTxnSelect.closest('form');
+                if (ref) {
+                    const inp = form.querySelector('input[name=reference]');
+                    if (inp) inp.value = ref;
+                }
+                if (amount) {
+                    const inp = form.querySelector('input[name=amount]');
+                    if (inp) inp.value = amount;
+                }
+                if (network) {
+                    const scope = form.querySelector('select[name=scope]');
+                    const netSel = form.querySelector('select[name=network_id]');
+                    if (scope) { scope.value = 'float'; toggleCorrNetwork(); }
+                    if (netSel) netSel.value = network;
+                }
+                if (sms) {
+                    const notes = form.querySelector('textarea[name=notes]');
+                    if (notes) {
+                        const addition = 'Linked txn ' + ref + ': ' + sms;
+                        if (!notes.value.includes(sms.slice(0,20))) {
+                            notes.value = (notes.value ? notes.value + ' | ' : '') + addition;
+                        }
+                    }
+                }
+            });
         }
 
         function cfmSet(id, value) {

@@ -16,6 +16,13 @@
         </div>
         <div class="view-actions">
             <a href="{{ route('reconciliation.index') }}" class="btn btn-ghost">← Back to list</a>
+            @if(is_admin())
+                <form method="POST" action="{{ route('reconciliation.destroy', $reconciliation) }}" onsubmit="return confirm('Delete reconciliation {{ $reconciliation->code }} for {{ $reconciliation->reconciliation_date->format('Y-m-d') }}? This will delete its corrections and cannot be undone.')" style="display:inline;">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-danger">Delete reconciled</button>
+                </form>
+            @endif
         </div>
     </div>
 
