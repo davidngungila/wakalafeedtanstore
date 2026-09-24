@@ -60,6 +60,19 @@ class FloatController extends Controller
         }
 
         // For admin with selected date, compute per-network current as of that day's end (opening + day's net)
+        // Cash at till must reference closing cash of previous day (if opening missing, derive from previous closing)
+        $previousClosingCash = null;
+        $previousClosingFloat = null;
+        if ($isAdmin && $todayOpening === null) {
+            $prevDate = $viewDate->copy()->subDay();
+            $previousClosingCash = $this->closingCashForDate($cashPoint, $prevDate);
+            $previousClosingFloat = $this->closingFloatForDate($cashPoint, $prevDate);
+        } elseif ($isAdmin && $todayOpening) {
+            $prevDate = $viewDate->copy()->subDay();
+            $previousClosingCash = $this->closingCashForDate($cashPoint, $prevDate);
+            $previousClosingFloat = $this->closingFloatForDate($cashPoint, $prevDate);
+        }
+
         if ($isAdmin && ! $viewDate->isSameDay(today())) {
             $networksAll = Network::orderBy('name')->get(['id', 'name', 'color']);
             $balancesForDate = collect();
@@ -68,6 +81,13 @@ class FloatController extends Controller
                 $openingVal = $todayOpening ? $todayOpening->getFloatOpening($net->id) : (float) ($bal?->opening_balance ?? 0);
                 if ($openingVal == 0.0 && $bal) {
                     $openingVal = (float) $bal->opening_balance;
+                }
+                // If no opening for this date, try previous day's closing float for this network
+                if ($openingVal == 0.0 && $previousClosingFloat !== null) {
+                    $prevNetworkClosing = $this->closingNetworkBalanceForDate($cashPoint, $viewDate->copy()->subDay(), $net->id);
+                    if ($prevNetworkClosing !== null) {
+                        $openingVal = $prevNetworkClosing;
+                    }
                 }
                 // Float delta for Transactions on that date for this network — float_topup/float_deposit/bank_to_wallet are bank float IN
                 $txsForNet = Transaction::where('agent_id', $cashPoint->id)->where('network_id', $net->id)->whereDate('created_at', $viewDate)->where('status', 'completed')->get();
@@ -103,15 +123,19 @@ class FloatController extends Controller
 
                 return $b;
             });
-            // Summary for that date
+            // Summary for that date — cash at till references previous closing if opening missing
+            $resolvedCashOpening = $todayOpening ? (float) $todayOpening->cash_opening : (float) ($previousClosingCash ?? 0);
             $summary = [
                 'totalFloat' => (float) $balances->sum('balance'),
                 'floatOut' => (float) $balances->sum('balance'),
-                'totalCash' => (float) ($todayOpening ? $todayOpening->cash_opening : $cashPoint->cash_balance),
+                'totalCash' => $resolvedCashOpening,
                 'networks' => Network::count(),
+                'resolvedCashOpening' => $resolvedCashOpening,
+                'previousClosingCash' => $previousClosingCash,
+                'previousClosingFloat' => $previousClosingFloat,
             ];
             $summary['floatCapacity'] = $summary['totalFloat'] + $summary['totalCash'];
-            // Override cash summary for that date: opening + net cash for that date
+            // Override cash summary for that date: opening (previous closing if needed) + net cash for that date (including cash_in float top-ups that affect cash)
             $dayTxCash = Transaction::where('agent_id', $cashPoint->id)->whereDate('created_at', $viewDate)->where('status', 'completed')->get();
             $cashIn = 0.0;
             $cashOut = 0.0;
@@ -123,7 +147,18 @@ class FloatController extends Controller
                     $cashOut += abs($d);
                 }
             }
-            $summary['totalCash'] = (float) ($todayOpening ? $todayOpening->cash_opening : 0) + $cashIn - $cashOut;
+            // Also include FloatTransaction cash_in/cash_out that affect cash (additional cash added via float)
+            $dayFloatCash = FloatTransaction::where('agent_id', $cashPoint->id)->whereDate('created_at', $viewDate)->get();
+            foreach ($dayFloatCash as $ft) {
+                if (in_array($ft->type, ['cash_in'], true)) {
+                    $cashIn += (float) $ft->amount;
+                } elseif (in_array($ft->type, ['cash_out', 'float_pull'], true)) {
+                    $cashOut += (float) $ft->amount;
+                }
+            }
+            $summary['totalCash'] = $resolvedCashOpening + $cashIn - $cashOut;
+            $summary['cashIn'] = $cashIn;
+            $summary['cashOut'] = $cashOut;
         } else {
             $balances = $cashPoint->balances()->with('network')->orderBy('network_id')->get();
 
@@ -657,5 +692,200 @@ class FloatController extends Controller
         $direction = in_array($type, ['deposit', 'airtime'], true) ? 1 : -1;
 
         return $direction * $amount;
+    }
+
+    /**
+     * Closing cash for a previous date: prefer DailyOpening cash_closing, then Reconciliation counted_cash, then opening + net.
+     */
+    private function closingCashForDate(Agent $agent, Carbon $date): ?float
+    {
+        $opening = DailyOpening::forAgentAndDate($agent->id, $date)->first();
+        if ($opening && $opening->cash_closing !== null) {
+            return (float) $opening->cash_closing;
+        }
+
+        $recon = $agent->reconciliations()->where('reconciliation_date', $date->toDateString())->latest()->first();
+        if ($recon) {
+            return (float) $recon->counted_cash;
+        }
+
+        if ($opening) {
+            $txs = Transaction::where('agent_id', $agent->id)->whereDate('created_at', $date)->where('status', 'completed')->get();
+            $in = 0;
+            $out = 0;
+            foreach ($txs as $t) {
+                $d = $this->cashDelta($t->type, (float) $t->amount);
+                if ($d > 0) {
+                    $in += $d;
+                } elseif ($d < 0) {
+                    $out += abs($d);
+                }
+            }
+            $fts = FloatTransaction::where('agent_id', $agent->id)->whereDate('created_at', $date)->get();
+            foreach ($fts as $ft) {
+                if ($ft->type === 'cash_in') {
+                    $in += (float) $ft->amount;
+                } elseif (in_array($ft->type, ['cash_out', 'float_pull'], true)) {
+                    $out += (float) $ft->amount;
+                }
+            }
+
+            return (float) $opening->cash_opening + $in - $out;
+        }
+
+        return null;
+    }
+
+    private function closingFloatForDate(Agent $agent, Carbon $date): ?float
+    {
+        $opening = DailyOpening::forAgentAndDate($agent->id, $date)->first();
+        if ($opening && $opening->float_closings !== null) {
+            return (float) array_sum($opening->float_closings);
+        }
+        // Fallback: opening + net float for that date
+        if ($opening) {
+            $networks = Network::orderBy('name')->get(['id']);
+            $total = 0;
+            foreach ($networks as $net) {
+                $open = $opening->getFloatOpening($net->id);
+                $txs = Transaction::where('agent_id', $agent->id)->where('network_id', $net->id)->whereDate('created_at', $date)->where('status', 'completed')->get();
+                $netFloat = 0;
+                foreach ($txs as $t) {
+                    $netFloat += match ($t->type) {
+                        'deposit' => -(float) $t->amount,
+                        'withdrawal','bank_to_wallet','float_topup','float_deposit' => (float) $t->amount,
+                        default => -(float) $t->amount,
+                    };
+                }
+                $fts = FloatTransaction::where('agent_id', $agent->id)->where('network_id', $net->id)->whereDate('created_at', $date)->get();
+                foreach ($fts as $ft) {
+                    $netFloat += match ($ft->type) {
+                        'cash_in','float_topup' => (float) $ft->amount,
+                        'cash_out','float_pull' => -(float) $ft->amount,
+                        default => 0,
+                    };
+                }
+                $total += $open + $netFloat;
+            }
+
+            return $total;
+        }
+
+        return null;
+    }
+
+    private function closingNetworkBalanceForDate(Agent $agent, Carbon $date, int $networkId): ?float
+    {
+        $opening = DailyOpening::forAgentAndDate($agent->id, $date)->first();
+        if ($opening && $opening->float_closings !== null && isset($opening->float_closings[$networkId])) {
+            return (float) $opening->float_closings[$networkId];
+        }
+        if ($opening) {
+            $open = $opening->getFloatOpening($networkId);
+            $txs = Transaction::where('agent_id', $agent->id)->where('network_id', $networkId)->whereDate('created_at', $date)->where('status', 'completed')->get();
+            $net = 0;
+            foreach ($txs as $t) {
+                $net += match ($t->type) {
+                    'deposit' => -(float) $t->amount,
+                    'withdrawal','bank_to_wallet','float_topup','float_deposit' => (float) $t->amount,
+                    default => -(float) $t->amount,
+                };
+            }
+            $fts = FloatTransaction::where('agent_id', $agent->id)->where('network_id', $networkId)->whereDate('created_at', $date)->get();
+            foreach ($fts as $ft) {
+                $net += match ($ft->type) {
+                    'cash_in','float_topup' => (float) $ft->amount,
+                    'cash_out','float_pull' => -(float) $ft->amount,
+                    default => 0,
+                };
+            }
+
+            return $open + $net;
+        }
+
+        return null;
+    }
+
+    /**
+     * Admin add additional cash at till for a specific date (references previous closing).
+     */
+    public function addCash(Request $request): JsonResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'date' => ['required', 'date'],
+            'amount' => ['required', 'numeric', 'min:1'],
+            'notes' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $agent = cash_point();
+        if ($agent === null) {
+            $msg = 'Set up the cash point first.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return redirect()->route('cash-point.index')->with('error', $msg);
+        }
+
+        $targetDate = Carbon::parse($validated['date']);
+        $amount = (float) $validated['amount'];
+
+        DB::transaction(function () use ($agent, $targetDate, $amount, $validated) {
+            // Ensure DailyOpening exists for that date referencing previous closing (so summary shows correct base)
+            $opening = DailyOpening::forAgentAndDate($agent->id, $targetDate)->first();
+            if (! $opening) {
+                $prevClose = $this->closingCashForDate($agent, $targetDate->copy()->subDay());
+                $base = $prevClose ?? (float) $agent->cash_balance;
+                $opening = DailyOpening::create([
+                    'agent_id' => $agent->id,
+                    'user_id' => auth()->id(),
+                    'opening_date' => $targetDate->toDateString(),
+                    'cash_opening' => $base,
+                    'float_openings' => [],
+                    'notes' => 'Auto-created for additional cash '.money($amount).' on '.$targetDate->toDateString(),
+                    'is_closed' => false,
+                    'total_volume' => 0,
+                    'total_commission' => 0,
+                    'total_transactions' => 0,
+                ]);
+            }
+
+            // Keep live Agent cash_balance in sync if target is today or future (cash at till is live)
+            if ($targetDate->isSameDay(today()) || $targetDate->isFuture()) {
+                $agent->increment('cash_balance', $amount);
+            }
+
+            // Audit via FloatTransaction cash_in for history — this is what summary's cashIn will sum, so Closing = Opening(previous closing) + cash_in (+ deposits/withdrawals)
+            $networkId = Network::active()->value('id') ?? Network::value('id');
+            if ($networkId) {
+                $ref = 'FLT-'.now()->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
+                $ft = FloatTransaction::create([
+                    'reference' => $ref,
+                    'agent_id' => $agent->id,
+                    'network_id' => $networkId,
+                    'type' => 'cash_in',
+                    'amount' => $amount,
+                    'fee' => 0,
+                    'status' => 'completed',
+                    'performed_by' => auth()->id(),
+                    'notes' => ($validated['notes'] ?? '').' | Additional cash at till for '.$targetDate->toDateString().' (refs previous closing '.$targetDate->copy()->subDay()->format('Y-m-d').')',
+                    'daily_opening_id' => $opening->id,
+                ]);
+                if (! $targetDate->isSameDay(today())) {
+                    $ft->timestamps = false;
+                    $ft->created_at = $targetDate->copy()->setTime(now()->hour, now()->minute, now()->second);
+                    $ft->updated_at = $ft->created_at;
+                    $ft->save();
+                }
+            }
+        });
+
+        $this->recordAudit('Additional cash added at till', 'DailyOpening', null, ['date' => $targetDate->toDateString(), 'amount' => $amount]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Additional cash '.money($amount).' added for '.$targetDate->toDateString().' (referenced previous closing).']);
+        }
+
+        return back()->with('status', 'Additional cash '.money($amount).' added for '.$targetDate->toDateString());
     }
 }

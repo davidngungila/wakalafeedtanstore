@@ -67,6 +67,46 @@
                 @else
                     <div style="margin-top:14px; padding:12px; background:var(--danger-100); border-radius:8px; font-size:13px;">No Daily Opening for <strong>{{ $viewDate->format('Y-m-d') }}</strong> — <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-sm btn-primary" style="margin-left:8px;">Create / Add opening</a> <span style="color:var(--ink-soft);">You can still add float entries for this date; they will be counted via <code>created_at</code> for reports/reconciliation.</span></div>
                 @endif
+                {{-- Cash at till must reference previous day closing --}}
+                @if(isset($summary['previousClosingCash']) || isset($summary['resolvedCashOpening']))
+                    @php
+                        $prevClosing = $summary['previousClosingCash'] ?? null;
+                        $resolvedOpening = $summary['resolvedCashOpening'] ?? ($todayOpening ? $todayOpening->cash_opening : 0);
+                        $prevDateStr = $viewDate->copy()->subDay()->format('Y-m-d');
+                    @endphp
+                    <div style="margin-top:12px; padding:12px; background:var(--white); border:1px solid var(--line); border-radius:8px; font-size:13px; line-height:1.6;">
+                        <strong>Cash at till — references previous closing:</strong><br>
+                        @if($prevClosing !== null)
+                            <span style="color:var(--ink-soft);">Previous day {{ $prevDateStr }} closing: <strong>@money($prevClosing)</strong></span>
+                            <span style="margin:0 6px;">→</span>
+                            <span>Opening {{ $viewDate->format('Y-m-d') }}: <strong>@money($resolvedOpening)</strong></span>
+                            @if(isset($summary['cashIn']) || isset($summary['cashOut']))
+                                <span style="color:var(--ink-soft);"> (Cash in +@money($summary['cashIn'] ?? 0) − Out @money($summary['cashOut'] ?? 0) → Closing <strong>@money($summary['totalCash'])</strong>)</span>
+                            @endif
+                        @else
+                            <span style="color:var(--ink-soft);">No previous closing found — opening defaults to <strong>@money($resolvedOpening)</strong> (set via Daily Opening or Agent balance)</span>
+                        @endif
+                        <div style="margin-top:8px; font-size:12px; color:var(--ink-soft);">Edit opening to change base, or add additional cash below (creates cash_in for this date, updates opening + live balance if today).</div>
+                    </div>
+                @endif
+                {{-- Allow to add additional cash for this date --}}
+                <div style="margin-top:12px; padding:12px; background:var(--acacia-50); border:1px solid var(--line); border-radius:8px;">
+                    <strong style="font-size:13px;">Add additional cash at till for {{ $viewDate->format('Y-m-d') }}</strong>
+                    <p style="font-size:12px; color:var(--ink-soft); margin:4px 0 8px;">References previous closing above — amount will be added to Daily Opening cash_opening for this date and booked as Float cash_in (visible in balance & reconciliation).</p>
+                    <form method="POST" action="{{ route('float.cash.add') }}" data-cash-add style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+                        @csrf
+                        <input type="hidden" name="date" value="{{ $viewDate->toDateString() }}">
+                        <div class="field" style="margin-bottom:0; min-width:160px;">
+                            <label>Amount (TZS) *</label>
+                            <input type="number" name="amount" min="1" step="0.01" required placeholder="e.g. 50000">
+                        </div>
+                        <div class="field" style="margin-bottom:0; flex:1; min-width:200px;">
+                            <label>Notes (optional)</label>
+                            <input type="text" name="notes" maxlength="255" placeholder="Additional cash from bank / owner">
+                        </div>
+                        <button type="submit" class="btn btn-primary">+ Add cash</button>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -289,6 +329,13 @@
         }, 'Float transaction');
 
         document.querySelectorAll('[data-float-balances]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
+            });
+        });
+
+        document.querySelectorAll('[data-cash-add]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
                 submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
