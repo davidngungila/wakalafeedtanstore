@@ -665,7 +665,12 @@ class FloatController extends Controller
         // Suggested cash opening: previous reconciled counted cash, or existing opening, or live balance
         $suggestedCash = $opening?->cash_opening ?? $previousClosingCash ?? $agent->cash_balance ?? 0;
 
-        return view('float.edit-opening', compact('agent', 'networks', 'currentBalances', 'opening', 'viewDate', 'dateStr', 'previousReconciliation', 'previousClosingCash', 'suggestedCash', 'prevDate'));
+        // Float top-ups for this date — must be added to Total Float (Auto) (opening + top-ups)
+        $floatTopupsForDate = (float) FloatTransaction::where('agent_id', $agent->id)->whereDate('created_at', $viewDate)->whereIn('type', ['float_topup', 'cash_in'])->sum('amount');
+        $floatTopupsForDate += (float) Transaction::where('agent_id', $agent->id)->whereDate('created_at', $viewDate)->whereIn('type', ['float_topup', 'float_deposit', 'bank_to_wallet'])->sum('amount');
+        $topupBreakdown = FloatTransaction::where('agent_id', $agent->id)->whereDate('created_at', $viewDate)->whereIn('type', ['float_topup', 'cash_in'])->with('network')->get()->groupBy('network_id')->map(fn ($g) => ['network' => $g->first()->network?->name ?? '—', 'total' => (float) $g->sum('amount')]);
+
+        return view('float.edit-opening', compact('agent', 'networks', 'currentBalances', 'opening', 'viewDate', 'dateStr', 'previousReconciliation', 'previousClosingCash', 'suggestedCash', 'prevDate', 'floatTopupsForDate', 'topupBreakdown'));
     }
 
     /**

@@ -97,9 +97,20 @@
                         </div>
                     </div>
                     <div class="balance-box" style="--stat-tint:var(--acacia-100);">
-                        <div class="bb-label">Total Float (Auto)</div>
-                        <div class="bb-amount" id="totalFloatAuto">{{ money($opening ? $opening->totalFloatOpening() : 0) }}</div>
-                        <div class="bb-sub">Sum of floats below. Updates <code>NetworkBalance.opening_balance</code>.</div>
+                        <div class="bb-label">Total Float (Auto) — opening + top-ups</div>
+                        <div class="bb-amount" id="totalFloatAuto">{{ money(($opening ? $opening->totalFloatOpening() : 0) + $floatTopupsForDate) }}</div>
+                        <div class="bb-sub" id="totalFloatBreakdown" data-topups="{{ $floatTopupsForDate }}">
+                            <span id="openingSumDisplay">{{ money($opening ? $opening->totalFloatOpening() : 0) }}</span> opening
+                            @if($floatTopupsForDate > 0)
+                                + <span style="color:var(--acacia-600); font-weight:700;">@money($floatTopupsForDate)</span> float top-ups
+                                @if($topupBreakdown->isNotEmpty())
+                                    <span style="font-size:11px; color:var(--ink-soft);">({{ $topupBreakdown->map(fn($r) => $r['network'].': '.money($r['total']))->implode(', ') }})</span>
+                                @endif
+                            @else
+                                + <span style="color:var(--ink-soft);">@money(0)</span> top-ups
+                            @endif
+                            = total
+                        </div>
                     </div>
                 </div>
 
@@ -156,11 +167,16 @@
         (function () {
             const inputs = document.querySelectorAll('.float-input');
             const totalEl = document.getElementById('totalFloatAuto');
+            const breakdown = document.getElementById('totalFloatBreakdown');
+            const topups = breakdown ? parseFloat(breakdown.getAttribute('data-topups') || 0) : 0;
             function fmt(num) { return 'TZS ' + Math.round(num).toLocaleString('en-US'); }
             function recalc() {
-                let total = 0;
-                inputs.forEach(i => { total += parseFloat(i.value || 0); });
+                let openingSum = 0;
+                inputs.forEach(i => { openingSum += parseFloat(i.value || 0); });
+                const total = openingSum + topups;
                 if (totalEl) totalEl.textContent = fmt(total);
+                const openingSpan = document.getElementById('openingSumDisplay');
+                if (openingSpan) openingSpan.textContent = fmt(openingSum);
             }
             inputs.forEach(i => i.addEventListener('input', recalc));
             recalc();
