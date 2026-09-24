@@ -31,7 +31,7 @@
                         <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-left:8px;">
                             <span style="font-size:12px; color:var(--ink-soft);">Recent openings:</span>
                             @foreach($availableDates->take(5) as $d)
-                                <a href="{{ route('reconciliation.create', ['date' => $d]) }}" class="tag {{ $d === $selectedDate ? 'tag-green' : 'tag-terracotta' }}" style="text-decoration:none;">{{ $d }}</a>
+                                <a href="{{ route('reconciliation.create', ['date' => \Illuminate\Support\Facades\Crypt::encryptString($d)]) }}" class="tag {{ $d === $selectedDate ? 'tag-green' : 'tag-terracotta' }}" style="text-decoration:none;">{{ $d }}</a>
                             @endforeach
                         </div>
                     @endif
@@ -54,7 +54,7 @@
         <div class="panel-head">
             <h3>All Opening Data for {{ $selectedDate }}</h3>
             <div style="display:flex; gap:8px;">
-                <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-ghost btn-sm">Edit opening</a>
+                <a href="{{ route('float.opening.edit', ['date' => $selectedDateEncrypted]) }}" class="btn btn-ghost btn-sm">Edit opening</a>
                 <a href="{{ route('daily-opening.index') }}" class="btn btn-ghost btn-sm">All openings</a>
             </div>
         </div>
@@ -78,7 +78,7 @@
                 @if($dayOpening->notes)<div style="margin-top:10px; font-size:13px;"><strong>Notes:</strong> {{ $dayOpening->notes }}</div>@endif
                 <div style="margin-top:10px;"><a href="{{ route('daily-opening.show', $dayOpening) }}" class="btn btn-ghost btn-sm">View opening details</a></div>
             @else
-                <p style="color:var(--ink-soft);">No Daily Opening for <strong>{{ $selectedDate }}</strong> — <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}">Create opening</a> to set cash & float. Reconciliation will use previous closing cash + live balances as fallback.</p>
+                <p style="color:var(--ink-soft);">No Daily Opening for <strong>{{ $selectedDate }}</strong> — <a href="{{ route('float.opening.edit', ['date' => $selectedDateEncrypted]) }}">Create opening</a> to set cash & float. Reconciliation will use previous closing cash + live balances as fallback.</p>
                 <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
                     @foreach($run['networks'] as $row)
                         <span class="tag" style="background:var(--white); border:1px solid var(--line);"><span class="net-dot" style="background:{{ $row['color'] }};"></span> {{ $row['name'] }}: @money($row['opening']) <span style="color:var(--ink-soft);">(live)</span></span>
@@ -92,9 +92,9 @@
         <div class="panel-head">
             <h3>Transactions Done for {{ $selectedDate }} ({{ $dayTransactions->count() }} completed, {{ $dayFloatTransactions->count() }} float)</h3>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <a href="{{ route('transactions.create') }}?date={{ $selectedDate }}" class="btn btn-ghost btn-sm">+ Add transaction for this date (admin)</a>
-                <a href="{{ route('transactions.index', ['date' => $selectedDate]) }}" class="btn btn-ghost btn-sm">View all</a>
-                <a href="{{ route('float.create', ['date' => $selectedDate]) }}" class="btn btn-ghost btn-sm">+ Add float for this date</a>
+                <a href="{{ route('transactions.create') }}?date={{ $selectedDateEncrypted }}" class="btn btn-ghost btn-sm">+ Add transaction for this date (admin)</a>
+                <a href="{{ route('transactions.index', ['date' => $selectedDateEncrypted]) }}" class="btn btn-ghost btn-sm">View all</a>
+                <a href="{{ route('float.create', ['date' => $selectedDateEncrypted]) }}" class="btn btn-ghost btn-sm">+ Add float for this date</a>
             </div>
         </div>
         <div class="panel-body" style="padding:0;">
@@ -169,7 +169,7 @@
                     </div>
                 </div>
 
-                <div class="balance-strip" style="margin-bottom:0;">
+                <div class="balance-strip" style="margin-bottom:0; gap:14px;">
                     <div class="balance-box" style="--stat-tint:var(--sand-100);">
                         <div class="bb-label">Opening cash</div>
                         <div class="bb-amount">@money($run['openingCash'])</div>
@@ -276,7 +276,7 @@
                 <span class="link">Expected closing (cash + float) must equal counted closing (cash + float) — float top-ups already in Expected</span>
             </div>
             <div class="panel-body">
-                <div class="balance-strip" style="margin-bottom:0;">
+                <div class="balance-strip" style="margin-bottom:0; gap:14px;">
                     <div class="balance-box" style="--stat-tint:var(--sand-100);">
                         <div class="bb-label">Opening cash on hand</div>
                         <div class="bb-amount">@money($run['openingCash'])</div>
@@ -317,7 +317,7 @@
                 <span class="link">{{ $agent->name }}</span>
             </div>
             <div class="panel-body">
-                <div class="balance-strip" style="margin-bottom:0;">
+                <div class="balance-strip" style="margin-bottom:0; gap:14px;">
                     <div class="balance-box">
                         <div class="bb-label">Cash variance</div>
                         <div class="bb-amount" id="cashVarDisplay">TZS 0</div>

@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -98,9 +99,20 @@ class ReconciliationController extends Controller
 
         $isAdmin = is_admin();
         $rawDate = $request->input('date', $request->input('reconciliation_date', today()->toDateString()));
+        $decrypted = $this->decryptDateParam($rawDate);
+        $isPlain = $this->isPlainDate($rawDate);
+        // Encrypt URL header for admin — plain 2026-09-22 -> eyJ... (like float)
+        if ($isAdmin && $rawDate !== null && $decrypted === null && $isPlain) {
+            try {
+                Carbon::parse($rawDate)->toDateString();
 
+                return redirect()->route('reconciliation.create', ['date' => $this->encryptDateParam($rawDate)]);
+            } catch (\Throwable) {
+            }
+        }
+        $effectiveRaw = $decrypted ?? $rawDate;
         try {
-            $viewDate = Carbon::parse($rawDate)->toDateString();
+            $viewDate = Carbon::parse($effectiveRaw)->toDateString();
         } catch (\Throwable) {
             $viewDate = today()->toDateString();
         }
@@ -146,11 +158,14 @@ class ReconciliationController extends Controller
             ->limit(50)
             ->get();
 
+        $selectedDateEncrypted = $isAdmin ? $this->encryptDateParam($viewDate) : $viewDate;
+
         return view('reconciliation.create', [
             'agent' => $agent,
             'run' => $run,
             'existing' => $existing,
             'selectedDate' => $viewDate,
+            'selectedDateEncrypted' => $selectedDateEncrypted,
             'isAdmin' => $isAdmin,
             'availableDates' => $availableDates,
             'dayOpening' => $dayOpening,
@@ -782,5 +797,39 @@ class ReconciliationController extends Controller
             ->first();
 
         return $previous ? (float) $previous->counted_cash : (float) $agent->cash_balance;
+    }
+
+    private function encryptDateParam(string $date): string
+    {
+        try {
+            return Crypt::encryptString($date);
+        } catch (\Throwable) {
+            return $date;
+        }
+    }
+
+    private function decryptDateParam(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        try {
+            $dec = Crypt::decryptString($value);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dec)) {
+                return $dec;
+            }
+        } catch (\Throwable) {
+        }
+
+        return null;
+    }
+
+    private function isPlainDate(?string $value): bool
+    {
+        if (! $value) {
+            return false;
+        }
+
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1;
     }
 }
