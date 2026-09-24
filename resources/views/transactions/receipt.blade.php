@@ -10,6 +10,9 @@
         </div>
         <div class="view-actions">
             <a href="{{ route('transactions.index') }}" class="btn btn-ghost">← Back</a>
+            @if(is_admin() && $transaction->status !== 'reversed')
+                <a href="{{ route('transactions.edit', $transaction) }}" class="btn btn-ghost">Edit</a>
+            @endif
             <a href="{{ route('transactions.receipt.pdf', $transaction) }}" class="btn btn-ghost">Download PDF</a>
             <button class="btn btn-primary" onclick="window.print()">Print</button>
         </div>

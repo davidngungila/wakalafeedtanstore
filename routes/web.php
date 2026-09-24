@@ -118,8 +118,6 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
 
     Route::middleware('role:supervisor,admin')->group(function () {
         Route::put('/transactions/{transaction}/reverse', [TransactionController::class, 'reverse'])->name('transactions.reverse');
-        Route::put('/transactions/{transaction}/mark-unusual', [TransactionController::class, 'markUnusual'])->name('transactions.mark-unusual');
-        Route::delete('/transactions/{transaction}/unusual', [TransactionController::class, 'clearUnusual'])->name('transactions.clear-unusual');
         Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
         Route::get('/reports', ReportController::class)->name('reports.index');
         Route::get('/finance', FinanceController::class)->name('finance.index');
@@ -143,6 +141,10 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     });
 
     Route::middleware('role:admin')->group(function () {
+        Route::get('/transactions/{transaction}/edit', [TransactionController::class, 'edit'])->name('transactions.edit');
+        Route::put('/transactions/{transaction}', [TransactionController::class, 'update'])->name('transactions.update');
+        Route::delete('/transactions/{transaction}', [TransactionController::class, 'destroy'])->name('transactions.destroy');
+
         Route::put('/cash-point', [CashPointController::class, 'update'])->name('cash-point.update');
         Route::put('/cash-point/{cashPoint}', [CashPointController::class, 'update'])->name('cash-point.update.id');
 

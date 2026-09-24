@@ -143,18 +143,17 @@
                             <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
                             <td>
                                 <div class="row-actions">
-                                    @if($txn->is_unusual)
-                                        <button type="button" title="Unusual: {{ $txn->unusual_reason }}" onclick="clearUnusual({{ $txn->id }})" style="width:32px;height:32px;border-radius:8px;border:1.5px solid var(--danger);background:var(--danger-100);display:flex;align-items:center;justify-content:center;color:var(--danger);">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                                        </button>
-                                    @else
-                                        <button type="button" title="Mark as unusual" onclick="openUnusualModal({{ $txn->id }}, '{{ addslashes($txn->reference) }}')" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                                        </button>
-                                    @endif
                                     <a href="{{ route('transactions.receipt', $txn) }}" title="View receipt" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"></path></svg>
                                     </a>
+                                    @if(is_admin())
+                                        <a href="{{ route('transactions.edit', $txn) }}" title="Edit transaction" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700);">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                        </a>
+                                        <button type="button" title="Delete transaction" onclick="deleteTxn({{ $txn->id }}, '{{ addslashes($txn->reference) }}')" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--danger);">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14.5px;height:14.5px;"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                        </button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -183,23 +182,20 @@
         </div>
     </div>
 
-    <!-- Mark unusual modal -->
-    <div class="modal-backdrop" id="unusualModal">
+    <!-- Delete confirmation modal -->
+    <div class="modal-backdrop" id="deleteModal">
         <div class="modal" style="max-width:440px;">
             <div class="modal-head">
-                <h3>Mark as Unusual</h3>
-                <button class="modal-close" onclick="closeModal('unusualModal')">✕</button>
+                <h3>Delete Transaction</h3>
+                <button class="modal-close" onclick="closeModal('deleteModal')">✕</button>
             </div>
             <div class="modal-body">
-                <p style="font-size:13.5px;color:var(--ink-soft);margin:0 0 12px;">Mark <strong id="unusualTxnRef"></strong> as unusual and provide a reason.</p>
-                <div class="field">
-                    <label>Reason</label>
-                    <textarea id="unusualReason" rows="3" placeholder="Why is this transaction unusual?" style="width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13.5px;font-family:inherit;resize:vertical;"></textarea>
-                </div>
+                <p style="font-size:13.5px;color:var(--ink-soft);margin:0 0 8px;">Are you sure you want to delete <strong id="deleteTxnRef"></strong>?</p>
+                <p style="font-size:12.5px;color:var(--danger);margin:0;">This will reverse all financial effects (cash, float, daily opening, and journal) and permanently remove the record. This cannot be undone.</p>
             </div>
             <div class="modal-foot">
-                <button class="btn btn-ghost" onclick="closeModal('unusualModal')">Cancel</button>
-                <button class="btn btn-danger" onclick="submitUnusual()">Mark Unusual</button>
+                <button class="btn btn-ghost" onclick="closeModal('deleteModal')">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmDeleteTxn()">Delete</button>
             </div>
         </div>
     </div>
@@ -365,45 +361,27 @@
             ];
         }, 'Transaction details');
 
-        let unusualTxnId = null;
-        function openUnusualModal(id, ref) {
-            unusualTxnId = id;
-            document.getElementById('unusualTxnRef').textContent = ref;
-            document.getElementById('unusualReason').value = '';
-            openModal('unusualModal');
+        let deleteTxnId = null;
+        function deleteTxn(id, ref) {
+            deleteTxnId = id;
+            document.getElementById('deleteTxnRef').textContent = ref;
+            openModal('deleteModal');
         }
 
-        async function submitUnusual() {
-            const reason = document.getElementById('unusualReason').value.trim();
-            if (!reason) { toast('Please provide a reason', 'error'); return; }
+        async function confirmDeleteTxn() {
+            if (!deleteTxnId) return;
             try {
-                const resp = await fetch('/transactions/' + unusualTxnId + '/mark-unusual', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
-                    body: JSON.stringify({ reason }),
-                });
-                const data = await resp.json().catch(() => ({}));
-                if (resp.ok && data.success) {
-                    toast(data.message || 'Marked as unusual', 'success');
-                    setTimeout(() => location.reload(), 400);
-                } else {
-                    toast(data.message || 'Failed to mark unusual', 'error');
-                }
-            } catch (e) { toast('Network error', 'error'); }
-        }
-
-        async function clearUnusual(id) {
-            try {
-                const resp = await fetch('/transactions/' + id + '/unusual', {
+                const resp = await fetch('/transactions/' + deleteTxnId, {
                     method: 'DELETE',
                     headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
                 });
                 const data = await resp.json().catch(() => ({}));
                 if (resp.ok && data.success) {
-                    toast(data.message || 'Unusual flag cleared', 'success');
+                    toast(data.message || 'Transaction deleted', 'success');
+                    closeModal('deleteModal');
                     setTimeout(() => location.reload(), 400);
                 } else {
-                    toast(data.message || 'Failed to clear flag', 'error');
+                    toast(data.message || 'Failed to delete transaction', 'error');
                 }
             } catch (e) { toast('Network error', 'error'); }
         }

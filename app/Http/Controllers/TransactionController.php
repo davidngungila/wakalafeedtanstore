@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Agent;
+use App\Models\CommissionRate;
 use App\Models\DailyOpening;
+use App\Models\JournalEntry;
 use App\Models\Network;
 use App\Models\NetworkBalance;
 use App\Models\SmsMessage;
@@ -205,6 +208,7 @@ class TransactionController extends Controller
             return redirect()->route('cash-point.index')->with('error', $message);
         }
 
+        $todayOpening = null;
         // Check if daily opening is recorded for today (only for cashiers)
         if (is_cashier()) {
             $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())->first();
@@ -226,6 +230,8 @@ class TransactionController extends Controller
 
                 return back()->with('error', $message);
             }
+        } else {
+            $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())->first();
         }
 
         $transaction = $this->transactions->process(
@@ -286,6 +292,315 @@ class TransactionController extends Controller
         }
 
         return redirect()->route('transactions.receipt', $transaction)->with('status', 'Transaction '.$transaction->reference.' created and linked'.(! empty($validated['sms_id']) ? ' to SMS #'.$validated['sms_id'] : '').'.');
+    }
+
+    public function edit(Request $request, Transaction $transaction): View
+    {
+        $transaction->load(['network', 'agent', 'operator', 'dailyOpening']);
+        $combos = $this->combos();
+
+        return view('transactions.edit', compact('transaction', 'combos'));
+    }
+
+    public function update(Request $request, Transaction $transaction): JsonResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'network_id' => ['required', 'exists:networks,id'],
+            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup'],
+            'customer_name' => ['nullable', 'string', 'max:120'],
+            'customer_phone' => ['required', 'string', 'max:30'],
+            'amount' => ['required', 'numeric', 'min:1'],
+            'provider_reference' => ['nullable', 'string', 'max:60'],
+            'notes' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        if ($transaction->status === 'reversed') {
+            $message = 'Cannot edit a reversed transaction. Reverse has already undone its financial effects.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->with('error', $message);
+        }
+
+        // Use the transaction's assigned agent (the area it belongs to), not the current cash_point()
+        $agent = $transaction->agent;
+        if ($agent === null) {
+            $agent = Agent::find($transaction->agent_id) ?? cash_point();
+        }
+
+        if ($agent === null) {
+            $message = 'Assigned cash point not found for this transaction.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->with('error', $message);
+        }
+
+        $oldAmount = (float) $transaction->amount;
+        $oldType = $transaction->type;
+        $oldNetworkId = (int) $transaction->network_id;
+        $oldAgentId = (int) $transaction->agent_id;
+        $oldDailyOpeningId = $transaction->daily_opening_id;
+        $oldCommission = (float) ($transaction->commission ?? 0);
+        $oldStatus = $transaction->status;
+        $oldReference = $transaction->reference;
+
+        $newAmount = (float) $validated['amount'];
+        $newType = $validated['type'];
+        $newNetworkId = (int) $validated['network_id'];
+
+        $newFee = $this->feeFor($newType, $newAmount);
+        $newCommission = $this->commissionFor($agent, $newNetworkId, $newType, $newAmount);
+
+        // If nothing changed, just update metadata quickly
+        $isFinancialChange = $oldAmount !== $newAmount || $oldType !== $newType || $oldNetworkId !== $newNetworkId;
+
+        try {
+            DB::transaction(function () use ($transaction, $oldAmount, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldCommission, $oldStatus, $newAmount, $newType, $newNetworkId, $newFee, $newCommission, $validated, $isFinancialChange): void {
+                // Only adjust financial areas if transaction was completed and financial fields changed
+                // Also handle case where only non-financial fields changed (name/phone) -> no balance adjustment
+                if ($isFinancialChange && $oldStatus === 'completed') {
+                    // Revert old financial effects from the assigned area
+                    $oldDeltaFloat = $this->floatDelta($oldType, $oldAmount);
+                    $oldBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $oldNetworkId)->lockForUpdate()->first();
+                    if ($oldBalance) {
+                        $oldBalance->balance = (float) $oldBalance->balance - $oldDeltaFloat;
+                        $oldBalance->save();
+                    }
+
+                    $oldDeltaCash = $this->cashDelta($oldType, $oldAmount);
+                    if ($oldDeltaCash !== 0) {
+                        $agentOld = Agent::where('id', $oldAgentId)->lockForUpdate()->first();
+                        if ($agentOld) {
+                            $agentOld->cash_balance = (float) $agentOld->cash_balance - $oldDeltaCash;
+                            $agentOld->save();
+                        }
+                    }
+
+                    if ($oldDailyOpeningId) {
+                        $opening = DailyOpening::where('id', $oldDailyOpeningId)->lockForUpdate()->first();
+                        if ($opening) {
+                            $opening->total_volume = max(0, (float) $opening->total_volume - $oldAmount);
+                            $opening->total_commission = max(0, (float) $opening->total_commission - $oldCommission);
+                            $opening->total_transactions = max(0, (int) $opening->total_transactions - 1);
+                            $opening->save();
+                        }
+                    }
+
+                    // Apply new financial effects to the (same) assigned area — respects network change
+                    $newDeltaFloat = $this->floatDelta($newType, $newAmount);
+                    $newBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $newNetworkId)->lockForUpdate()->first();
+                    if (! $newBalance) {
+                        $newBalance = NetworkBalance::create([
+                            'agent_id' => $oldAgentId,
+                            'network_id' => $newNetworkId,
+                            'opening_balance' => 0,
+                            'balance' => 0,
+                        ]);
+                        // Re-fetch with lock
+                        $newBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $newNetworkId)->lockForUpdate()->first();
+                    }
+                    if ($newBalance) {
+                        $newBalance->balance = (float) $newBalance->balance + $newDeltaFloat;
+                        $newBalance->save();
+                    }
+
+                    $newDeltaCash = $this->cashDelta($newType, $newAmount);
+                    if ($newDeltaCash !== 0) {
+                        $agentNew = Agent::where('id', $oldAgentId)->lockForUpdate()->first();
+                        if ($agentNew) {
+                            $agentNew->cash_balance = (float) $agentNew->cash_balance + $newDeltaCash;
+                            $agentNew->save();
+                        }
+                    }
+
+                    $targetOpeningId = $oldDailyOpeningId;
+                    if (! $targetOpeningId) {
+                        $todayOpening = DailyOpening::forAgentAndDate($oldAgentId, today())->first();
+                        if ($todayOpening && ! $todayOpening->is_closed) {
+                            $targetOpeningId = $todayOpening->id;
+                        }
+                    }
+                    if ($targetOpeningId) {
+                        $opening = DailyOpening::where('id', $targetOpeningId)->lockForUpdate()->first();
+                        if ($opening) {
+                            $opening->total_volume = (float) $opening->total_volume + $newAmount;
+                            $opening->total_commission = (float) $opening->total_commission + $newCommission;
+                            $opening->total_transactions = (int) $opening->total_transactions + 1;
+                            $opening->save();
+                        }
+                        // Ensure transaction keeps link to opening (especially if it was null before)
+                        $transaction->daily_opening_id = $targetOpeningId;
+                    }
+                }
+
+                // Refresh assigned agent for running balances after adjustments
+                $agentForRunning = Agent::find($oldAgentId);
+                $runningCash = $agentForRunning ? (float) $agentForRunning->cash_balance : $transaction->running_cash_balance;
+                $runningFloat = $agentForRunning ? (float) $agentForRunning->totalFloat() : $transaction->running_float_balance;
+
+                $transaction->update([
+                    'network_id' => $newNetworkId,
+                    'type' => $newType,
+                    'customer_name' => $validated['customer_name'] ?? null,
+                    'customer_phone' => $validated['customer_phone'],
+                    'amount' => $newAmount,
+                    'fee' => $newFee,
+                    'commission' => $newCommission,
+                    'provider_reference' => $validated['provider_reference'] ?? $transaction->provider_reference,
+                    'notes' => $validated['notes'] ?? $transaction->notes,
+                    'running_cash_balance' => $runningCash,
+                    'running_float_balance' => $runningFloat,
+                ]);
+
+                // Journal handling: keep GL in sync with the assigned area's transaction
+                // If financial fields changed and transaction is completed, rebuild the journal entry
+                if ($isFinancialChange && $oldStatus === 'completed') {
+                    $existingJournal = JournalEntry::where('reference', $transaction->reference)->first();
+                    if ($existingJournal) {
+                        // Delete old lines and the entry itself, then re-post fresh so debits/credits match new amount
+                        $existingJournal->lines()->delete();
+                        $existingJournal->delete();
+                    }
+                    // Also clean up any prior reversal entries for this reference (e.g. RVS-... created earlier)
+                    $reversals = JournalEntry::where('description', 'like', '%'.$transaction->reference.'%')
+                        ->where('reference', 'like', 'RVS-%')
+                        ->get();
+                    foreach ($reversals as $rev) {
+                        $rev->lines()->delete();
+                        $rev->delete();
+                    }
+
+                    $transaction->refresh();
+                    $transaction->load('network');
+                    // Only post if still completed
+                    if ($transaction->status === 'completed') {
+                        app(TransactionJournalService::class)->postForTransaction($transaction);
+                    }
+                }
+            });
+        } catch (\Throwable $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Failed to update transaction: '.$e->getMessage()], 422);
+            }
+
+            return back()->with('error', 'Failed to update transaction: '.$e->getMessage());
+        }
+
+        $this->recordAudit('Transaction updated', 'Transaction', $transaction->id, [
+            'reference' => $oldReference,
+            'old' => ['amount' => $oldAmount, 'type' => $oldType, 'network_id' => $oldNetworkId],
+            'new' => ['amount' => $newAmount, 'type' => $newType, 'network_id' => $newNetworkId],
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Transaction updated successfully.', 'reference' => $transaction->reference]);
+        }
+
+        return redirect()->route('transactions.index')->with('status', 'Transaction '.$transaction->reference.' updated successfully. Balances for assigned area have been adjusted.');
+    }
+
+    public function destroy(Request $request, Transaction $transaction): JsonResponse|RedirectResponse
+    {
+        if ($transaction->status === 'reversed') {
+            // Already reversed — just delete without double-reversing balances
+            $reference = $transaction->reference;
+            DB::transaction(function () use ($transaction, $reference): void {
+                $journal = JournalEntry::where('reference', $reference)->first();
+                if ($journal) {
+                    $journal->lines()->delete();
+                    $journal->delete();
+                }
+                $reversals = JournalEntry::where('description', 'like', '%'.$reference.'%')->where('reference', 'like', 'RVS-%')->get();
+                foreach ($reversals as $rev) {
+                    $rev->lines()->delete();
+                    $rev->delete();
+                }
+                $transaction->delete();
+            });
+
+            $this->recordAudit('Transaction deleted (was reversed)', 'Transaction', $transaction->id, ['reference' => $reference]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => true, 'message' => 'Reversed transaction deleted.']);
+            }
+
+            return redirect()->route('transactions.index')->with('status', 'Reversed transaction deleted.');
+        }
+
+        $oldAmount = (float) $transaction->amount;
+        $oldCommission = (float) ($transaction->commission ?? 0);
+        $oldType = $transaction->type;
+        $oldNetworkId = (int) $transaction->network_id;
+        $oldAgentId = (int) $transaction->agent_id;
+        $oldDailyOpeningId = $transaction->daily_opening_id;
+        $oldReference = $transaction->reference;
+
+        try {
+            DB::transaction(function () use ($transaction, $oldAmount, $oldCommission, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldReference): void {
+                // Revert financial effects from the assigned area
+                $deltaFloat = $this->floatDelta($oldType, $oldAmount);
+                $balance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $oldNetworkId)->lockForUpdate()->first();
+                if ($balance) {
+                    $balance->balance = (float) $balance->balance - $deltaFloat;
+                    $balance->save();
+                }
+
+                $deltaCash = $this->cashDelta($oldType, $oldAmount);
+                if ($deltaCash !== 0) {
+                    $agent = Agent::where('id', $oldAgentId)->lockForUpdate()->first();
+                    if ($agent) {
+                        $agent->cash_balance = (float) $agent->cash_balance - $deltaCash;
+                        $agent->save();
+                    }
+                }
+
+                if ($oldDailyOpeningId) {
+                    $opening = DailyOpening::where('id', $oldDailyOpeningId)->lockForUpdate()->first();
+                    if ($opening) {
+                        $opening->total_volume = max(0, (float) $opening->total_volume - $oldAmount);
+                        $opening->total_commission = max(0, (float) $opening->total_commission - $oldCommission);
+                        $opening->total_transactions = max(0, (int) $opening->total_transactions - 1);
+                        $opening->save();
+                    }
+                }
+
+                // Remove journal entries for this transaction (and any reversals) to keep GL consistent
+                $journal = JournalEntry::where('reference', $oldReference)->first();
+                if ($journal) {
+                    $journal->lines()->delete();
+                    $journal->delete();
+                }
+                $reversals = JournalEntry::where('description', 'like', '%'.$oldReference.'%')->where('reference', 'like', 'RVS-%')->get();
+                foreach ($reversals as $rev) {
+                    $rev->lines()->delete();
+                    $rev->delete();
+                }
+
+                $transaction->delete();
+            });
+        } catch (\Throwable $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Failed to delete transaction: '.$e->getMessage()], 422);
+            }
+
+            return back()->with('error', 'Failed to delete transaction: '.$e->getMessage());
+        }
+
+        $this->recordAudit('Transaction deleted', 'Transaction', $transaction->id, [
+            'reference' => $oldReference,
+            'amount' => $oldAmount,
+            'type' => $oldType,
+            'agent_id' => $oldAgentId,
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Transaction deleted and assigned area balances reversed.']);
+        }
+
+        return redirect()->route('transactions.index')->with('status', 'Transaction '.$oldReference.' deleted. Balances for assigned area have been reversed.');
     }
 
     public function receipt(Request $request, Transaction $transaction): View|RedirectResponse
@@ -467,7 +782,51 @@ class TransactionController extends Controller
     {
         return [
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
-            'types' => ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank', 'float_deposit'],
+            'types' => ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank', 'float_deposit', 'float_topup'],
         ];
+    }
+
+    private function floatDelta(string $type, float $amount): float
+    {
+        return match ($type) {
+            'deposit', 'float_deposit', 'float_topup' => -$amount,
+            'withdrawal', 'bank_to_wallet' => $amount,
+            default => -$amount,
+        };
+    }
+
+    private function cashDelta(string $type, float $amount): float
+    {
+        if (! in_array($type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
+            return 0;
+        }
+
+        $direction = in_array($type, ['deposit', 'float_deposit', 'float_topup', 'airtime'], true) ? 1 : -1;
+        if ($type === 'wallet_to_bank') {
+            $direction = -1;
+        }
+
+        return $direction * $amount;
+    }
+
+    private function commissionFor(Agent $agent, int $networkId, string $type, float $amount): float
+    {
+        $rate = CommissionRate::where('network_id', $networkId)
+            ->where('agent_level', $agent->agent_level)
+            ->where('transaction_type', $type)
+            ->where('is_active', true)
+            ->first();
+
+        return round($amount * (($rate?->rate ?? 0) / 100), 2);
+    }
+
+    private function feeFor(string $type, float $amount): float
+    {
+        return match ($type) {
+            'withdrawal' => min(5000, max(200, round($amount * 0.002, 2))),
+            'bill_payment' => round($amount * 0.003, 2),
+            'bank_to_wallet', 'wallet_to_bank' => round($amount * 0.001, 2),
+            default => 0,
+        };
     }
 }
