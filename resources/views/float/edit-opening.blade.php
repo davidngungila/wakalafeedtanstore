@@ -121,7 +121,13 @@
                     @php
                         $prevOpening = $opening ? ($opening->float_openings[$network->id] ?? null) : null;
                         $bal = $currentBalances[$network->id] ?? null;
-                        $prevCounted = $prevFloatCountedMap[$network->id] ?? $prevFloatCountedMap[$network->name] ?? null;
+                        // Direct search in previous reconciliation Counted to avoid map key mismatches (e.g. Airtel 1,002,000 etc)
+                        $prevRow = null;
+                        if (!empty($previousReconciliation->network_balances)) {
+                            $prevRow = collect($previousReconciliation->network_balances)->firstWhere('network_id', $network->id);
+                            if (!$prevRow) $prevRow = collect($previousReconciliation->network_balances)->firstWhere('network', $network->name);
+                        }
+                        $prevCounted = $prevRow ? ($prevRow['counted'] ?? $prevRow['expected'] ?? $prevRow['system'] ?? null) : ($prevFloatCountedMap[$network->id] ?? $prevFloatCountedMap[$network->name] ?? null);
                         $suggested = old('float_openings.'.$network->id, $prevOpening ?? $prevCounted ?? $bal?->balance ?? $bal?->opening_balance ?? 0);
                         $isFromPrevCounted = $prevOpening === null && $prevCounted !== null && !old('float_openings.'.$network->id);
                     @endphp
