@@ -174,8 +174,11 @@ class FloatController extends Controller
         }
 
         $networks = Network::active()->pluck('name', 'id');
+        $allNetworks = Network::orderBy('name')->get(['id', 'name', 'color']);
+        $currentBalances = $cashPoint->balances()->with('network')->get()->keyBy('network_id');
 
         $dayTransactions = collect();
+        $dayFloatTransactions = collect();
         if ($isAdmin) {
             $dayTransactions = Transaction::with(['network'])
                 ->where('agent_id', $cashPoint->id)
@@ -184,9 +187,15 @@ class FloatController extends Controller
                 ->latest()
                 ->limit(50)
                 ->get();
+            $dayFloatTransactions = FloatTransaction::with(['network'])
+                ->where('agent_id', $cashPoint->id)
+                ->whereDate('created_at', $viewDate)
+                ->latest()
+                ->limit(50)
+                ->get();
         }
 
-        return view('float.create', compact('networks', 'selectedDate', 'viewDate', 'isAdmin', 'todayOpening', 'dayTransactions'));
+        return view('float.create', compact('networks', 'allNetworks', 'currentBalances', 'selectedDate', 'viewDate', 'isAdmin', 'todayOpening', 'dayTransactions', 'dayFloatTransactions'));
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse

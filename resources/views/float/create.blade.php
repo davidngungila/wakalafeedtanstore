@@ -24,8 +24,8 @@
                 @if($isAdmin)
                     <div class="field">
                         <label>Float date (admin — for selected day)</label>
-                        <input type="date" name="float_date" value="{{ old('float_date', $selectedDate) }}" max="{{ today()->toDateString() }}">
-                        <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Pick the day this float movement actually happened. It will be counted for that day's reports/reconciliation and use that day's opening if exists. Leave as today for live float.</p>
+                        <input type="date" name="float_date" id="floatDateInput" value="{{ old('float_date', $selectedDate) }}" max="{{ today()->toDateString() }}">
+                        <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Pick the day this float movement actually happened. Changing the date will reload all float data for that day. It will be counted for that day's reports/reconciliation and use that day's opening if exists.</p>
                     </div>
                     @if(isset($dayTransactions) && $dayTransactions->isNotEmpty())
                         <div class="field">
@@ -39,7 +39,68 @@
                             <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Pick a transaction received on {{ $viewDate->format('d M Y') }} to autofill network/amount and link. Will update that transaction's notes and appear in reconciliation for this date.</p>
                             <input type="hidden" name="transaction_id" id="floatLinkedTxn" value="{{ old('transaction_id') }}">
                         </div>
+                    @else
+                        <p style="font-size:12px; color:var(--ink-soft);">No completed transactions for {{ $viewDate->format('d M Y') }} to reference.</p>
                     @endif
+                    <div class="panel" style="margin-top:12px; border:1px solid var(--line); border-radius:10px; overflow:hidden;">
+                        <div class="panel-head" style="padding:12px 16px;">
+                            <h3 style="font-size:14px;">All Float Data for {{ $viewDate->format('d M Y') }}</h3>
+                            <span class="tag tag-gold">{{ $viewDate->toDateString() }}</span>
+                        </div>
+                        <div class="panel-body" style="padding:12px 16px; font-size:12.5px;">
+                            @if($todayOpening)
+                                <div style="margin-bottom:10px;">
+                                    <strong>Opening:</strong> Cash @money($todayOpening->cash_opening) ·
+                                    @foreach($allNetworks as $net)
+                                        @php $openingAmt = $todayOpening->float_openings[$net->id] ?? 0; @endphp
+                                        <span class="tag" style="background:var(--white); border:1px solid var(--line);"><span class="net-dot" style="background:{{ $net->color }};"></span> {{ $net->name }}: @money($openingAmt)</span>
+                                    @endforeach
+                                </div>
+                            @else
+                                <div style="margin-bottom:10px; color:var(--ink-soft);">No Daily Opening for {{ $viewDate->toDateString() }} — opening balances from live <code>NetworkBalance.opening_balance</code> will be used.</div>
+                            @endif
+                            <div class="table-scroll" style="max-height:220px; overflow-y:auto;">
+                                <table style="min-width:500px;">
+                                    <thead>
+                                        <tr>
+                                            <th>Network</th>
+                                            <th style="text-align:right;">Opening</th>
+                                            <th style="text-align:right;">Current</th>
+                                            <th style="text-align:right;">Variance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($allNetworks as $net)
+                                            @php
+                                                $bal = $currentBalances[$net->id] ?? null;
+                                                $openingVal = $todayOpening ? ($todayOpening->float_openings[$net->id] ?? 0) : ($bal?->opening_balance ?? 0);
+                                                $currentVal = $bal?->balance ?? 0;
+                                                $var = $currentVal - $openingVal;
+                                            @endphp
+                                            <tr data-float-net-id="{{ $net->id }}" style="transition:background .2s;">
+                                                <td><span class="net-dot" style="background:{{ $net->color }};"></span> {{ $net->name }}</td>
+                                                <td style="text-align:right;">@money($openingVal)</td>
+                                                <td style="text-align:right; font-weight:600;">@money($currentVal)</td>
+                                                <td style="text-align:right; color:{{ $var >=0 ? 'var(--acacia-600)' : 'var(--danger)' }};">{{ $var >=0 ? '+' : '' }}@money($var)</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            @if(isset($dayFloatTransactions) && $dayFloatTransactions->isNotEmpty())
+                                <div style="margin-top:12px; border-top:1px solid var(--line); padding-top:10px;">
+                                    <strong>Float movements for {{ $viewDate->format('d M Y') }} ({{ $dayFloatTransactions->count() }}):</strong>
+                                    <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+                                        @foreach($dayFloatTransactions as $ft)
+                                            <span class="tag {{ $ft->type === 'float_topup' || $ft->type === 'cash_in' ? 'tag-green' : 'tag-terracotta' }}">{{ $ft->created_at->format('H:i') }} {{ $ft->network?->name }} {{ $ft->type }} @money($ft->amount) {{ $ft->notes ? '· '.$ft->notes : '' }}</span>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @else
+                                <div style="margin-top:10px; font-size:12px; color:var(--ink-soft);">No float movements yet for {{ $viewDate->format('d M Y') }}.</div>
+                            @endif
+                        </div>
+                    </div>
                 @endif
                 <div class="form-row">
                     <div class="field">
@@ -96,6 +157,7 @@
                 const linked = document.getElementById('floatLinkedTxn');
                 if (!opt || !opt.value) {
                     if (linked) linked.value = '';
+                    document.querySelectorAll('[data-float-net-id]').forEach(row => { row.style.background=''; row.style.outline=''; });
                     return;
                 }
                 if (linked) linked.value = opt.value;
@@ -134,6 +196,26 @@
                     if (!notes.value.includes(addition)) {
                         notes.value = (notes.value ? notes.value + ' | ' : '') + addition;
                     }
+                }
+                // Highlight network row in All Float Data panel and show full data
+                document.querySelectorAll('[data-float-net-id]').forEach(row => { row.style.background=''; row.style.outline=''; });
+                if (networkId) {
+                    const row = document.querySelector('[data-float-net-id="' + networkId + '"]');
+                    if (row) {
+                        row.style.background = 'var(--gold-100)';
+                        row.style.outline = '2px solid var(--gold-500)';
+                        row.style.borderRadius = '6px';
+                    }
+                }
+            });
+        }
+
+        const floatDateInput = document.getElementById('floatDateInput');
+        if (floatDateInput) {
+            floatDateInput.addEventListener('change', () => {
+                const newDate = floatDateInput.value;
+                if (newDate) {
+                    window.location.href = '{{ route('float.create') }}?date=' + encodeURIComponent(newDate);
                 }
             });
         }
