@@ -197,7 +197,7 @@
         <div class="panel" style="max-width:980px;">
             <div class="panel-head">
                 <h3>Float reconciliation per network</h3>
-                <span class="link">Opening float + customer withdrawals − customer deposits = closing float</span>
+                <span class="link">Opening + withdrawals + float top-ups + bank in − deposits = closing — all networks shown, top-ups added</span>
             </div>
             <div class="panel-body">
                 <div class="table-card">
@@ -206,11 +206,13 @@
                             <thead>
                                 <tr>
                                     <th>Network</th>
-                                    <th>Opening float</th>
-                                    <th>+ Withdrawals</th>
+                                    <th>Opening</th>
+                                    <th>+ W/drawals</th>
                                     <th>− Deposits</th>
-                                    <th>= Expected closing</th>
-                                    <th>Counted closing</th>
+                                    <th>+ Top-ups</th>
+                                    <th>+ Bank in</th>
+                                    <th>= Expected</th>
+                                    <th>Counted</th>
                                     <th>Variance</th>
                                 </tr>
                             </thead>
@@ -220,13 +222,15 @@
                                         <td>
                                             <span class="cell-title">
                                                 <span class="net-dot" style="background:{{ $row['color'] }};margin-right:7px;vertical-align:middle;"></span>
-                                                {{ $row['name'] }} Float
+                                                {{ $row['name'] }}
                                             </span>
                                         </td>
                                         <td data-run-opening="@money($row['opening'])">@money($row['opening'])</td>
-                                        <td data-run-withdrawals="@money($row['withdrawals'])">+@money($row['withdrawals'])</td>
-                                        <td data-run-deposits="@money($row['deposits'])">−@money($row['deposits'])</td>
-                                        <td data-run-expected="@money($row['expected'])">@money($row['expected'])</td>
+                                        <td>+@money($row['withdrawals'])</td>
+                                        <td>−@money($row['deposits'])</td>
+                                        <td style="color:var(--acacia-600);">+@money($row['float_topups'] ?? 0)</td>
+                                        <td style="color:var(--acacia-600);">+@money($row['bank_ins'] ?? 0)</td>
+                                        <td data-run-expected="@money($row['expected'])" style="font-weight:700;">@money($row['expected'])</td>
                                         <td>
                                             <input type="number" name="counted_floats[{{ $row['id'] }}]" min="0" step="0.01"
                                                 value="{{ old('counted_floats.'.$row['id'], $row['expected']) }}"
@@ -236,7 +240,7 @@
                                         <td data-net-var class="cell-sub" style="white-space:nowrap;color:var(--coffee-700);">TZS 0</td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="7" class="empty-state"><h4>No active networks</h4><p>Enable at least one network to reconcile its float.</p></td></tr>
+                                    <tr><td colspan="9" class="empty-state"><h4>No active networks</h4><p>Enable at least one network to reconcile its float.</p></td></tr>
                                 @endforelse
                             </tbody>
                         </table>
