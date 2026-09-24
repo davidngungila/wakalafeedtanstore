@@ -296,6 +296,119 @@ class ReconciliationController extends Controller
         return view('reconciliation.show', compact('reconciliation', 'channels', 'networks', 'run'));
     }
 
+    public function edit(Reconciliation $reconciliation): View
+    {
+        $reconciliation->load(['agent']);
+        $run = $this->runFromRecord($reconciliation);
+        $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
+
+        return view('reconciliation.edit', compact('reconciliation', 'run', 'networks'));
+    }
+
+    public function update(Request $request, Reconciliation $reconciliation): JsonResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'counted_cash' => ['required', 'numeric', 'min:0'],
+            'counted_floats' => ['nullable', 'array'],
+            'counted_floats.*' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $run = $this->runFromRecord($reconciliation);
+        $countedCash = (float) $validated['counted_cash'];
+        $countedFloatsInput = $validated['counted_floats'] ?? [];
+
+        // Map counted_floats by network name or id to handle both
+        $networkBalances = collect($reconciliation->network_balances ?? [])->map(function (array $row) use ($countedFloatsInput) {
+            $keyName = $row['network'] ?? null;
+            $keyId = $row['network_id'] ?? null;
+            $newCounted = null;
+            if ($keyName && isset($countedFloatsInput[$keyName])) {
+                $newCounted = (float) $countedFloatsInput[$keyName];
+            } elseif ($keyId && isset($countedFloatsInput[$keyId])) {
+                $newCounted = (float) $countedFloatsInput[$keyId];
+            } else {
+                $newCounted = (float) ($row['counted'] ?? $row['expected'] ?? 0);
+            }
+            $expected = (float) ($row['expected'] ?? $row['system'] ?? 0);
+
+            return array_merge($row, [
+                'counted' => $newCounted,
+                'variance' => round($newCounted - $expected, 2),
+            ]);
+        })->values()->all();
+
+        $countedFloatTotal = collect($networkBalances)->sum('counted');
+        $cashVariance = round($countedCash - (float) $reconciliation->expected_cash, 2);
+        // For float, expected is from stored run
+        $expectedFloat = (float) $reconciliation->total_float;
+        $floatVariance = round($countedFloatTotal - $expectedFloat, 2);
+        $tieOut = round(((float) $reconciliation->expected_cash + $expectedFloat) - ($countedCash + $countedFloatTotal), 2);
+        $channels = $this->settledChannels($reconciliation);
+        // Recompute status after update
+        $anyVariance = abs($cashVariance) > 0.005 || abs($floatVariance) > 0.005 || abs($tieOut) > 0.005;
+        // Also check corrections
+        $status = $anyVariance ? 'variance' : 'reconciled';
+        if ($anyVariance) {
+            $remainingCash = $cashVariance - collect($reconciliation->corrections)->where('scope', 'cash')->sum(fn ($c) => $c->signedAmount());
+            $allRemainingZero = abs($remainingCash) < 0.005;
+            foreach ($networkBalances as $b) {
+                $netName = $b['network'] ?? '';
+                $variance = (float) ($b['variance'] ?? 0);
+                $settled = (float) collect($reconciliation->corrections)->where('scope', 'float')->filter(fn ($c) => $c->network?->name === $netName)->sum(fn ($c) => $c->signedAmount());
+                if (abs($variance - $settled) >= 0.005) {
+                    $allRemainingZero = false;
+                    break;
+                }
+            }
+            if ($allRemainingZero) {
+                $status = 'resolved';
+            }
+        }
+
+        $reconciliation->update([
+            'counted_cash' => $countedCash,
+            'cash_variance' => $cashVariance,
+            'float_variance' => $floatVariance,
+            'tie_out' => $tieOut,
+            'network_balances' => $networkBalances,
+            'total_float' => $expectedFloat,
+            'status' => $status,
+            'notes' => $validated['notes'] ?? $reconciliation->notes,
+        ]);
+
+        // If reconciled, update live balances to counted
+        if ($status === 'reconciled') {
+            $agent = $reconciliation->agent;
+            if ($agent) {
+                $agent->update(['cash_balance' => $countedCash]);
+                foreach ($networkBalances as $row) {
+                    $bal = $agent->balances()->where('network_id', $row['network_id'] ?? null)->first();
+                    if ($bal) {
+                        $bal->update(['balance' => $row['counted']]);
+                    } else {
+                        // Try by name
+                        $net = Network::where('name', $row['network'] ?? '')->first();
+                        if ($net) {
+                            $bal2 = $agent->balances()->where('network_id', $net->id)->first();
+                            if ($bal2) {
+                                $bal2->update(['balance' => $row['counted']]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        $this->recordAudit('Reconciliation recorrected full', 'Reconciliation', $reconciliation->id, ['counted_cash' => $countedCash, 'status' => $status]);
+
+        if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+            return response()->json(['success' => true, 'message' => 'Reconciliation recorrected. Status: '.$status]);
+        }
+
+        return redirect()->route('reconciliation.show', $reconciliation)->with('status', 'Recorrected — status '.$status);
+    }
+
     public function exportSingle(Request $request, Reconciliation $reconciliation)
     {
         $reconciliation->load(['agent', 'reconciler', 'corrections.network', 'corrections.creator']);
@@ -731,11 +844,19 @@ class ReconciliationController extends Controller
                     $floatTopups = $inferred;
                 }
             }
-            // Fix historic Vodacom -356,500 with no activity (was live NetworkBalance fallback) — show 0 when no data belongs to him
-            if ($row['network'] === 'Vodacom M-Pesa' && abs($deposits) < 0.005 && abs($withdrawals) < 0.005 && abs($floatTopups) < 0.005 && abs($bankIns) < 0.005) {
-                if (abs($opening + 356500) < 0.005 && abs($expected + 356500) < 0.005 && abs($counted) < 0.005) {
+            // Fix any historic Vodacom (or any network) with negative opening due to live -356,500 fallback when no activity — show 0 when no data
+            $hasNoActivity = abs($deposits) < 0.005 && abs($withdrawals) < 0.005 && abs($floatTopups) < 0.005 && abs($bankIns) < 0.005;
+            if ($hasNoActivity && abs($counted) < 0.005) {
+                // If opening was live negative due to earlier bug, correct to 0
+                if ($opening < -1000 || abs($expected + 356500) < 0.005) {
                     $opening = 0.0;
                     $expected = 0.0;
+                } elseif (abs($opening) > 0.005 && $row['network'] === 'Vodacom M-Pesa') {
+                    // Specific Vodacom historic -356,500 case
+                    if (abs($opening + 356500) < 0.005) {
+                        $opening = 0.0;
+                        $expected = 0.0;
+                    }
                 }
             }
 
@@ -801,8 +922,19 @@ class ReconciliationController extends Controller
 
         foreach (($reconciliation->network_balances ?? []) as $balance) {
             $name = $balance['network'] ?? 'Network';
-            $system = (float) ($balance['system'] ?? 0);
+            $system = (float) ($balance['system'] ?? $balance['expected'] ?? 0);
             $counted = (float) ($balance['counted'] ?? 0);
+            $opening = (float) ($balance['opening'] ?? 0);
+            $deposits = (float) ($balance['deposits'] ?? 0);
+            $withdrawals = (float) ($balance['withdrawals'] ?? 0);
+            $floatTopups = (float) ($balance['float_topups'] ?? 0);
+            $bankIns = (float) ($balance['bank_ins'] ?? 0);
+            // Correct historic Vodacom -356,500 with no activity to 0/0 for display (was live fallback)
+            $hasNoActivity = abs($deposits) < 0.005 && abs($withdrawals) < 0.005 && abs($floatTopups) < 0.005 && abs($bankIns) < 0.005;
+            if ($hasNoActivity && abs($counted) < 0.005 && (abs($opening + 356500) < 0.005 || abs($system + 356500) < 0.005)) {
+                $system = 0.0;
+                $opening = 0.0;
+            }
             $channels['float.'.$name] = [
                 'label' => $name.' Float',
                 'system' => $system,
