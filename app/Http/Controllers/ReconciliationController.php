@@ -127,11 +127,12 @@ class ReconciliationController extends Controller
             ->map(fn ($d) => Carbon::parse($d)->toDateString())
             ->values();
 
-        // Load all opening data + transactions done for the selected date (admin request)
+        // Load all opening data + transactions done for the selected date (admin request) — per user: dont include float top up in reconciliation transaction list
         $dayOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($viewDate))->first();
         $dayTransactions = Transaction::with(['network', 'operator', 'agent'])
             ->where('agent_id', $agent->id)
             ->whereDate('created_at', $viewDate)
+            ->whereNotIn('type', ['float_topup', 'float_deposit'])
             ->latest()
             ->limit(100)
             ->get();
@@ -203,7 +204,8 @@ class ReconciliationController extends Controller
         $cashVariance = round($countedCash - $expectedCash, 2);
         $floatVariance = round($countedFloatTotal - $run['expectedFloat'], 2);
 
-        $tieOut = round(($run['openingCash'] + $run['openingFloat']) - ($countedCash + $countedFloatTotal), 2);
+        // Tie-out: expected total vs counted total (float top-ups are bank-replenished, not customer activity — they are already in expectedFloat, so opening vs counted would be -3M on days with 3M top-up. Don't penalize tie-out for float injection; tie-out reflects sum of variances only)
+        $tieOut = round(($run['expectedCash'] + $run['expectedFloat']) - ($countedCash + $countedFloatTotal), 2);
 
         $status = abs($cashVariance) < 0.005 && abs($floatVariance) < 0.005 && abs($tieOut) < 0.005
             ? 'reconciled'
@@ -405,8 +407,6 @@ class ReconciliationController extends Controller
             ->where('status', 'completed')
             ->get();
 
-        // Per user request: float_topup and float_deposit (deposit float) must be ADDED to float (increase), not subtracted
-        // Use same deltas as TransactionService for accuracy, but group float_topup/float_deposit as float IN
         $depositsByNetwork = $transactions
             ->whereIn('type', ['deposit'])
             ->groupBy('network_id')
@@ -427,9 +427,17 @@ class ReconciliationController extends Controller
             ->groupBy('network_id')
             ->map(fn ($group): float => (float) $group->sum('amount'));
 
+        // FloatTransaction top-ups for that date (e.g. 3×1M on 2026-09-21) — float is bank-replenished, must be added to expected
+        $floatTxTopupsByNetwork = FloatTransaction::where('agent_id', $agent->id)
+            ->whereDate('created_at', $date)
+            ->whereIn('type', ['float_topup', 'cash_in'])
+            ->get()
+            ->groupBy('network_id')
+            ->map(fn ($group): float => (float) $group->sum('amount'));
+
         $balances = $agent->balances()->get()->keyBy('network_id');
 
-        $rows = $networks->map(function (Network $network) use ($dailyOpening, $balances, $depositsByNetwork, $withdrawalsByNetwork, $floatTopupsByNetwork, $bankToWalletByNetwork): array {
+        $rows = $networks->map(function (Network $network) use ($dailyOpening, $balances, $depositsByNetwork, $withdrawalsByNetwork, $floatTopupsByNetwork, $bankToWalletByNetwork, $floatTxTopupsByNetwork): array {
             $balance = $balances->get($network->id);
 
             $opening = $dailyOpening !== null
@@ -442,11 +450,10 @@ class ReconciliationController extends Controller
 
             $deposits = (float) ($depositsByNetwork[$network->id] ?? 0);
             $withdrawals = (float) ($withdrawalsByNetwork[$network->id] ?? 0);
-            $floatTopups = (float) ($floatTopupsByNetwork[$network->id] ?? 0);
+            $floatTopups = (float) ($floatTopupsByNetwork[$network->id] ?? 0) + (float) ($floatTxTopupsByNetwork[$network->id] ?? 0);
             $bankIns = (float) ($bankToWalletByNetwork[$network->id] ?? 0);
 
-            // Float expected: opening - customer deposits (float out) + withdrawals (float in) + float topups/deposits (float in) + bank_to_wallet (float in)
-            // Per user: float_topup and float_deposit must be ADDED to float
+            // Float expected: opening - deposits + withdrawals + float top-ups + bank in
             $expected = round($opening - $deposits + $withdrawals + $floatTopups + $bankIns, 2);
 
             return [

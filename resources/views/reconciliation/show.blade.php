@@ -118,7 +118,7 @@
                         <tr>
                             <td>
                                 <div class="cell-title">{{ $row['network'] }} Float</div>
-                                <div class="cell-sub">Opening − deposits + withdrawals</div>
+                                <div class="cell-sub">Opening − deposits + withdrawals + top-ups</div>
                             </td>
                             <td>@money($row['opening'])</td>
                             <td>−@money($row['deposits'])</td>
@@ -135,6 +135,29 @@
                         <tr><td colspan="7" class="empty-state"><p>No network float rows recorded for this session.</p></td></tr>
                     @endforelse
                 </tbody>
+                <tfoot>
+                    @php
+                        $totalOpening = $run['openingCash'] + $run['openingFloat'];
+                        $totalDeposits = $run['cashDeposits'] + collect($run['networks'])->sum('deposits');
+                        $totalWithdrawals = $run['cashWithdrawals'] + collect($run['networks'])->sum('withdrawals');
+                        $totalExpected = $run['expectedCash'] + $run['expectedFloat'];
+                        $totalCounted = $run['countedCash'] + $run['countedFloat'];
+                        $totalVariance = $run['cashVariance'] + ($run['countedFloat'] - $run['expectedFloat']);
+                    @endphp
+                    <tr style="font-weight:700; background:var(--sand-50); border-top:2px solid var(--line);">
+                        <td>Total</td>
+                        <td>@money($totalOpening)</td>
+                        <td>+@money($totalDeposits)</td>
+                        <td>−@money($totalWithdrawals)</td>
+                        <td>@money($totalExpected)</td>
+                        <td>@money($totalCounted)</td>
+                        <td>
+                            <span class="tag {{ abs($totalVariance) < 0.005 ? 'tag-green' : ($totalVariance > 0 ? 'tag-gold' : 'tag-red') }}">
+                                {{ $totalVariance > 0 ? '+' : '' }}@money($totalVariance)
+                            </span>
+                        </td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     </div>
@@ -142,7 +165,7 @@
     <div class="panel">
         <div class="panel-head">
             <h3>Tie-out check</h3>
-            <span class="link">Opening cash + opening float must equal counted closing cash + counted closing float</span>
+            <span class="link">Expected total must equal counted total — float top-ups are bank-replenished and already in expected (not a variance)</span>
         </div>
         <div class="panel-body">
             <div class="balance-strip" style="margin-bottom:0;">
@@ -157,6 +180,11 @@
                 <div class="balance-box" style="--stat-tint:var(--sand-100);">
                     <div class="bb-label">= Opening total</div>
                     <div class="bb-amount">@money($run['openingCash'] + $run['openingFloat'])</div>
+                </div>
+                <div class="balance-box" style="--stat-tint:var(--gold-100);">
+                    <div class="bb-label">Expected closing total</div>
+                    <div class="bb-amount">@money($run['expectedCash'] + $run['expectedFloat'])</div>
+                    <div class="bb-sub">Cash @money($run['expectedCash']) + Float @money($run['expectedFloat']) — includes top-ups.</div>
                 </div>
                 <div class="balance-box">
                     <div class="bb-label">Counted closing cash in hand</div>
@@ -175,7 +203,7 @@
                             <span style="color:#8a6418;">{{ $run['tieOut'] > 0 ? '+' : '' }}@money($run['tieOut'])</span>
                         @endif
                     </div>
-                    <div class="bb-sub">Opening total minus counted closing total.</div>
+                    <div class="bb-sub">Expected total minus counted total (sum of variances; float top-up injection ignored).</div>
                 </div>
             </div>
         </div>

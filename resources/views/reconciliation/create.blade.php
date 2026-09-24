@@ -197,7 +197,7 @@
         <div class="panel" style="max-width:980px;">
             <div class="panel-head">
                 <h3>Float reconciliation per network</h3>
-                <span class="link">Opening + withdrawals + float top-ups + bank in − deposits = closing — all networks shown, top-ups added</span>
+                <span class="link">Opening − deposits + withdrawals + top-ups + bank in = closing — all networks shown (top-ups are bank float, in Expected)</span>
             </div>
             <div class="panel-body">
                 <div class="table-card">
@@ -243,6 +243,27 @@
                                     <tr><td colspan="9" class="empty-state"><h4>No active networks</h4><p>Enable at least one network to reconcile its float.</p></td></tr>
                                 @endforelse
                             </tbody>
+                            <tfoot>
+                                @php
+                                    $totalOpeningFloat = collect($run['networks'])->sum('opening');
+                                    $totalWithdrawals = collect($run['networks'])->sum('withdrawals');
+                                    $totalDeposits = collect($run['networks'])->sum('deposits');
+                                    $totalTopups = collect($run['networks'])->sum('float_topups');
+                                    $totalBankIns = collect($run['networks'])->sum('bank_ins');
+                                    $totalExpectedFloat = collect($run['networks'])->sum('expected');
+                                @endphp
+                                <tr style="font-weight:700; background:var(--sand-50); border-top:2px solid var(--line);" id="floatTotalRow">
+                                    <td>Total</td>
+                                    <td id="totalOpeningFloat">@money($totalOpeningFloat)</td>
+                                    <td id="totalWithdrawalsFloat">+@money($totalWithdrawals)</td>
+                                    <td id="totalDepositsFloat">−@money($totalDeposits)</td>
+                                    <td id="totalTopupsFloat" style="color:var(--acacia-600);">+@money($totalTopups)</td>
+                                    <td id="totalBankInsFloat" style="color:var(--acacia-600);">+@money($totalBankIns)</td>
+                                    <td id="totalExpectedFloat" style="font-weight:700;">@money($totalExpectedFloat)</td>
+                                    <td id="totalCountedFloat">—</td>
+                                    <td id="totalVarianceFloat" style="color:var(--coffee-700);">TZS 0</td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -252,7 +273,7 @@
         <div class="panel" style="max-width:980px;">
             <div class="panel-head">
                 <h3>Tie-out check</h3>
-                <span class="link">Opening cash on hand + opening float must equal counted closing cash in hand + counted closing float</span>
+                <span class="link">Expected closing (cash + float) must equal counted closing (cash + float) — float top-ups already in Expected</span>
             </div>
             <div class="panel-body">
                 <div class="balance-strip" style="margin-bottom:0;">
@@ -268,6 +289,11 @@
                         <div class="bb-label">= Opening total</div>
                         <div class="bb-amount" id="openingTotalDisplay">@money($run['openingCash'] + $run['openingFloat'])</div>
                     </div>
+                    <div class="balance-box" style="--stat-tint:var(--gold-100);">
+                        <div class="bb-label">Expected closing total</div>
+                        <div class="bb-amount" id="expectedTotalDisplay">@money($run['expectedCash'] + $run['expectedFloat'])</div>
+                        <div class="bb-sub">Cash @money($run['expectedCash']) + Float @money($run['expectedFloat'])</div>
+                    </div>
                     <div class="balance-box">
                         <div class="bb-label">Counted closing cash in hand</div>
                         <div class="bb-amount" id="countedCashTotal">@money($run['expectedCash'])</div>
@@ -279,7 +305,7 @@
                     <div class="balance-box" style="--stat-tint:var(--acacia-100);">
                         <div class="bb-label">Tie-out (must be 0)</div>
                         <div class="bb-amount" id="tieOutDisplay">TZS 0</div>
-                        <div class="bb-sub">Opening total minus counted closing total.</div>
+                        <div class="bb-sub">Expected total minus counted total (float injection ignored).</div>
                     </div>
                 </div>
             </div>
@@ -369,15 +395,25 @@
                 const floatVar = countedFloat - expectedFloat;
                 setDisplay(document.getElementById('floatVarDisplay'), floatVar);
 
-                const openingTotal = run.openingCash + run.openingFloat;
+                const expectedTotal = run.expectedCash + run.expectedFloat;
                 const countedTotal = countedCash + countedFloat;
-                const tieOut = openingTotal - countedTotal;
+                const tieOut = expectedTotal - countedTotal;
                 const tieOutEl = document.getElementById('tieOutDisplay');
                 tieOutEl.textContent = sign(tieOut) + fmt(tieOut);
                 tieOutEl.style.color = Math.abs(tieOut) < 0.005 ? 'var(--acacia-600)' : 'var(--danger)';
 
                 document.getElementById('countedCashTotal').textContent = fmt(countedCash);
                 document.getElementById('countedFloatTotal').textContent = fmt(countedFloat);
+                document.getElementById('expectedTotalDisplay').textContent = fmt(expectedTotal);
+                // Update float totals footer
+                const totalCountedCell = document.getElementById('totalCountedFloat');
+                const totalVarCell = document.getElementById('totalVarianceFloat');
+                if (totalCountedCell) totalCountedCell.textContent = fmt(countedFloat);
+                if (totalVarCell) {
+                    const totVar = countedFloat - run.expectedFloat;
+                    totalVarCell.textContent = (totVar > 0 ? '+' : (totVar < 0 ? '-' : '')) + fmt(totVar);
+                    totalVarCell.style.color = Math.abs(totVar) < 0.005 ? 'var(--coffee-700)' : (totVar < 0 ? 'var(--danger)' : '#8a6418');
+                }
 
                 const result = document.getElementById('resultDisplay');
                 if (Math.abs(cashVar) < 0.005 && Math.abs(floatVar) < 0.005 && Math.abs(tieOut) < 0.005) {

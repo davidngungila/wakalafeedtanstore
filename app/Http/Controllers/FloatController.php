@@ -69,7 +69,7 @@ class FloatController extends Controller
                 if ($openingVal == 0.0 && $bal) {
                     $openingVal = (float) $bal->opening_balance;
                 }
-                // Float delta for Transactions on that date for this network
+                // Float delta for Transactions on that date for this network — float_topup/float_deposit/bank_to_wallet are bank float IN
                 $txsForNet = Transaction::where('agent_id', $cashPoint->id)->where('network_id', $net->id)->whereDate('created_at', $viewDate)->where('status', 'completed')->get();
                 $netTxFloat = 0.0;
                 foreach ($txsForNet as $t) {
@@ -79,7 +79,7 @@ class FloatController extends Controller
                         default => -(float) $t->amount,
                     };
                 }
-                // Float delta for FloatTransactions on that date for this network
+                // Float delta for FloatTransactions on that date — float_topup/cash_in are float IN
                 $ftsForNet = FloatTransaction::where('agent_id', $cashPoint->id)->where('network_id', $net->id)->whereDate('created_at', $viewDate)->get();
                 $netFloatTx = 0.0;
                 foreach ($ftsForNet as $ft) {
@@ -116,7 +116,7 @@ class FloatController extends Controller
             $cashIn = 0.0;
             $cashOut = 0.0;
             foreach ($dayTxCash as $t) {
-                $d = in_array($t->type, ['deposit', 'airtime'], true) ? (float) $t->amount : (in_array($t->type, ['withdrawal', 'wallet_to_bank', 'float_deposit', 'float_topup'], true) ? -(float) $t->amount : 0);
+                $d = $this->cashDelta($t->type, (float) $t->amount);
                 if ($d > 0) {
                     $cashIn += $d;
                 } elseif ($d < 0) {
@@ -646,5 +646,16 @@ class FloatController extends Controller
         }
 
         return back()->with('status', 'Float transaction '.$reference.' deleted.');
+    }
+
+    private function cashDelta(string $type, float $amount): float
+    {
+        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime'], true)) {
+            return 0;
+        }
+
+        $direction = in_array($type, ['deposit', 'airtime'], true) ? 1 : -1;
+
+        return $direction * $amount;
     }
 }
