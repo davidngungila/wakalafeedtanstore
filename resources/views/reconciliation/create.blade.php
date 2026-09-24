@@ -138,11 +138,45 @@
             @endif
             @if($dayFloatTransactions->isNotEmpty())
                 <div style="padding:12px 16px; border-top:1px solid var(--line);">
-                    <strong>Float movements for {{ $selectedDate }} ({{ $dayFloatTransactions->count() }}):</strong>
-                    <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-                        @foreach($dayFloatTransactions as $ft)
-                            <span class="tag {{ $ft->type === 'float_topup' || $ft->type === 'cash_in' ? 'tag-green' : 'tag-terracotta' }}">{{ $ft->network?->name }}: {{ str_replace('_',' ',$ft->type) }} @money($ft->amount) at {{ $ft->created_at->format('H:i') }} {{ $ft->notes ? '· '.$ft->notes : '' }}</span>
-                        @endforeach
+                    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                        <strong>Float movements for {{ $selectedDate }} ({{ $dayFloatTransactions->count() }}) — manage where referenced</strong>
+                        <a href="{{ route('float.day', ['date' => $selectedDateEncrypted]) }}" class="btn btn-ghost btn-sm">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path></svg>
+                            Manage in Float Day
+                        </a>
+                    </div>
+                    <div class="table-scroll">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Network</th>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Notes</th>
+                                    <th style="text-align:center;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($dayFloatTransactions as $ft)
+                                <tr>
+                                    <td>{{ $ft->created_at->format('H:i:s') }}</td>
+                                    <td><span class="net-dot" style="background:{{ $ft->network?->color }};"></span> {{ $ft->network?->name }}</td>
+                                    <td><span class="tag {{ $ft->type === 'float_topup' || $ft->type === 'cash_in' ? 'tag-green' : 'tag-terracotta' }}">{{ str_replace('_',' ',$ft->type) }}</span></td>
+                                    <td class="cell-title">@money($ft->amount)</td>
+                                    <td style="max-width:280px; font-size:12px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="{{ $ft->notes }}">{{ Str::limit($ft->notes ?? '—', 70) }}</td>
+                                    <td style="white-space:nowrap; text-align:center;">
+                                        <a href="{{ route('float.day', ['date' => $selectedDateEncrypted]) }}" title="View day" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--ink);margin-right:3px;">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        </a>
+                                        <button type="button" onclick="if(confirm('Delete float {{ $ft->reference }}?')) deleteFloatFromRecon({{ $ft->id }}, '{{ $ft->reference }}')" title="Delete" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--danger);">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
+                                        </button>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             @endif
@@ -429,6 +463,16 @@
             floatInputs.forEach(i => i.addEventListener('input', recalc));
             recalc();
         })();
+
+        async function deleteFloatFromRecon(id, ref) {
+            if (!confirm('Delete float ' + ref + '? This reverts its balance and will affect this reconciliation expected.')) return;
+            try {
+                const resp = await fetch('/float/' + id, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data.success) { toast(data.message || 'Float deleted', 'success'); setTimeout(() => location.reload(), 500); }
+                else toast(data.message || 'Failed to delete', 'error');
+            } catch (e) { toast('Network error', 'error'); }
+        }
 
         document.querySelectorAll('[data-recon-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
