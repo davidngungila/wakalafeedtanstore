@@ -59,6 +59,8 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::put('/account/password', [AccountController::class, 'updatePassword'])->name('account.password');
     Route::post('/account/two-factor/confirm', [AccountController::class, 'confirmTwoFactor'])->name('account.two-factor.confirm');
     Route::post('/account/two-factor/disable', [AccountController::class, 'disableTwoFactor'])->name('account.two-factor.disable');
+    Route::post('/account/two-factor/method', [AccountController::class, 'updateTwoFactorMethod'])->name('account.two-factor.method');
+    Route::post('/account/two-factor/enable-email', [AccountController::class, 'enableEmailTwoFactor'])->name('account.two-factor.enable-email');
     Route::post('/account/recovery-codes', [AccountController::class, 'refreshRecoveryCodes'])->name('account.recovery-codes');
     Route::delete('/account/sessions/{session}', [AccountController::class, 'revokeSession'])->name('account.sessions.destroy');
 

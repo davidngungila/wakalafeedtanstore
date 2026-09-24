@@ -121,7 +121,7 @@ class SettingController extends Controller
         }
 
         try {
-            Mail::raw("This is a test email from Wakala Feedtan Store.\n\nIf you received this, your email settings (SMTP for OTP & Reports) are saved in database (settings key=email) and working.\n\nSent at ".now()->format('Y-m-d H:i:s').' to '.$to, function ($message) use ($to) {
+            Mail::send('emails.test', ['to' => $to], function ($message) use ($to) {
                 $message->to($to)->subject('Test Email — Wakala Feedtan Store — '.now()->format('H:i'));
             });
 

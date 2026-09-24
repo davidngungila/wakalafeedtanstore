@@ -13,7 +13,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
 
-#[Fillable(['name', 'email', 'phone', 'password', 'role', 'agent_id', 'is_active', 'two_factor_secret', 'two_factor_enabled', 'two_factor_recovery_codes', 'profile_photo_path'])]
+#[Fillable(['name', 'email', 'phone', 'password', 'role', 'agent_id', 'is_active', 'two_factor_secret', 'two_factor_enabled', 'two_factor_method', 'two_factor_recovery_codes', 'profile_photo_path'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {

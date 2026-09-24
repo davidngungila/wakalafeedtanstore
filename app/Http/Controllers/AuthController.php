@@ -52,11 +52,12 @@ class AuthController extends Controller
         $request->session()->put('two_factor_user_email', $user->email);
         $request->session()->regenerate();
 
-        // If OTP via email is enabled in settings, generate and send beautiful OTP email (system colors/fonts)
+        // If user selected Email OTP and system email OTP is enabled, send beautiful OTP email (system colors/fonts) — otherwise use Authenticator App
         try {
             $emailSettings = Setting::where('key', 'email')->value('value');
-            $otpViaEmail = is_array($emailSettings) && ($emailSettings['otp_via_email'] ?? '1') == '1' && ($emailSettings['otp_enabled'] ?? '1') == '1';
-            if ($otpViaEmail) {
+            $systemOtpEmail = is_array($emailSettings) && ($emailSettings['otp_via_email'] ?? '1') == '1' && ($emailSettings['otp_enabled'] ?? '1') == '1';
+            $userWantsEmail = ($user->two_factor_method ?? 'app') === 'email';
+            if ($systemOtpEmail && $userWantsEmail) {
                 $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
                 Cache::put('otp_email_'.$user->id, $code, 300);
                 Mail::send(new OtpMail($code, $user->email, 5));

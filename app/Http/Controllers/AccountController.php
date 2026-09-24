@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Setting;
 use App\Support\TwoFactor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -14,6 +15,63 @@ use Illuminate\View\View;
 
 class AccountController extends Controller
 {
+    public function updateTwoFactorMethod(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'method' => ['required', 'in:app,email'],
+        ]);
+
+        $user = auth()->user();
+
+        // Email OTP requires email settings enabled
+        if ($validated['method'] === 'email') {
+            $emailSettings = Setting::where('key', 'email')->value('value');
+            $otpViaEmail = is_array($emailSettings) && ($emailSettings['otp_via_email'] ?? '0') == '1' && ($emailSettings['otp_enabled'] ?? '0') == '1';
+            if (! $otpViaEmail) {
+                return response()->json(['success' => false, 'message' => 'Email OTP is not enabled in system settings.'], 422);
+            }
+        }
+
+        $user->forceFill(['two_factor_method' => $validated['method']])->save();
+
+        $this->recordAudit('Two-factor method updated', 'User', $user->id, ['method' => $validated['method']]);
+
+        return response()->json(['success' => true, 'message' => 'Verification method set to '.($validated['method'] === 'email' ? 'Email OTP' : 'Authenticator App').'.']);
+    }
+
+    public function enableEmailTwoFactor(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+
+        if ($user->two_factor_enabled) {
+            return response()->json(['success' => false, 'message' => 'Two-factor is already enabled. Disable first to switch method.'], 422);
+        }
+
+        $emailSettings = Setting::where('key', 'email')->value('value');
+        $otpViaEmail = is_array($emailSettings) && ($emailSettings['otp_via_email'] ?? '0') == '1' && ($emailSettings['otp_enabled'] ?? '0') == '1';
+        if (! $otpViaEmail) {
+            return response()->json(['success' => false, 'message' => 'Email OTP is not enabled in system settings.'], 422);
+        }
+
+        // For Email OTP we don't need TOTP secret — use a random secret but mark method as email
+        $secret = TwoFactor::generateSecret();
+
+        $recoveryCodes = TwoFactor::generateRecoveryCodes();
+
+        $user->forceFill([
+            'two_factor_secret' => Crypt::encryptString($secret),
+            'two_factor_enabled' => true,
+            'two_factor_method' => 'email',
+            'two_factor_recovery_codes' => array_map(fn (string $code): string => TwoFactor::hashRecoveryCode($code), $recoveryCodes),
+        ])->save();
+
+        $request->session()->forget('two_factor_pending_secret');
+
+        $this->recordAudit('Two-factor enabled via Email OTP', 'User', $user->id);
+
+        return response()->json(['success' => true, 'message' => 'Email OTP enabled. Codes will be sent to '.$user->email.' at login.', 'recovery_codes' => $recoveryCodes]);
+    }
+
     public function index(Request $request): View
     {
         $user = auth()->user();

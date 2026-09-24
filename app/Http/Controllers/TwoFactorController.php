@@ -97,6 +97,9 @@ class TwoFactorController extends Controller
         if (! $user) {
             return $request->expectsJson() ? response()->json(['success' => false, 'message' => 'User not found'], 422) : redirect()->route('login');
         }
+        if (($user->two_factor_method ?? 'app') !== 'email') {
+            return $request->expectsJson() ? response()->json(['success' => false, 'message' => 'Email OTP not selected — use authenticator app'], 422) : back()->withErrors(['code' => 'Email OTP not selected']);
+        }
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         Cache::put('otp_email_'.$user->id, $code, 300);
         try {
