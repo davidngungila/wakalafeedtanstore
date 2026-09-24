@@ -132,7 +132,6 @@
             </div>
         </div>
     @endif
-    @endif
 
     @if(!$isAdmin)
     <div class="table-card">
