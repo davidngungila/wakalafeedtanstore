@@ -121,7 +121,7 @@
     </div>
 
     <div class="modal-backdrop" id="deleteReconModal">
-        <div class="modal" style="max-width:440px;">
+        <div class="popup" style="max-width:440px; width:100%; margin:auto;">
             <div class="modal-head">
                 <h3>Delete Reconciliation</h3>
                 <button class="modal-close" onclick="closeModal('deleteReconModal')">✕</button>
@@ -141,7 +141,7 @@
     </form>
 
     <div class="modal-backdrop" id="lockReconModal">
-        <div class="modal" style="max-width:440px;">
+        <div class="popup" style="max-width:440px; width:100%; margin:auto;">
             <div class="modal-head">
                 <h3 id="lockReconTitle">Lock Report</h3>
                 <button class="modal-close" onclick="closeModal('lockReconModal')">✕</button>
