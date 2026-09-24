@@ -112,7 +112,7 @@
         document.querySelectorAll('[data-opening-edit]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                submitForm(form, { method: 'PUT', done: (data) => { toast(data.message || 'Opening saved', 'success'); setTimeout(() => window.location.href = '{{ route('float.index') }}?date=' + encodeURIComponent(form.querySelector('input[name=opening_date]').value), 700); } });
+                submitForm(form, { method: 'POST', done: (data) => { toast(data.message || 'Opening saved', 'success'); setTimeout(() => window.location.href = '{{ route('float.index') }}?date=' + encodeURIComponent(form.querySelector('input[name=opening_date]').value), 700); } });
             });
         });
     </script>

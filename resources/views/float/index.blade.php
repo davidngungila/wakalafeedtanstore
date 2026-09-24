@@ -243,7 +243,7 @@
         document.querySelectorAll('[data-float-balances]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                submitForm(form, { method: 'PUT', done: () => setTimeout(() => location.reload(), 600) });
+                submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
             });
         });
     </script>

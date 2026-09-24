@@ -238,14 +238,14 @@
         document.querySelectorAll('[data-transaction-edit]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                submitForm(form, { method: 'PUT', done: (data) => { toast(data.message || 'Updated', 'success'); setTimeout(() => window.location.href = '{{ route('transactions.index') }}', 700); } });
+                submitForm(form, { method: 'POST', done: (data) => { toast(data.message || 'Updated', 'success'); setTimeout(() => window.location.href = '{{ route('transactions.index') }}', 700); } });
             });
         });
         document.querySelectorAll('[data-transaction-delete]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
                 if (!confirm('Delete this transaction and reverse its assigned area balances?')) return;
-                submitForm(form, { method: 'DELETE', done: (data) => { toast(data.message || 'Deleted', 'success'); setTimeout(() => window.location.href = '{{ route('transactions.index') }}', 700); } });
+                submitForm(form, { method: 'POST', done: (data) => { toast(data.message || 'Deleted', 'success'); setTimeout(() => window.location.href = '{{ route('transactions.index') }}', 700); } });
             });
         });
 
