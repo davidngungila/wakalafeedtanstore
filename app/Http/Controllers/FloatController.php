@@ -218,15 +218,31 @@ class FloatController extends Controller
         $exportColumns = $this->exportColumns();
         $exportRoute = route('float.export');
 
-        // For admin: also load openings for date picker and the selected opening's details
-        $openings = collect();
+        // For admin: also load openings for manage-all link (not for single-day table anymore)
+        $openingsCount = 0;
         if ($isAdmin) {
-            $openings = DailyOpening::where('agent_id', $cashPoint->id)->orderByDesc('opening_date')->limit(30)->get();
+            $openingsCount = DailyOpening::where('agent_id', $cashPoint->id)->count();
         }
 
         $selectedDateEncrypted = $isAdmin ? $this->encryptDateParam($selectedDate) : $selectedDate;
 
-        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'allNetworks', 'summary', 'todayOpening', 'exportColumns', 'exportRoute', 'selectedDate', 'selectedDateEncrypted', 'viewDate', 'openings', 'isAdmin'));
+        return view('float.index', compact('balances', 'floatTransactions', 'networks', 'allNetworks', 'summary', 'todayOpening', 'exportColumns', 'exportRoute', 'selectedDate', 'selectedDateEncrypted', 'viewDate', 'openingsCount', 'isAdmin'));
+    }
+
+    public function days(Request $request): View|RedirectResponse
+    {
+        $cashPoint = cash_point();
+        if ($cashPoint === null) {
+            return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before managing float.');
+        }
+        if (! is_admin()) {
+            abort(403);
+        }
+
+        $openings = DailyOpening::where('agent_id', $cashPoint->id)->orderByDesc('opening_date')->paginate(30);
+        $allNetworks = Network::orderBy('name')->get(['id', 'name', 'color']);
+
+        return view('float.days', compact('openings', 'allNetworks'));
     }
 
     public function export(Request $request, ExportService $export)
