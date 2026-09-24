@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Agent;
 use App\Models\DailyOpening;
 use App\Models\FloatTransaction;
 use App\Models\Network;
