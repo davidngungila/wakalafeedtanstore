@@ -357,7 +357,8 @@ class ReconciliationController extends Controller
      */
     private function buildRun(Agent $agent, string $date): array
     {
-        $networks = Network::active()->orderBy('name')->get(['id', 'name', 'color']);
+        // Show float opening for ALL networks (active + inactive) as requested
+        $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
 
         $dailyOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($date))->first();
 
@@ -365,11 +366,12 @@ class ReconciliationController extends Controller
             ->where('agent_id', $agent->id)
             ->whereDate('created_at', $date)
             ->where('status', 'completed')
-            ->whereIn('type', ['deposit', 'float_deposit', 'withdrawal'])
             ->get();
 
+        // Per user request: float_topup and float_deposit (deposit float) must be ADDED to float (increase), not subtracted
+        // Use same deltas as TransactionService for accuracy, but group float_topup/float_deposit as float IN
         $depositsByNetwork = $transactions
-            ->whereIn('type', ['deposit', 'float_deposit'])
+            ->whereIn('type', ['deposit'])
             ->groupBy('network_id')
             ->map(fn ($group): float => (float) $group->sum('amount'));
 
@@ -378,9 +380,19 @@ class ReconciliationController extends Controller
             ->groupBy('network_id')
             ->map(fn ($group): float => (float) $group->sum('amount'));
 
+        $floatTopupsByNetwork = $transactions
+            ->whereIn('type', ['float_topup', 'float_deposit'])
+            ->groupBy('network_id')
+            ->map(fn ($group): float => (float) $group->sum('amount'));
+
+        $bankToWalletByNetwork = $transactions
+            ->where('type', 'bank_to_wallet')
+            ->groupBy('network_id')
+            ->map(fn ($group): float => (float) $group->sum('amount'));
+
         $balances = $agent->balances()->get()->keyBy('network_id');
 
-        $rows = $networks->map(function (Network $network) use ($dailyOpening, $balances, $depositsByNetwork, $withdrawalsByNetwork): array {
+        $rows = $networks->map(function (Network $network) use ($dailyOpening, $balances, $depositsByNetwork, $withdrawalsByNetwork, $floatTopupsByNetwork, $bankToWalletByNetwork): array {
             $balance = $balances->get($network->id);
 
             $opening = $dailyOpening !== null
@@ -393,6 +405,12 @@ class ReconciliationController extends Controller
 
             $deposits = (float) ($depositsByNetwork[$network->id] ?? 0);
             $withdrawals = (float) ($withdrawalsByNetwork[$network->id] ?? 0);
+            $floatTopups = (float) ($floatTopupsByNetwork[$network->id] ?? 0);
+            $bankIns = (float) ($bankToWalletByNetwork[$network->id] ?? 0);
+
+            // Float expected: opening - customer deposits (float out) + withdrawals (float in) + float topups/deposits (float in) + bank_to_wallet (float in)
+            // Per user: float_topup and float_deposit must be ADDED to float
+            $expected = round($opening - $deposits + $withdrawals + $floatTopups + $bankIns, 2);
 
             return [
                 'id' => $network->id,
@@ -401,7 +419,9 @@ class ReconciliationController extends Controller
                 'opening' => $opening,
                 'deposits' => $deposits,
                 'withdrawals' => $withdrawals,
-                'expected' => round($opening - $deposits + $withdrawals, 2),
+                'float_topups' => $floatTopups,
+                'bank_ins' => $bankIns,
+                'expected' => $expected,
             ];
         })->values()->all();
 
@@ -409,8 +429,19 @@ class ReconciliationController extends Controller
             ? (float) $dailyOpening->cash_opening
             : $this->previousClosingCash($agent, $date);
 
-        $cashDeposits = (float) $transactions->whereIn('type', ['deposit', 'float_deposit'])->sum('amount');
-        $cashWithdrawals = (float) $transactions->where('type', 'withdrawal')->sum('amount');
+        // Cash: use deltas as per TransactionService for all types
+        $cashIn = 0.0;
+        $cashOut = 0.0;
+        foreach ($transactions as $t) {
+            $delta = $this->cashDelta($t->type, (float) $t->amount);
+            if ($delta > 0) {
+                $cashIn += $delta;
+            } elseif ($delta < 0) {
+                $cashOut += abs($delta);
+            }
+        }
+        $cashDeposits = $cashIn;
+        $cashWithdrawals = $cashOut;
 
         return [
             'date' => $date,
@@ -422,6 +453,28 @@ class ReconciliationController extends Controller
             'expectedFloat' => round(array_sum(array_column($rows, 'expected')), 2),
             'networks' => $rows,
         ];
+    }
+
+    private function cashDelta(string $type, float $amount): float
+    {
+        if (! in_array($type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
+            return 0;
+        }
+        $direction = in_array($type, ['deposit', 'float_deposit', 'float_topup', 'airtime'], true) ? 1 : -1;
+        if ($type === 'wallet_to_bank') {
+            $direction = -1;
+        }
+
+        return $direction * $amount;
+    }
+
+    private function floatDelta(string $type, float $amount): float
+    {
+        return match ($type) {
+            'deposit', 'float_deposit', 'float_topup' => -$amount,
+            'withdrawal', 'bank_to_wallet' => $amount,
+            default => -$amount,
+        };
     }
 
     /**
