@@ -231,11 +231,9 @@ class TransactionController extends Controller
     public function create(Request $request): View
     {
         $combos = $this->combos();
+        // Show ALL messages in the database for Link to SMS (per user: SHOW ALL MESSAGE IN THE DATABASE) — no limit, ordered newest first, includes all statuses
         $smsMessages = SmsMessage::with(['device', 'network'])
-            ->whereNull('transaction_id')
-            ->whereIn('processing_status', ['NEEDS_REVIEW', 'FAILED', 'PARSED'])
             ->latest('server_received_at')
-            ->limit(50)
             ->get();
 
         $selectedDate = null;
