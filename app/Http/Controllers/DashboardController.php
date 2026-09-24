@@ -24,7 +24,7 @@ class DashboardController extends Controller
         $cashAvailable = $cashPoint?->cash_balance;
         $floatAvailable = NetworkBalance::sum('balance');
 
-        $todayDeposits = Transaction::whereDate('created_at', $today)->where('type', 'deposit')->where('status', 'completed')->sum('amount');
+        $todayDeposits = Transaction::whereDate('created_at', $today)->whereIn('type', ['deposit', 'airtime', 'send_money', 'float_deposit'])->where('status', 'completed')->sum('amount');
         $todayWithdrawals = Transaction::whereDate('created_at', $today)->where('type', 'withdrawal')->where('status', 'completed')->sum('amount');
         $todayCommission = Transaction::whereDate('created_at', $today)->where('status', 'completed')->sum('commission');
         $todayFees = Transaction::whereDate('created_at', $today)->where('status', 'completed')->sum('fee');
@@ -209,7 +209,7 @@ class DashboardController extends Controller
             $count = (int) $row->cnt;
             $isCompleted = $row->status === 'completed';
 
-            if ($isCompleted && $row->type === 'deposit') {
+            if ($isCompleted && in_array($row->type, ['deposit', 'airtime', 'send_money', 'float_deposit'], true)) {
                 $deposits[$index] += $amount;
             } elseif ($isCompleted && $row->type === 'withdrawal') {
                 $withdrawals[$index] += $amount;
@@ -319,7 +319,7 @@ class DashboardController extends Controller
                 ->value('running_cash_balance') ?? $cashAvailable);
         }
 
-        $inTypes = ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet', 'airtime'];
+        $inTypes = ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet', 'airtime', 'send_money'];
         $outTypes = ['withdrawal', 'wallet_to_bank'];
 
         $todayRow = Transaction::whereDate('created_at', $today)
