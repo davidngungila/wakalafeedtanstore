@@ -121,13 +121,20 @@
                     @php
                         $prevOpening = $opening ? ($opening->float_openings[$network->id] ?? null) : null;
                         $bal = $currentBalances[$network->id] ?? null;
-                        $suggested = old('float_openings.'.$network->id, $prevOpening ?? $bal?->opening_balance ?? $bal?->balance ?? 0);
+                        $prevCounted = $prevFloatCountedMap[$network->id] ?? $prevFloatCountedMap[$network->name] ?? null;
+                        $suggested = old('float_openings.'.$network->id, $prevOpening ?? $prevCounted ?? $bal?->balance ?? $bal?->opening_balance ?? 0);
+                        $isFromPrevCounted = $prevOpening === null && $prevCounted !== null && !old('float_openings.'.$network->id);
                     @endphp
                     <div class="field">
                         <label>
                             <span class="net-dot" style="background:{{ $network->color }};margin-right:7px;vertical-align:middle;"></span>
                             {{ $network->name }} Float
-                            @if($bal)<span style="font-size:11px; color:var(--ink-soft);"> (current live: @money($bal->balance) · opening: @money($bal->opening_balance))</span>@endif
+                            @if($isFromPrevCounted)
+                                <span style="font-size:11px; color:var(--acacia-600); font-weight:700;"> — from previous day Counted @money($prevCounted)</span>
+                                <span style="font-size:11px; color:var(--ink-soft);"> (reconciled {{ $prevDate->format('Y-m-d') }})</span>
+                            @elseif($bal)
+                                <span style="font-size:11px; color:var(--ink-soft);"> (current live: @money($bal->balance) · opening: @money($bal->opening_balance))</span>
+                            @endif
                         </label>
                         <input type="number" name="float_openings[{{ $network->id }}]" min="0" step="0.01" value="{{ $suggested }}" class="float-input" placeholder="0.00">
                         @error('float_openings.'.$network->id)<p style="color:var(--danger);font-size:12px;">{{ $message }}</p>@enderror
