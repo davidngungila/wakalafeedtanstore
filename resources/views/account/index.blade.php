@@ -1,9 +1,5 @@
 @extends('layouts.app')
 
-@php
-    use App\Support\TwoFactor;
-@endphp
-
 @section('title', 'Account & Security')
 
 @section('content')
@@ -244,30 +240,8 @@
             <div class="modal-body">
                 <ol style="margin:0 0 18px;padding-left:20px;color:var(--ink-soft);font-size:13.5px;line-height:1.8;">
                     <li>Install an authenticator app (Google Authenticator, Authy, Microsoft Authenticator, 1Password, etc.).</li>
-                    <li>Add a new account by scanning the QR code below or manually entering the setup key.</li>
                     <li>Enter the 6-digit code from the app to verify and enable two-factor authentication.</li>
                 </ol>
-
-                <div style="background:var(--sand-100);border:1px dashed var(--line);border-radius:12px;padding:24px;text-align:center;margin-bottom:20px;">
-                    <div id="otpauthQr" data-uri="{{ TwoFactor::otpauthUri($pendingSecret, $user->email) }}" style="display:inline-block;margin:0 auto 12px;"></div>
-                    <p style="margin:0 0 18px;color:var(--ink-soft);font-size:13px;">Scan this code with your authenticator app.</p>
-
-                    <div style="margin-bottom:18px;">
-                        <strong style="display:block;margin-bottom:8px;color:var(--coffee-900);font-size:13px;">Setup key (Manual entry)</strong>
-                        <div style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;">
-                            <code style="font-family:ui-monospace,monospace;background:var(--white);border:1px solid var(--line);border-radius:8px;padding:10px 14px;font-size:14px;font-weight:700;letter-spacing:.05em;color:var(--coffee-900);user-select:all;"
-                                id="setupKey">{{ chunk_split($pendingSecret, 4, ' ') }}</code>
-                            <button type="button" class="btn btn-ghost" onclick="copyText('{{ $pendingSecret }}', this)" style="padding:8px 14px;font-size:12.5px;">Copy key</button>
-                        </div>
-                    </div>
-
-                    <div style="margin-top:14px;">
-                        <strong style="display:block;margin-bottom:8px;color:var(--coffee-900);font-size:13px;">otpauth URI (apps that offer "Scan with camera")</strong>
-                        <code style="font-family:ui-monospace,monospace;background:var(--white);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:11.5px;color:var(--ink-soft);word-break:break-all;display:block;max-height:80px;overflow:auto;">
-                            {{ TwoFactor::otpauthUri($pendingSecret, $user->email) }}
-                        </code>
-                    </div>
-                </div>
 
                 <form method="POST" action="{{ route('account.two-factor.confirm') }}" data-2fa-confirm-form>
                     @csrf
