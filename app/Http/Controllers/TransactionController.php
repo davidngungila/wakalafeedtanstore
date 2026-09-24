@@ -689,8 +689,8 @@ class TransactionController extends Controller
             'transaction_date' => ['nullable', 'date'],
         ]);
 
-        if ($transaction->status === 'reversed') {
-            $message = 'Cannot edit a reversed transaction. Reverse has already undone its financial effects.';
+        if ($transaction->status === 'reversed' && ! is_admin()) {
+            $message = 'Cannot edit a reversed transaction. Reverse has already undone its financial effects. Ask an admin.';
             if ($request->expectsJson()) {
                 return response()->json(['success' => false, 'message' => $message], 422);
             }
@@ -722,6 +722,7 @@ class TransactionController extends Controller
         $oldStatus = $transaction->status;
         $oldReference = $transaction->reference;
         $oldProviderReference = $transaction->provider_reference;
+        $wasReversed = $oldStatus === 'reversed';
 
         $newAmount = (float) $validated['amount'];
         $newType = $validated['type'];
@@ -741,8 +742,9 @@ class TransactionController extends Controller
         $newDateStr = $newCreatedAt->format('Y-m-d');
 
         try {
-            DB::transaction(function () use ($transaction, $oldAmount, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldCommission, $oldStatus, $newAmount, $newType, $newNetworkId, $newFee, $newCommission, $validated, $isFinancialChange, $isDateChange, $isDateDayChange, $oldCreatedAt, $newCreatedAt, $oldDateStr, $newDateStr, $oldProviderReference): void {
+            DB::transaction(function () use ($transaction, $oldAmount, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldCommission, $oldStatus, $wasReversed, $newAmount, $newType, $newNetworkId, $newFee, $newCommission, $validated, $isFinancialChange, $isDateChange, $isDateDayChange, $oldCreatedAt, $newCreatedAt, $oldDateStr, $newDateStr, $oldProviderReference): void {
                 $needsFinancialAdjustment = $oldStatus === 'completed' && ($isFinancialChange || $isDateDayChange);
+                $needsReversedReapply = $wasReversed && is_admin() && ($isFinancialChange || $isDateDayChange || $wasReversed);
                 // Revert old financial effects if needed (amount/type/network or date day moved)
                 if ($needsFinancialAdjustment) {
                     // Revert old financial effects from the assigned area
@@ -845,6 +847,38 @@ class TransactionController extends Controller
                             $transaction->daily_opening_id = null;
                         }
                     }
+                } elseif ($needsReversedReapply) {
+                    // Admin editing a reversed transaction: already reverted, now re-apply as completed with new values
+                    $newDeltaFloat = $this->floatDelta($newType, $newAmount);
+                    $newBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $newNetworkId)->lockForUpdate()->first();
+                    if (! $newBalance) {
+                        $newBalance = NetworkBalance::create(['agent_id' => $oldAgentId, 'network_id' => $newNetworkId, 'opening_balance' => 0, 'balance' => 0]);
+                        $newBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $newNetworkId)->lockForUpdate()->first();
+                    }
+                    if ($newBalance) {
+                        $newBalance->balance = (float) $newBalance->balance + $newDeltaFloat;
+                        $newBalance->save();
+                    }
+                    $newDeltaCash = $this->cashDelta($newType, $newAmount);
+                    if ($newDeltaCash !== 0) {
+                        $agentNew = Agent::where('id', $oldAgentId)->lockForUpdate()->first();
+                        if ($agentNew) {
+                            $agentNew->cash_balance = (float) $agentNew->cash_balance + $newDeltaCash;
+                            $agentNew->save();
+                        }
+                    }
+                    $targetOpening = DailyOpening::forAgentAndDate($oldAgentId, $newCreatedAt)->first();
+                    $targetOpeningId = $targetOpening?->id;
+                    if ($targetOpeningId) {
+                        $opening = DailyOpening::where('id', $targetOpeningId)->lockForUpdate()->first();
+                        if ($opening) {
+                            $opening->total_volume = (float) $opening->total_volume + $newAmount;
+                            $opening->total_commission = (float) $opening->total_commission + $newCommission;
+                            $opening->total_transactions = (int) $opening->total_transactions + 1;
+                            $opening->save();
+                        }
+                        $transaction->daily_opening_id = $targetOpeningId;
+                    }
                 } elseif ($isFinancialChange && $oldStatus === 'completed') {
                     // This branch is now covered by needsFinancialAdjustment above; kept for safety but no-op
                 }
@@ -871,6 +905,13 @@ class TransactionController extends Controller
                 ];
                 if (Schema::hasColumn('transactions', 'running_network_balance')) {
                     $updates['running_network_balance'] = $runningNetwork;
+                }
+                // Admin re-activates reversed transaction: set back to completed
+                if ($wasReversed && is_admin()) {
+                    $updates['status'] = 'completed';
+                    $updates['reversed_by'] = null;
+                    $updates['reversed_at'] = null;
+                    $updates['reversal_reason'] = null;
                 }
 
                 if ($isDateChange) {
@@ -915,7 +956,8 @@ class TransactionController extends Controller
 
                 // Journal handling: keep GL in sync with the assigned area's transaction
                 // Rebuild if amount/type/network changed OR date (day) changed — entry_date must follow transaction date, and GL must reflect new values
-                $needsJournalRebuild = ($isFinancialChange || $isDateDayChange) && $oldStatus === 'completed';
+                // Also handle admin re-activating reversed transaction
+                $needsJournalRebuild = ($isFinancialChange || $isDateDayChange || $wasReversed) && ($oldStatus === 'completed' || ($wasReversed && is_admin()));
                 if ($needsJournalRebuild) {
                     $existingJournal = JournalEntry::where('reference', $transaction->reference)->first();
                     if ($existingJournal) {
@@ -955,8 +997,11 @@ class TransactionController extends Controller
                         if ($newDateStr !== $oldDateStr) {
                             $this->recomputeReconciliationForAgentDate($oldAgentId, $newDateStr);
                         }
-                    } elseif ($isFinancialChange && $oldStatus === 'completed') {
+                    } elseif (($isFinancialChange && $oldStatus === 'completed') || ($wasReversed && is_admin() && ($isFinancialChange || $isDateDayChange))) {
                         $this->recomputeReconciliationForAgentDate($oldAgentId, $oldDateStr);
+                        if ($wasReversed && $isDateDayChange && $newDateStr !== $oldDateStr) {
+                            $this->recomputeReconciliationForAgentDate($oldAgentId, $newDateStr);
+                        }
                     }
                 } catch (\Throwable $e) {
                     \Log::warning('Reconciliation auto-recompute failed after transaction edit', ['error' => $e->getMessage(), 'reference' => $oldReference]);

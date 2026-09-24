@@ -24,7 +24,7 @@
                 <div class="detail-item"><div class="dk">Cash Point / Agent</div><div class="dv">{{ $transaction->agent?->name ?? '—' }} · {{ $transaction->agent?->code ?? '' }}</div><div class="cell-sub">Area: {{ $transaction->agent?->region ?? '—' }} / {{ $transaction->agent?->district ?? '—' }} · Level {{ $transaction->agent?->agent_level ?? '—' }}</div></div>
                 <div class="detail-item"><div class="dk">Current Network</div><div class="dv"><span class="net-dot" style="background:{{ $transaction->network?->color ?? '#999' }};"></span> {{ $transaction->network?->name ?? '—' }} ({{ $transaction->network?->code ?? '—' }})</div></div>
                 <div class="detail-item"><div class="dk">Daily Opening</div><div class="dv">{{ $transaction->dailyOpening ? $transaction->dailyOpening->opening_date->format('Y-m-d') . ' · ' . money($transaction->dailyOpening->cash_opening) : '— (no opening linked)' }}</div><div class="cell-sub">Vol @money($transaction->dailyOpening?->total_volume ?? 0) · Comm @money($transaction->dailyOpening?->total_commission ?? 0) · {{ $transaction->dailyOpening?->total_transactions ?? 0 }} txs</div></div>
-                <div class="detail-item"><div class="dk">Status</div><div class="dv"><span class="tag {{ status_badge($transaction->status) }}">{{ ucfirst($transaction->status) }}</span> @if($transaction->status === 'reversed') <span style="font-size:11px;color:var(--ink-soft);">Cannot edit reversed transactions</span> @endif</div></div>
+                <div class="detail-item"><div class="dk">Status</div><div class="dv"><span class="tag {{ status_badge($transaction->status) }}">{{ ucfirst($transaction->status) }}</span> @if($transaction->status === 'reversed') <span style="font-size:11px;color:{{ is_admin() ? 'var(--acacia-600)' : 'var(--ink-soft)' }};">{{ is_admin() ? 'Reversed — admin can still edit (will re-activate as completed)' : 'Cannot edit reversed transactions' }}</span> @endif</div></div>
             </div>
             <div style="margin-top:14px; padding:10px 12px; background:var(--gold-100); border:1px solid var(--line); border-radius:8px; font-size:12.5px; line-height:1.6; color:var(--coffee-700);">
                 <strong>Editing affects the assigned area:</strong> Changing amount, type, or network will automatically reverse the old financial effects and re-apply the new ones against
@@ -61,18 +61,22 @@
             <span class="link">Editing {{ $transaction->reference }}</span>
         </div>
         <div class="panel-body">
-            @if($transaction->status === 'reversed')
+            @if($transaction->status === 'reversed' && !is_admin())
                 <div style="padding:12px; background:var(--danger-100); border-radius:8px; font-size:13px; margin-bottom:16px;">
                     This transaction is <strong>reversed</strong> and cannot be edited. Its balances have already been undone. Delete it instead if you need to remove it entirely.
                 </div>
+            @elseif($transaction->status === 'reversed' && is_admin())
+                <div style="padding:12px; background:var(--acacia-100); border-radius:8px; font-size:13px; margin-bottom:16px; border:1px solid var(--acacia-600);">
+                    <span style="color:var(--acacia-600); font-weight:700;">Admin:</span> This transaction is <strong>reversed</strong> — you can still edit it. Saving will re-activate it as <code>completed</code>, re-apply new cash/float balances, and re-post the journal.
+                </div>
             @endif
-            <form method="POST" action="{{ route('transactions.update', $transaction) }}" data-transaction-edit @if($transaction->status === 'reversed') onsubmit="return false;" @endif>
+            <form method="POST" action="{{ route('transactions.update', $transaction) }}" data-transaction-edit @if($transaction->status === 'reversed' && !is_admin()) onsubmit="return false;" @endif>
                 @csrf
                 @method('PUT')
                 <div class="form-row">
                     <div class="field">
                         <label>Network <span style="color:var(--danger);">*</span></label>
-                        <select name="network_id" id="editNetwork" required @if($transaction->status === 'reversed') disabled @endif>
+                        <select name="network_id" id="editNetwork" required @if($transaction->status === 'reversed' && !is_admin()) disabled @endif>
                             <option value="">Select network</option>
                             @foreach($combos['networks'] as $network)
                                 <option value="{{ $network->id }}" {{ (string)old('network_id', $transaction->network_id) === (string)$network->id ? 'selected' : '' }}>{{ $network->name }}</option>
@@ -82,7 +86,7 @@
                     </div>
                     <div class="field">
                         <label>Transaction type <span style="color:var(--danger);">*</span></label>
-                        <select name="type" id="editType" required @if($transaction->status === 'reversed') disabled @endif>
+                        <select name="type" id="editType" required @if($transaction->status === 'reversed' && !is_admin()) disabled @endif>
                             <option value="deposit" {{ old('type', $transaction->type) === 'deposit' ? 'selected' : '' }}>Customer Deposit</option>
                             <option value="withdrawal" {{ old('type', $transaction->type) === 'withdrawal' ? 'selected' : '' }}>Customer Withdrawal</option>
                             <option value="send_money" {{ old('type', $transaction->type) === 'send_money' ? 'selected' : '' }}>Send Money</option>
@@ -100,25 +104,25 @@
                 <div class="form-row">
                     <div class="field">
                         <label>Customer name</label>
-                        <input type="text" name="customer_name" value="{{ old('customer_name', $transaction->customer_name) }}" placeholder="e.g. Juma Athumani" @if($transaction->status === 'reversed') disabled @endif>
+                        <input type="text" name="customer_name" value="{{ old('customer_name', $transaction->customer_name) }}" placeholder="e.g. Juma Athumani" @if($transaction->status === 'reversed' && !is_admin()) disabled @endif>
                         @error('customer_name')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>
                     <div class="field">
                         <label>Customer phone <span style="color:var(--danger);">*</span></label>
-                        <input type="text" name="customer_phone" value="{{ old('customer_phone', $transaction->customer_phone) }}" placeholder="07xxxxxxxx" required @if($transaction->status === 'reversed') disabled @endif>
+                        <input type="text" name="customer_phone" value="{{ old('customer_phone', $transaction->customer_phone) }}" placeholder="07xxxxxxxx" required @if($transaction->status === 'reversed' && !is_admin()) disabled @endif>
                         @error('customer_phone')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="field">
                         <label>Amount (TZS) <span style="color:var(--danger);">*</span></label>
-                        <input type="number" name="amount" id="editAmount" value="{{ old('amount', $transaction->amount) }}" min="1" step="any" placeholder="e.g. 100000" required @if($transaction->status === 'reversed') disabled @endif>
+                        <input type="number" name="amount" id="editAmount" value="{{ old('amount', $transaction->amount) }}" min="1" step="any" placeholder="e.g. 100000" required @if($transaction->status === 'reversed' && !is_admin()) disabled @endif>
                         <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Fee and commission will be recalculated automatically.</p>
                         @error('amount')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>
                     <div class="field">
                         <label>Provider reference</label>
-                        <input type="text" name="provider_reference" id="editProviderRef" value="{{ old('provider_reference', $transaction->provider_reference) }}" placeholder="e.g. Tnx 626... or PP..." @if($transaction->status === 'reversed') disabled @endif>
+                        <input type="text" name="provider_reference" id="editProviderRef" value="{{ old('provider_reference', $transaction->provider_reference) }}" placeholder="e.g. Tnx 626... or PP..." @if($transaction->status === 'reversed' && !is_admin()) disabled @endif>
                         <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">If this matches an SMS, that SMS will be auto-linked as RECORDED.</p>
                         @error('provider_reference')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>
@@ -126,7 +130,7 @@
                 <div class="form-row">
                     <div class="field">
                         <label>Transaction date & time <span style="color:var(--danger);">*</span></label>
-                        <input type="datetime-local" name="transaction_date" id="editDate" value="{{ old('transaction_date', $transaction->created_at->format('Y-m-d').'T'.$transaction->created_at->format('H:i')) }}" required @if($transaction->status === 'reversed') disabled @endif>
+                        <input type="datetime-local" name="transaction_date" id="editDate" value="{{ old('transaction_date', $transaction->created_at->format('Y-m-d').'T'.$transaction->created_at->format('H:i')) }}" required @if($transaction->status === 'reversed' && !is_admin()) disabled @endif>
                         <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">When it actually happened. Changing moves it between Daily Openings, Reconciliation days, Reports & Journal dates. Was: {{ $transaction->created_at->format('d M Y H:i') }}</p>
                         @error('transaction_date')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>
@@ -157,13 +161,13 @@
                 </div>
                 <div class="field">
                     <label>Notes (optional)</label>
-                    <textarea name="notes" rows="2" maxlength="255" placeholder="Internal notes…" @if($transaction->status === 'reversed') disabled @endif>{{ old('notes', $transaction->notes) }}</textarea>
+                    <textarea name="notes" rows="2" maxlength="255" placeholder="Internal notes…" @if($transaction->status === 'reversed' && !is_admin()) disabled @endif>{{ old('notes', $transaction->notes) }}</textarea>
                     @error('notes')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                 </div>
 
                 <div style="display:flex; gap:10px; margin-top:18px;">
-                    @if($transaction->status !== 'reversed')
-                        <button type="submit" class="btn btn-primary">Save changes</button>
+                    @if($transaction->status !== 'reversed' || is_admin())
+                        <button type="submit" class="btn btn-primary">Save changes @if($transaction->status === 'reversed') (re-activate) @endif</button>
                         <a href="{{ route('transactions.index') }}" class="btn btn-ghost">Cancel</a>
                         <a href="{{ route('transactions.receipt', $transaction) }}" class="btn btn-ghost">View receipt</a>
                     @else
@@ -174,7 +178,7 @@
         </div>
     </div>
 
-    @if($transaction->status !== 'reversed')
+    @if($transaction->status !== 'reversed' || is_admin())
     <div class="panel" id="impactPanel" style="margin-top:18px; border-left:3px solid var(--terracotta-600);">
         <div class="panel-head">
             <h3>Where this edit will affect — Live Preview</h3>
@@ -211,7 +215,7 @@
     </div>
     @endif
 
-    @if($transaction->status !== 'reversed')
+    @if($transaction->status !== 'reversed' || is_admin())
     <div class="panel" style="margin-top:18px;">
         <div class="panel-head">
             <h3>Danger Zone</h3>
