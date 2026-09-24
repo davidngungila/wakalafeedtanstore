@@ -11,7 +11,10 @@
         <div class="view-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
             <a href="{{ route('float.days') }}" class="btn btn-ghost">← All Days (index)</a>
             <a href="{{ route('float.index', ['date' => $selectedDateEncrypted]) }}" class="btn btn-ghost">View in Float Filter</a>
-            <a href="{{ route('float.opening.edit', ['date' => $selectedDateEncrypted]) }}" class="btn btn-primary">✏️ Edit Opening</a>
+            <a href="{{ route('float.opening.edit', ['date' => $selectedDateEncrypted]) }}" class="btn btn-primary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 1 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit Opening
+            </a>
         </div>
     </div>
 
@@ -57,9 +60,18 @@
                     </div>
                 </div>
                 <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
-                    <a href="{{ route('float.opening.edit', ['date' => $selectedDateEncrypted]) }}" class="btn btn-primary btn-sm">✏️ Edit Opening for this day</a>
-                    <a href="{{ route('daily-opening.show', $todayOpening) }}" class="btn btn-ghost btn-sm">View Daily Opening</a>
-                    <button type="button" onclick="deleteDay('{{ $selectedDate }}', '{{ $viewDate->format('Y-m-d') }}', false)" class="btn btn-ghost btn-sm" style="color:var(--danger); border:1px solid var(--line);">🗑️ Delete Day (opening only)</button>
+                    <a href="{{ route('float.opening.edit', ['date' => $selectedDateEncrypted]) }}" class="btn btn-primary btn-sm">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 1 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        Edit Opening for this day
+                    </a>
+                    <a href="{{ route('daily-opening.show', $todayOpening) }}" class="btn btn-ghost btn-sm">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        View Daily Opening
+                    </a>
+                    <button type="button" onclick="deleteDay('{{ $selectedDate }}', '{{ $viewDate->format('Y-m-d') }}', false)" class="btn btn-ghost btn-sm" style="color:var(--danger); border:1px solid var(--line); display:inline-flex; align-items:center; gap:6px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        Delete Day (opening only)
+                    </button>
                 </div>
             @else
                 <div style="padding:12px; background:var(--danger-100); border-radius:8px; font-size:13px;">No Daily Opening for <strong>{{ $selectedDate }}</strong> — <a href="{{ route('float.opening.edit', ['date' => $selectedDateEncrypted]) }}" class="btn btn-sm btn-primary" style="margin-left:8px;">Create Opening for this day</a></div>
