@@ -245,6 +245,122 @@ class FloatController extends Controller
         return view('float.days', compact('openings', 'allNetworks'));
     }
 
+    public function showDay(Request $request, string $date): View|RedirectResponse
+    {
+        $cashPoint = cash_point();
+        if ($cashPoint === null) {
+            return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before managing float.');
+        }
+        if (! is_admin()) {
+            abort(403);
+        }
+
+        // Date in path is encrypted (eyJ...), decrypt to Y-m-d
+        $decrypted = $this->decryptDateParam($date);
+        $plain = $decrypted ?? $date;
+        if (! $this->isPlainDate($plain)) {
+            // Try raw date as plain fallback (for old plain links)
+            $plain = $date;
+        }
+        try {
+            $viewDate = Carbon::parse($plain);
+        } catch (\Throwable) {
+            return redirect()->route('float.days')->with('error', 'Invalid date');
+        }
+        $selectedDate = $viewDate->toDateString();
+
+        // Reuse same logic as index single-day but isolated to this day only (no all-days table)
+        $todayOpening = DailyOpening::forAgentAndDate($cashPoint->id, $viewDate)->first();
+
+        $previousClosingCash = $this->closingCashForDate($cashPoint, $viewDate->copy()->subDay());
+        $previousClosingFloat = $this->closingFloatForDate($cashPoint, $viewDate->copy()->subDay());
+
+        $networksAll = Network::orderBy('name')->get(['id', 'name', 'color']);
+        $balancesForDate = collect();
+        foreach ($networksAll as $net) {
+            $bal = $cashPoint->balances()->where('network_id', $net->id)->first();
+            $openingVal = $todayOpening ? $todayOpening->getFloatOpening($net->id) : (float) ($bal?->opening_balance ?? 0);
+            if ($openingVal == 0.0 && $bal) {
+                $openingVal = (float) $bal->opening_balance;
+            }
+            if ($openingVal == 0.0 && $previousClosingFloat !== null) {
+                $prevClose = $this->closingNetworkBalanceForDate($cashPoint, $viewDate->copy()->subDay(), $net->id);
+                if ($prevClose !== null) {
+                    $openingVal = $prevClose;
+                }
+            }
+            $txsForNet = Transaction::where('agent_id', $cashPoint->id)->where('network_id', $net->id)->whereDate('created_at', $viewDate)->where('status', 'completed')->get();
+            $netTxFloat = 0;
+            foreach ($txsForNet as $t) {
+                $netTxFloat += match ($t->type) {
+                    'deposit' => -(float) $t->amount,
+                    'withdrawal','bank_to_wallet','float_topup','float_deposit' => (float) $t->amount,
+                    default => -(float) $t->amount,
+                };
+            }
+            $ftsForNet = FloatTransaction::where('agent_id', $cashPoint->id)->where('network_id', $net->id)->whereDate('created_at', $viewDate)->get();
+            $netFloatTx = 0;
+            foreach ($ftsForNet as $ft) {
+                $netFloatTx += match ($ft->type) {
+                    'cash_in','float_topup' => (float) $ft->amount,
+                    'cash_out','float_pull' => -(float) $ft->amount,
+                    default => 0,
+                };
+            }
+            $balancesForDate->push((object) [
+                'network' => $net,
+                'network_id' => $net->id,
+                'opening_balance' => $openingVal,
+                'balance' => $openingVal + $netTxFloat + $netFloatTx,
+            ]);
+        }
+        $balances = $balancesForDate;
+
+        $resolvedCashOpening = $todayOpening ? (float) $todayOpening->cash_opening : (float) ($previousClosingCash ?? 0);
+        $dayTxCash = Transaction::where('agent_id', $cashPoint->id)->whereDate('created_at', $viewDate)->where('status', 'completed')->get();
+        $cashIn = 0;
+        $cashOut = 0;
+        foreach ($dayTxCash as $t) {
+            $d = $this->cashDelta($t->type, (float) $t->amount);
+            if ($d > 0) {
+                $cashIn += $d;
+            } elseif ($d < 0) {
+                $cashOut += abs($d);
+            }
+        }
+        $dayFloatCash = FloatTransaction::where('agent_id', $cashPoint->id)->whereDate('created_at', $viewDate)->get();
+        foreach ($dayFloatCash as $ft) {
+            if ($ft->type === 'cash_in') {
+                $cashIn += (float) $ft->amount;
+            } elseif (in_array($ft->type, ['cash_out', 'float_pull'], true)) {
+                $cashOut += (float) $ft->amount;
+            }
+        }
+        $summary = [
+            'totalFloat' => (float) $balances->sum('balance'),
+            'floatOut' => (float) $balances->sum('balance'),
+            'totalCash' => $resolvedCashOpening + $cashIn - $cashOut,
+            'networks' => Network::count(),
+            'resolvedCashOpening' => $resolvedCashOpening,
+            'previousClosingCash' => $previousClosingCash,
+            'previousClosingFloat' => $previousClosingFloat,
+            'cashIn' => $cashIn,
+            'cashOut' => $cashOut,
+        ];
+        $summary['floatCapacity'] = $summary['totalFloat'] + $summary['totalCash'];
+
+        $floatTransactions = FloatTransaction::with(['network', 'operator'])->where('agent_id', $cashPoint->id)->whereDate('created_at', $viewDate)->latest()->limit(50)->get();
+        $dayTransactions = Transaction::with(['network', 'operator'])->where('agent_id', $cashPoint->id)->whereDate('created_at', $viewDate)->latest()->limit(50)->get();
+
+        $allNetworks = Network::orderBy('name')->get(['id', 'name', 'color']);
+        $networks = Network::active()->orderBy('name')->get(['id', 'name', 'color']);
+        $exportColumns = $this->exportColumns();
+        $exportRoute = route('float.export');
+        $selectedDateEncrypted = $this->encryptDateParam($selectedDate);
+
+        return view('float.day', compact('balances', 'floatTransactions', 'dayTransactions', 'networks', 'allNetworks', 'summary', 'todayOpening', 'exportColumns', 'exportRoute', 'selectedDate', 'selectedDateEncrypted', 'viewDate'));
+    }
+
     public function export(Request $request, ExportService $export)
     {
         $cashPoint = cash_point();
@@ -523,7 +639,6 @@ class FloatController extends Controller
         $rawDate = $request->input('date', today()->toDateString());
         $decrypted = $this->decryptDateParam($rawDate);
         if ($decrypted === null && $this->isPlainDate($rawDate) && $rawDate !== today()->toDateString()) {
-            // Redirect to encrypted if plain was passed (except today which can stay plain for convenience)
             return redirect()->route('float.opening.edit', ['date' => $this->encryptDateParam($rawDate)]);
         }
         $dateStr = $decrypted ?? $rawDate ?? today()->toDateString();
@@ -538,7 +653,19 @@ class FloatController extends Controller
         $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
         $currentBalances = $agent->balances()->with('network')->get()->keyBy('network_id');
 
-        return view('float.edit-opening', compact('agent', 'networks', 'currentBalances', 'opening', 'viewDate', 'dateStr'));
+        // Previous day reconciled report for cash reference (must reference counted cash)
+        $prevDate = $viewDate->copy()->subDay();
+        $previousReconciliation = $agent->reconciliations()->where('reconciliation_date', $prevDate->toDateString())->latest()->first();
+        $previousClosingCash = null;
+        if ($previousReconciliation) {
+            $previousClosingCash = (float) $previousReconciliation->counted_cash;
+        } else {
+            $previousClosingCash = $this->closingCashForDate($agent, $prevDate);
+        }
+        // Suggested cash opening: previous reconciled counted cash, or existing opening, or live balance
+        $suggestedCash = $opening?->cash_opening ?? $previousClosingCash ?? $agent->cash_balance ?? 0;
+
+        return view('float.edit-opening', compact('agent', 'networks', 'currentBalances', 'opening', 'viewDate', 'dateStr', 'previousReconciliation', 'previousClosingCash', 'suggestedCash', 'prevDate'));
     }
 
     /**

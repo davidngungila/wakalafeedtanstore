@@ -626,7 +626,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
                     <span>Transactions</span>
                 </a>
-                <a href="{{ route('float.index') }}" class="sb-item {{ $isFloatArea ? 'active' : '' }}">
+                <a href="{{ is_admin() ? route('float.days') : route('float.index') }}" class="sb-item {{ $isFloatArea ? 'active' : '' }}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l9-9 5 5 4-4"></path><path d="m16 8 2-2"></path><path d="M9 14 7 16"></path></svg>
                     <span>Cash &amp; Float</span>
                 </a>

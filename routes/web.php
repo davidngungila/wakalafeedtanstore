@@ -77,6 +77,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::get('/networks/{network}', [NetworkController::class, 'show'])->name('networks.show');
 
     Route::get('/float/days', [FloatController::class, 'days'])->name('float.days');
+    Route::get('/float/day/{date}', [FloatController::class, 'showDay'])->name('float.day');
     Route::get('/float/export', [FloatController::class, 'export'])->name('float.export');
     Route::get('/float', [FloatController::class, 'index'])->name('float.index');
     Route::get('/float/create', [FloatController::class, 'create'])->name('float.create');

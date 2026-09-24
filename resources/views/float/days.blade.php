@@ -44,7 +44,7 @@
                             <td>{{ $op->total_transactions }} txs<br><span class="cell-sub">@money($op->total_volume)</span></td>
                             <td><span class="tag {{ $op->is_closed ? 'tag-grey' : 'tag-green' }}">{{ $op->is_closed ? 'Closed' : 'Open' }}</span></td>
                             <td style="white-space:nowrap; text-align:center;">
-                                <a href="{{ route('float.index', ['date' => \Illuminate\Support\Facades\Crypt::encryptString($op->opening_date->toDateString())]) }}" title="View day (its page only)" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--ink);margin-right:4px;">
+                                <a href="{{ route('float.day', ['date' => \Illuminate\Support\Facades\Crypt::encryptString($op->opening_date->toDateString())]) }}" title="View day — only its opening (its page)" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--ink);margin-right:4px;">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                 </a>
                                 <a href="{{ route('float.opening.edit', ['date' => \Illuminate\Support\Facades\Crypt::encryptString($op->opening_date->toDateString())]) }}" title="Edit opening" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--acacia-600);margin-right:4px;">
@@ -65,7 +65,7 @@
                 {{ $openings->links() }}
             </div>
             <div style="padding:10px 12px; background:var(--sand-50); border-top:1px solid var(--line); font-size:12px; color:var(--ink-soft);">
-                Single-day page <code>/float?date=</code> is now clean — each encrypted date shows only its own cash/float/activity. Use this table to manage all days. Icons: 👁 View day page, ✏️ Edit opening, 🗑️ Delete day.
+                Single-day page <code>/float/day/{encrypted}</code> (and legacy <code>/float?date=eyJ...</code>) is clean — each shows only its own opening. Use this table as <strong>index</strong> for all days. Icons: 👁 View dedicated day page (only that day opened), ✏️ Edit opening, 🗑️ Delete day.
             </div>
         </div>
     </div>

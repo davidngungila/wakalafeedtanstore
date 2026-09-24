@@ -119,7 +119,10 @@
             </div>
             <div class="panel-body">
                 <p style="font-size:13px; color:var(--ink-soft);">This page shows only <strong>{{ $viewDate->format('Y-m-d') }}</strong> — cash, float, and activity for that date alone. To manage all added days in a table (edit/delete any day), use the dedicated page.</p>
-                <a href="{{ route('float.days') }}" class="btn btn-primary btn-sm">📋 Manage All Days (table)</a>
+                <a href="{{ route('float.days') }}" class="btn btn-primary btn-sm">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V4"></path></svg>
+                    Manage All Days (table)
+                </a>
                 <span style="font-size:12px; color:var(--ink-soft); margin-left:8px;">Same table previously shown here is now at <code>/float/days</code> — keeps single-day page clean.</span>
             </div>
         </div>
