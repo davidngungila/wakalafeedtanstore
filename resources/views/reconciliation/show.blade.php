@@ -92,6 +92,7 @@
                         <th>Opening</th>
                         <th>Deposits</th>
                         <th>Withdrawals</th>
+                        <th>+ Top-ups</th>
                         <th>= Expected closing</th>
                         <th>Counted</th>
                         <th>Variance</th>
@@ -106,6 +107,7 @@
                         <td>@money($run['openingCash'])</td>
                         <td>+@money($run['cashDeposits'])</td>
                         <td>−@money($run['cashWithdrawals'])</td>
+                        <td style="color:var(--ink-soft);">—</td>
                         <td>@money($run['expectedCash'])</td>
                         <td>@money($run['countedCash'])</td>
                         <td>
@@ -123,6 +125,7 @@
                             <td>@money($row['opening'])</td>
                             <td>−@money($row['deposits'])</td>
                             <td>+@money($row['withdrawals'])</td>
+                            <td style="color:var(--acacia-600);">+@money($row['float_topups'] ?? 0)</td>
                             <td>@money($row['expected'])</td>
                             <td>@money($row['counted'])</td>
                             <td>
@@ -132,7 +135,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="empty-state"><p>No network float rows recorded for this session.</p></td></tr>
+                        <tr><td colspan="8" class="empty-state"><p>No network float rows recorded for this session.</p></td></tr>
                     @endforelse
                 </tbody>
                 <tfoot>
@@ -140,6 +143,7 @@
                         $totalOpening = $run['openingCash'] + $run['openingFloat'];
                         $totalDeposits = $run['cashDeposits'] + collect($run['networks'])->sum('deposits');
                         $totalWithdrawals = $run['cashWithdrawals'] + collect($run['networks'])->sum('withdrawals');
+                        $totalTopups = collect($run['networks'])->sum(fn($r) => $r['float_topups'] ?? 0);
                         $totalExpected = $run['expectedCash'] + $run['expectedFloat'];
                         $totalCounted = $run['countedCash'] + $run['countedFloat'];
                         $totalVariance = $run['cashVariance'] + ($run['countedFloat'] - $run['expectedFloat']);
@@ -149,6 +153,7 @@
                         <td>@money($totalOpening)</td>
                         <td>+@money($totalDeposits)</td>
                         <td>−@money($totalWithdrawals)</td>
+                        <td style="color:var(--acacia-600);">+@money($totalTopups)</td>
                         <td>@money($totalExpected)</td>
                         <td>@money($totalCounted)</td>
                         <td>
@@ -162,10 +167,14 @@
         </div>
     </div>
 
+    @php
+        $totalTopupsForTie = collect($run['networks'])->sum(fn($r) => $r['float_topups'] ?? 0);
+        $openingPlusTopups = $run['openingCash'] + $run['openingFloat'] + $totalTopupsForTie;
+    @endphp
     <div class="panel">
         <div class="panel-head">
             <h3>Tie-out check</h3>
-            <span class="link">Expected total must equal counted total — float top-ups are bank-replenished and already in expected (not a variance)</span>
+            <span class="link">Opening + float top-ups (bank) + customer activity must equal counted closing — top-ups included in opening and closing</span>
         </div>
         <div class="panel-body">
             <div class="balance-strip" style="margin-bottom:0;">
@@ -181,10 +190,20 @@
                     <div class="bb-label">= Opening total</div>
                     <div class="bb-amount">@money($run['openingCash'] + $run['openingFloat'])</div>
                 </div>
+                <div class="balance-box" style="--stat-tint:var(--acacia-100);">
+                    <div class="bb-label">+ Float top-ups (bank)</div>
+                    <div class="bb-amount">+@money($totalTopupsForTie)</div>
+                    <div class="bb-sub">Not customer activity — added to both sides.</div>
+                </div>
+                <div class="balance-box" style="--stat-tint:var(--gold-100);">
+                    <div class="bb-label">= Opening + top-ups</div>
+                    <div class="bb-amount">@money($openingPlusTopups)</div>
+                    <div class="bb-sub">Should equal Expected @money($run['expectedCash'] + $run['expectedFloat'])</div>
+                </div>
                 <div class="balance-box" style="--stat-tint:var(--gold-100);">
                     <div class="bb-label">Expected closing total</div>
                     <div class="bb-amount">@money($run['expectedCash'] + $run['expectedFloat'])</div>
-                    <div class="bb-sub">Cash @money($run['expectedCash']) + Float @money($run['expectedFloat']) — includes top-ups.</div>
+                    <div class="bb-sub">Cash @money($run['expectedCash']) + Float @money($run['expectedFloat']) — includes top-ups + deposits/withdrawals.</div>
                 </div>
                 <div class="balance-box">
                     <div class="bb-label">Counted closing cash in hand</div>
@@ -193,6 +212,10 @@
                 <div class="balance-box">
                     <div class="bb-label">+ Counted closing float</div>
                     <div class="bb-amount">+@money($run['countedFloat'])</div>
+                </div>
+                <div class="balance-box" style="--stat-tint:var(--sand-100);">
+                    <div class="bb-label">= Counted total (with top-ups)</div>
+                    <div class="bb-amount">@money($run['countedCash'] + $run['countedFloat'])</div>
                 </div>
                 <div class="balance-box" style="--stat-tint:{{ abs($run['tieOut']) < 0.005 ? 'var(--acacia-100)' : 'var(--gold-100)' }};">
                     <div class="bb-label">Tie-out (must be 0)</div>
@@ -203,7 +226,7 @@
                             <span style="color:#8a6418;">{{ $run['tieOut'] > 0 ? '+' : '' }}@money($run['tieOut'])</span>
                         @endif
                     </div>
-                    <div class="bb-sub">Expected total minus counted total (sum of variances; float top-up injection ignored).</div>
+                    <div class="bb-sub">Expected total minus counted total — top-ups included on both sides, so 3M injection shows 0.</div>
                 </div>
             </div>
         </div>

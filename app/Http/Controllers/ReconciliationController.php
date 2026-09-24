@@ -192,6 +192,8 @@ class ReconciliationController extends Controller
                 'opening' => $row['opening'],
                 'deposits' => $row['deposits'],
                 'withdrawals' => $row['withdrawals'],
+                'float_topups' => $row['float_topups'] ?? 0,
+                'bank_ins' => $row['bank_ins'] ?? 0,
                 'expected' => $row['expected'],
                 'system' => $row['expected'],
                 'counted' => $counted,
@@ -549,29 +551,50 @@ class ReconciliationController extends Controller
         $rows = collect($reconciliation->network_balances ?? [])->map(function (array $row): array {
             $expected = (float) ($row['expected'] ?? $row['system'] ?? 0);
             $counted = (float) ($row['counted'] ?? 0);
+            $opening = (float) ($row['opening'] ?? 0);
+            $deposits = (float) ($row['deposits'] ?? 0);
+            $withdrawals = (float) ($row['withdrawals'] ?? 0);
+            $floatTopups = (float) ($row['float_topups'] ?? 0);
+            $bankIns = (float) ($row['bank_ins'] ?? 0);
+            // Backfill for historic records saved before float_topups was stored: infer top-ups so Opening - deposits + withdrawals + top-ups = Expected
+            if (abs($floatTopups) < 0.005 && abs($bankIns) < 0.005) {
+                $inferred = round($expected - ($opening - $deposits + $withdrawals), 2);
+                if (abs($inferred) > 0.005) {
+                    $floatTopups = $inferred;
+                }
+            }
 
             return [
                 'network' => $row['network'] ?? 'Network',
-                'opening' => (float) ($row['opening'] ?? 0),
-                'deposits' => (float) ($row['deposits'] ?? 0),
-                'withdrawals' => (float) ($row['withdrawals'] ?? 0),
+                'opening' => $opening,
+                'deposits' => $deposits,
+                'withdrawals' => $withdrawals,
+                'float_topups' => $floatTopups,
+                'bank_ins' => $bankIns,
                 'expected' => $expected,
                 'counted' => $counted,
                 'variance' => round($counted - $expected, 2),
             ];
         })->values()->all();
 
+        $countedFloat = (float) collect($reconciliation->network_balances ?? [])->sum('counted');
+        $expectedFloat = (float) $reconciliation->total_float;
+        $expectedCash = (float) $reconciliation->expected_cash;
+        $countedCash = (float) $reconciliation->counted_cash;
+        // Recompute tie-out as Expected - Counted so historic -3M (opening - counted) records now show 0 when variances are 0 (top-ups already in expected)
+        $recomputedTieOut = round(($expectedCash + $expectedFloat) - ($countedCash + $countedFloat), 2);
+
         return [
             'openingCash' => (float) $reconciliation->opening_cash,
             'cashDeposits' => (float) $reconciliation->cash_deposits,
             'cashWithdrawals' => (float) $reconciliation->cash_withdrawals,
-            'expectedCash' => (float) $reconciliation->expected_cash,
-            'countedCash' => (float) $reconciliation->counted_cash,
+            'expectedCash' => $expectedCash,
+            'countedCash' => $countedCash,
             'cashVariance' => (float) $reconciliation->cash_variance,
             'openingFloat' => (float) $reconciliation->opening_float,
-            'expectedFloat' => (float) $reconciliation->total_float,
-            'countedFloat' => (float) collect($reconciliation->network_balances ?? [])->sum('counted'),
-            'tieOut' => (float) $reconciliation->tie_out,
+            'expectedFloat' => $expectedFloat,
+            'countedFloat' => $countedFloat,
+            'tieOut' => $recomputedTieOut,
             'networks' => $rows,
         ];
     }
