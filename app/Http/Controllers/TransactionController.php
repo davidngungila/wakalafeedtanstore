@@ -47,6 +47,14 @@ class TransactionController extends Controller
             $query->where('network_id', $request->input('network'));
         }
 
+        if ($request->filled('date')) {
+            try {
+                $d = Carbon::parse($request->input('date'))->toDateString();
+                $query->whereDate('created_at', $d);
+            } catch (\Throwable) {
+            }
+        }
+
         if ($request->filled('q')) {
             $needle = $request->input('q');
             $query->where(function ($sub) use ($needle) {
@@ -67,11 +75,40 @@ class TransactionController extends Controller
             'failed' => (int) Transaction::whereDate('created_at', today())->whereIn('status', ['failed', 'reversed'])->count(),
         ];
 
+        // Per-network totals for the currently filtered set (respects status/type/network/date/q) — total for all on each network per selected date
+        $filteredBase = clone $query;
+        $filteredBase->getQuery()->limit = null;
+        $filteredBase->getQuery()->offset = null;
+        $filteredBase->getQuery()->orders = null;
+        $perNetworkTotals = (clone $filteredBase)
+            ->selectRaw('network_id, COUNT(*) as cnt, SUM(amount) as vol, SUM(commission) as comm, SUM(fee) as fee')
+            ->groupBy('network_id')
+            ->with('network')
+            ->get()
+            ->map(fn ($r) => [
+                'network_id' => $r->network_id,
+                'network' => $r->network?->name ?? '—',
+                'color' => $r->network?->color ?? '#999',
+                'count' => (int) $r->cnt,
+                'volume' => (float) $r->vol,
+                'commission' => (float) $r->comm,
+                'fee' => (float) $r->fee,
+            ])
+            ->sortByDesc('volume')
+            ->values();
+
+        $filteredGrand = [
+            'count' => (int) (clone $filteredBase)->count(),
+            'volume' => (float) (clone $filteredBase)->sum('amount'),
+            'commission' => (float) (clone $filteredBase)->sum('commission'),
+            'fee' => (float) (clone $filteredBase)->sum('fee'),
+        ];
+
         $combos = $this->combos();
         $exportColumns = $this->exportColumns();
         $exportRoute = route('transactions.export');
 
-        return view('transactions.index', compact('transactions', 'todayTotals', 'combos', 'exportColumns', 'exportRoute') + ['filters' => $request->only(['status', 'type', 'network', 'q'])]);
+        return view('transactions.index', compact('transactions', 'todayTotals', 'combos', 'exportColumns', 'exportRoute', 'perNetworkTotals', 'filteredGrand') + ['filters' => $request->only(['status', 'type', 'network', 'q', 'date'])]);
     }
 
     public function export(Request $request, ExportService $export)
@@ -86,6 +123,13 @@ class TransactionController extends Controller
         }
         if ($request->filled('network') && $request->input('network') !== 'all') {
             $query->where('network_id', $request->input('network'));
+        }
+        if ($request->filled('date')) {
+            try {
+                $d = Carbon::parse($request->input('date'))->toDateString();
+                $query->whereDate('created_at', $d);
+            } catch (\Throwable) {
+            }
         }
         if ($request->filled('q')) {
             $needle = $request->input('q');
@@ -915,6 +959,16 @@ class TransactionController extends Controller
 
             $this->journals->reverseForTransaction($transaction, auth()->id());
         });
+
+        // Recompute reconciliation for that date so Reports/Reconciliation reflect reversal
+        try {
+            $dateStr = $transaction->created_at ? Carbon::parse($transaction->created_at)->format('Y-m-d') : null;
+            if ($dateStr) {
+                $this->recomputeReconciliationForAgentDate((int) $transaction->agent_id, $dateStr);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Reconciliation recompute after reverse failed', ['error' => $e->getMessage(), 'reference' => $transaction->reference]);
+        }
 
         $this->recordAudit('Transaction reversed', 'Transaction', $transaction->id, [
             'reference' => $transaction->reference,

@@ -74,7 +74,6 @@
         <div class="table-card">
             <div class="table-toolbar">
                 <input type="hidden" name="status" id="fStatus" value="{{ $filters['status'] ?? 'all' }}">
-                <input type="hidden" name="type" id="fType" value="{{ $filters['type'] ?? 'all' }}">
                 <div class="chip-filters" id="statusChips">
                     <button type="button" class="chip {{ ($filters['status'] ?? 'all') === 'all' ? 'active' : '' }}" data-status="all" onclick="setStatusFilter('all')">All</button>
                     <button type="button" class="chip {{ ($filters['status'] ?? '') === 'completed' ? 'active' : '' }}" data-status="completed" onclick="setStatusFilter('completed')">Completed</button>
@@ -100,11 +99,68 @@
                         <option value="{{ $type }}" {{ ($filters['type'] ?? '') === $type ? 'selected' : '' }}>{{ txn_type_label($type) }}</option>
                     @endforeach
                 </select>
+                <input type="date" name="date" value="{{ $filters['date'] ?? '' }}" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;background:var(--white);color:var(--coffee-700);font-weight:600;">
+                @if(($filters['date'] ?? '') !== '' || ($filters['network'] ?? 'all') !== 'all' || ($filters['type'] ?? 'all') !== 'all' || ($filters['status'] ?? 'all') !== 'all' || ($filters['q'] ?? '') !== '')
+                    <a href="{{ route('transactions.index') }}" class="btn btn-ghost btn-sm" style="padding:8px 12px;">Clear</a>
+                @endif
             </div>
         </div>
     </form>
 
-    <div class="table-card" style="margin-top:-24px;">
+    @if(isset($perNetworkTotals) && isset($filteredGrand))
+        <div class="panel" style="margin-top:18px; border-left:3px solid var(--acacia-600);">
+            <div class="panel-head">
+                <h3>Total for all — Per Network (filtered)</h3>
+                <span class="tag tag-green">{{ $filteredGrand['count'] }} txs · @money($filteredGrand['volume'])</span>
+            </div>
+            <div class="panel-body" style="padding:0;">
+                <div style="padding:12px 16px; font-size:12.5px; color:var(--ink-soft); background:var(--sand-50); border-bottom:1px solid var(--line);">
+                    Showing totals for <strong>{{ ($filters['date'] ?? '') !== '' ? $filters['date'] : 'all dates' }}</strong>
+                    @if(($filters['network'] ?? 'all') !== 'all') · Network: <strong>{{ $combos['networks']->firstWhere('id', (int)($filters['network'] ?? 0))?->name ?? $filters['network'] }}</strong> @endif
+                    @if(($filters['status'] ?? 'all') !== 'all') · Status: <strong>{{ $filters['status'] }}</strong> @endif
+                    @if(($filters['type'] ?? 'all') !== 'all') · Type: <strong>{{ txn_type_label($filters['type']) }}</strong> @endif
+                    — Grand: <strong>@money($filteredGrand['volume'])</strong> ({{ $filteredGrand['count'] }} txs, Comm @money($filteredGrand['commission']), Fee @money($filteredGrand['fee']))
+                </div>
+                <div class="table-scroll">
+                    <table style="min-width:600px;">
+                        <thead>
+                            <tr>
+                                <th>Network</th>
+                                <th style="text-align:right;">Transactions</th>
+                                <th style="text-align:right;">Volume</th>
+                                <th style="text-align:right;">Commission</th>
+                                <th style="text-align:right;">Fee</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($perNetworkTotals as $row)
+                                <tr>
+                                    <td><span class="net-dot" style="background:{{ $row['color'] }};"></span> {{ $row['network'] }}</td>
+                                    <td style="text-align:right; font-weight:600;">{{ $row['count'] }}</td>
+                                    <td style="text-align:right; font-weight:600;">@money($row['volume'])</td>
+                                    <td style="text-align:right;">@money($row['commission'])</td>
+                                    <td style="text-align:right;">@money($row['fee'])</td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="5" class="empty-state" style="padding:18px;">No transactions for this filter.</td></tr>
+                            @endforelse
+                            @if($perNetworkTotals->isNotEmpty())
+                                <tr style="background:var(--sand-50); font-weight:700;">
+                                    <td>Total (all in filter)</td>
+                                    <td style="text-align:right;">{{ $filteredGrand['count'] }}</td>
+                                    <td style="text-align:right;">@money($filteredGrand['volume'])</td>
+                                    <td style="text-align:right;">@money($filteredGrand['commission'])</td>
+                                    <td style="text-align:right;">@money($filteredGrand['fee'])</td>
+                                </tr>
+                            @endif
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <div class="table-card" style="margin-top:18px;">
         <div class="table-scroll">
             <table>
                 <thead>
@@ -114,7 +170,6 @@
                         <th>Type</th>
                         <th>Network</th>
                         <th>Amount</th>
-                        <th>Running Float<br><span style="font-size:10px; font-weight:400; text-transform:none; letter-spacing:0; color:var(--ink-soft);">per network</span></th>
                         <th>Status</th>
                         <th></th>
                     </tr>
@@ -139,17 +194,6 @@
                                 {{ $txn->network?->name }}
                             </td>
                             <td class="cell-title">@money($txn->amount)</td>
-                            <td style="font-weight:600;">
-                                @if($txn->running_network_balance !== null)
-                                    {{ money($txn->running_network_balance) }}
-                                    <div class="cell-sub" style="font-size:10px; color:var(--ink-soft);">{{ $txn->network?->name }} float · total {{ money($txn->running_float_balance ?? 0) }}</div>
-                                @elseif($txn->running_float_balance !== null)
-                                    {{ money($txn->running_float_balance) }}
-                                    <div class="cell-sub" style="font-size:10px; color:var(--ink-soft);">{{ $txn->network?->name }} (total legacy)</div>
-                                @else
-                                    —
-                                @endif
-                            </td>
                             <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
                             <td>
                                 <div class="row-actions">
@@ -168,7 +212,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="empty-state"><h4>No transactions found</h4><p>Try a different filter or process a new transaction.</p></td></tr>
+                        <tr><td colspan="7" class="empty-state"><h4>No transactions found</h4><p>Try a different filter or process a new transaction.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>

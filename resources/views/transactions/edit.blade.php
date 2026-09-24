@@ -190,6 +190,28 @@
     @endif
 
     @if($transaction->status !== 'reversed')
+    <div class="panel" style="margin-top:18px; border:1px solid var(--danger);">
+        <div class="panel-head">
+            <h3>Reverse Transaction</h3>
+            <span class="tag tag-red">Affects all areas</span>
+        </div>
+        <div class="panel-body">
+            <p style="font-size:13px; color:var(--ink-soft); margin-bottom:12px;">Reversing will <strong>undo</strong> this transaction's effects: cash, float per network, daily opening, journal (creates <code>RVS-...</code>), and recomputes reconciliation for <code>{{ $transaction->created_at->format('Y-m-d') }}</code>. Reports will exclude it.</p>
+            <form data-transaction-reverse action="{{ route('transactions.reverse', $transaction) }}" method="POST">
+                @csrf
+                @method('PUT')
+                <div class="field">
+                    <label>Reversal reason (optional)</label>
+                    <textarea name="reason" rows="2" maxlength="255" placeholder="e.g. Duplicate, customer cancelled, wrong amount..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-danger">Mark as Reversed</button>
+                <span style="font-size:11px; color:var(--ink-soft); margin-left:8px;">Sets status to <code>reversed</code> — affects all areas</span>
+            </form>
+        </div>
+    </div>
+    @endif
+
+    @if($transaction->status !== 'reversed')
     <div class="panel" style="margin-top:18px;">
         <div class="panel-head">
             <h3>Danger Zone</h3>
@@ -246,6 +268,13 @@
                 e.preventDefault();
                 if (!confirm('Delete this transaction and reverse its assigned area balances?')) return;
                 submitForm(form, { method: 'POST', done: (data) => { toast(data.message || 'Deleted', 'success'); setTimeout(() => window.location.href = '{{ route('transactions.index') }}', 700); } });
+            });
+        });
+        document.querySelectorAll('[data-transaction-reverse]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (!confirm('Reverse this transaction? This will undo its effects on cash, float per network, daily opening, journal and reconciliation. Reports will exclude it.')) return;
+                submitForm(form, { method: 'POST', done: (data) => { toast(data.message || 'Reversed', 'success'); setTimeout(() => location.reload(), 700); } });
             });
         });
 
