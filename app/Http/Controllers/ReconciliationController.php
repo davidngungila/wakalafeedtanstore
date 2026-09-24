@@ -141,11 +141,14 @@ class ReconciliationController extends Controller
             ->map(fn ($d) => Carbon::parse($d)->toDateString())
             ->values();
 
-        // Load all opening data + transactions done for the selected date (admin request) — per user: dont include float top up in reconciliation transaction list
+        // Load all opening data + transactions done for the selected date (admin request) — include reversed on both created and reversed dates so TXN-260923-8118 shows correctly on reversal day
         $dayOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($viewDate))->first();
         $dayTransactions = Transaction::with(['network', 'operator', 'agent'])
             ->where('agent_id', $agent->id)
-            ->whereDate('created_at', $viewDate)
+            ->where(function ($q) use ($viewDate) {
+                $q->whereDate('created_at', $viewDate)
+                    ->orWhereDate('reversed_at', $viewDate);
+            })
             ->whereNotIn('type', ['float_topup', 'float_deposit'])
             ->latest()
             ->limit(100)
