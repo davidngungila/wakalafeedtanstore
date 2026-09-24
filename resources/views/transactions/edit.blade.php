@@ -126,7 +126,7 @@
                 <div class="form-row">
                     <div class="field">
                         <label>Transaction date & time <span style="color:var(--danger);">*</span></label>
-                        <input type="datetime-local" name="transaction_date" id="editDate" value="{{ old('transaction_date', $transaction->created_at->format('Y-m-d\TH:i')) }}" required @if($transaction->status === 'reversed') disabled @endif>
+                        <input type="datetime-local" name="transaction_date" id="editDate" value="{{ old('transaction_date', $transaction->created_at->format('Y-m-d').'T'.$transaction->created_at->format('H:i')) }}" required @if($transaction->status === 'reversed') disabled @endif>
                         <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">When it actually happened. Changing moves it between Daily Openings, Reconciliation days, Reports & Journal dates. Was: {{ $transaction->created_at->format('d M Y H:i') }}</p>
                         @error('transaction_date')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>
