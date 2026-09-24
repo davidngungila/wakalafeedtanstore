@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Agent;
 use App\Models\CommissionRate;
 use App\Models\DailyOpening;
+use App\Models\FloatTransaction;
 use App\Models\JournalEntry;
 use App\Models\Network;
 use App\Models\NetworkBalance;
@@ -33,14 +34,20 @@ class TransactionController extends Controller
 
     public function index(Request $request): View
     {
-        $query = Transaction::with(['network', 'agent', 'operator', 'dailyOpening']);
+        $query = Transaction::with(['network', 'agent', 'operator', 'dailyOpening'])
+            ->whereNotIn('type', ['float_topup', 'float_deposit']);
 
         if ($request->filled('status') && $request->input('status') !== 'all') {
             $query->where('status', $request->input('status'));
         }
 
         if ($request->filled('type') && $request->input('type') !== 'all') {
-            $query->where('type', $request->input('type'));
+            if (in_array($request->input('type'), ['float_topup', 'float_deposit'], true)) {
+                // These types are now float-only and not shown in transactions list
+                $query->where('type', $request->input('type'));
+            } else {
+                $query->where('type', $request->input('type'));
+            }
         }
 
         if ($request->filled('network') && $request->input('network') !== 'all') {
@@ -255,6 +262,14 @@ class TransactionController extends Controller
             'transaction_date' => ['nullable', 'date'],
         ]);
 
+        // Auto-cleanup: existing float_topup/deposit transactions that should be float-only (for 2026-09-21 etc.)
+        $this->migrateFloatTopupTransactionsToFloat();
+
+        // Float top-up / float deposit should not be a customer transaction — transfer to float balance
+        if (in_array($validated['type'], ['float_topup', 'float_deposit'], true)) {
+            return $this->storeAsFloat($request, $validated);
+        }
+
         $agent = cash_point();
 
         if ($agent === null) {
@@ -422,6 +437,180 @@ class TransactionController extends Controller
         }
 
         return redirect()->route('transactions.receipt', $transaction)->with('status', 'Transaction '.$transaction->reference.' created and linked'.(! empty($validated['sms_id']) ? ' to SMS #'.$validated['sms_id'] : '').'.');
+    }
+
+    private function storeAsFloat(Request $request, array $validated): JsonResponse|RedirectResponse
+    {
+        $agent = cash_point();
+        if ($agent === null) {
+            $message = 'Set up the cash point first.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return redirect()->route('cash-point.index')->with('error', $message);
+        }
+
+        $targetDate = today();
+        if (is_admin() && $request->filled('transaction_date')) {
+            try {
+                $targetDate = Carbon::parse($request->input('transaction_date'));
+            } catch (\Throwable) {
+                $targetDate = today();
+            }
+        } elseif (is_admin() && $request->filled('date')) {
+            try {
+                $targetDate = Carbon::parse($request->input('date'));
+            } catch (\Throwable) {
+                $targetDate = today();
+            }
+        }
+
+        $todayOpening = DailyOpening::forAgentAndDate($agent->id, $targetDate)->first();
+
+        $balance = NetworkBalance::firstOrCreate(
+            ['agent_id' => $agent->id, 'network_id' => $validated['network_id']],
+            ['opening_balance' => 0, 'balance' => 0]
+        );
+
+        $amount = (float) $validated['amount'];
+        $reference = 'FLT-'.now()->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
+        $notes = trim(($validated['provider_reference'] ? $validated['provider_reference'].' ' : '').($validated['customer_name'] ? $validated['customer_name'].' ' : '').'via TXN float_topup');
+
+        DB::transaction(function () use ($agent, $balance, $amount, $reference, $validated, $targetDate, $todayOpening) {
+            // Float top-up: +float, no cash (bank transfer) — per user, must be added to float for the day
+            $balance->balance = (float) $balance->balance + $amount;
+            $balance->save();
+
+            $now = $targetDate->isSameDay(today()) ? now() : $targetDate->copy()->setTime(now()->hour, now()->minute, now()->second);
+            $ft = FloatTransaction::create([
+                'reference' => $reference,
+                'agent_id' => $agent->id,
+                'network_id' => $balance->network_id,
+                'type' => 'float_topup',
+                'amount' => $amount,
+                'fee' => 0,
+                'status' => 'completed',
+                'performed_by' => auth()->id(),
+                'notes' => $validated['provider_reference'] ?? $notes,
+                'daily_opening_id' => $todayOpening?->id,
+            ]);
+            if (! $targetDate->isSameDay(today())) {
+                $ft->timestamps = false;
+                $ft->created_at = $now;
+                $ft->updated_at = $now;
+                $ft->save();
+            }
+            // Link SMS if provided
+            if (! empty($validated['sms_id'])) {
+                $sms = SmsMessage::find($validated['sms_id']);
+                if ($sms) {
+                    $sms->update([
+                        'processing_status' => 'RECORDED',
+                        'transaction_id' => null,
+                        'transaction_reference' => $validated['provider_reference'] ?? $reference,
+                    ]);
+                }
+            }
+        });
+
+        // Recompute reconciliation for that date
+        try {
+            $this->recomputeReconciliationForAgentDate($agent->id, $targetDate->toDateString());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Reconciliation recompute after float_topup store failed', ['error' => $e->getMessage()]);
+        }
+
+        $this->recordAudit('Float top-up via transactions (converted to float)', 'FloatTransaction', null, [
+            'reference' => $reference,
+            'amount' => $amount,
+            'network_id' => $validated['network_id'],
+            'date' => $targetDate->toDateString(),
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Float top-up recorded as float balance (not customer transaction).', 'reference' => $reference]);
+        }
+
+        return redirect()->route('float.index', ['date' => $targetDate->toDateString()])->with('status', 'Float top-up '.$reference.' added to float (not customer transaction) for '.$targetDate->toDateString().'.');
+    }
+
+    private function migrateFloatTopupTransactionsToFloat(): void
+    {
+        // One-time auto-migration for existing TXN-... float_topup/deposit that should be float only (e.g. 2026-09-21 3× 1M)
+        $toMigrate = Transaction::whereIn('type', ['float_topup', 'float_deposit'])
+            ->where('status', 'completed')
+            ->latest()
+            ->limit(20)
+            ->get();
+
+        foreach ($toMigrate as $txn) {
+            try {
+                DB::transaction(function () use ($txn) {
+                    $agentId = (int) $txn->agent_id;
+                    $networkId = (int) $txn->network_id;
+                    $amount = (float) $txn->amount;
+                    $date = $txn->created_at ? Carbon::parse($txn->created_at) : today();
+
+                    // Revert the old (incorrect) effects: old logic was float -amount, cash +amount — revert
+                    $oldBalance = NetworkBalance::where('agent_id', $agentId)->where('network_id', $networkId)->first();
+                    if ($oldBalance) {
+                        // Old: -float, +cash — so revert = +float, -cash
+                        $oldBalance->balance = (float) $oldBalance->balance + $amount;
+                        $oldBalance->save();
+                    }
+                    $agent = Agent::find($agentId);
+                    if ($agent) {
+                        $agent->cash_balance = (float) $agent->cash_balance - $amount;
+                        $agent->save();
+                    }
+                    if ($txn->daily_opening_id) {
+                        $opening = DailyOpening::find($txn->daily_opening_id);
+                        if ($opening) {
+                            $opening->total_volume = max(0, (float) $opening->total_volume - $amount);
+                            $opening->total_transactions = max(0, (int) $opening->total_transactions - 1);
+                            $opening->save();
+                        }
+                    }
+                    // Delete the old journal
+                    $journal = JournalEntry::where('reference', $txn->reference)->first();
+                    if ($journal) {
+                        $journal->lines()->delete();
+                        $journal->delete();
+                    }
+                    // Create correct FloatTransaction: +float, no cash, for that date
+                    $balance = NetworkBalance::firstOrCreate(['agent_id' => $agentId, 'network_id' => $networkId], ['opening_balance' => 0, 'balance' => 0]);
+                    $balance->balance = (float) $balance->balance + $amount;
+                    $balance->save();
+
+                    $openingForFloat = DailyOpening::forAgentAndDate($agentId, $date)->first();
+                    $ft = FloatTransaction::create([
+                        'reference' => 'FLT-'.Carbon::parse($txn->created_at)->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT),
+                        'agent_id' => $agentId,
+                        'network_id' => $networkId,
+                        'type' => 'float_topup',
+                        'amount' => $amount,
+                        'fee' => 0,
+                        'status' => 'completed',
+                        'performed_by' => $txn->performed_by,
+                        'notes' => 'Migrated from TXN '.$txn->reference.' ('.$txn->provider_reference.')',
+                        'daily_opening_id' => $openingForFloat?->id,
+                    ]);
+                    $ft->timestamps = false;
+                    $ft->created_at = $txn->created_at;
+                    $ft->updated_at = $txn->created_at;
+                    $ft->save();
+
+                    // Recompute reconciliation for that date
+                    $this->recomputeReconciliationForAgentDate($agentId, Carbon::parse($txn->created_at)->toDateString());
+
+                    // Finally delete the customer transaction
+                    $txn->delete();
+                });
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Migrate float_topup txn to float failed', ['id' => $txn->id, 'error' => $e->getMessage()]);
+            }
+        }
     }
 
     public function edit(Request $request, Transaction $transaction): View
