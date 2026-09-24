@@ -231,7 +231,15 @@ class TransactionController extends Controller
             ->limit(50)
             ->get();
 
-        return view('transactions.create', compact('combos', 'smsMessages') + ['selectedSms' => $request->input('sms')]);
+        $selectedDate = null;
+        if (is_admin() && $request->filled('date')) {
+            try {
+                $selectedDate = Carbon::parse($request->input('date'))->toDateString();
+            } catch (\Throwable) {
+            }
+        }
+
+        return view('transactions.create', compact('combos', 'smsMessages', 'selectedDate') + ['selectedSms' => $request->input('sms')]);
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse
@@ -244,6 +252,7 @@ class TransactionController extends Controller
             'amount' => ['required', 'numeric', 'min:1'],
             'provider_reference' => ['nullable', 'string', 'max:60'],
             'sms_id' => ['nullable', 'exists:sms_messages,id'],
+            'transaction_date' => ['nullable', 'date'],
         ]);
 
         $agent = cash_point();
@@ -255,6 +264,39 @@ class TransactionController extends Controller
             }
 
             return redirect()->route('cash-point.index')->with('error', $message);
+        }
+
+        $targetDate = today();
+        if (is_admin() && $request->filled('transaction_date')) {
+            try {
+                $targetDate = Carbon::parse($request->input('transaction_date'));
+            } catch (\Throwable) {
+                $targetDate = today();
+            }
+        } elseif (is_admin() && $request->filled('date')) {
+            try {
+                $targetDate = Carbon::parse($request->input('date'));
+            } catch (\Throwable) {
+                $targetDate = today();
+            }
+        }
+
+        $targetDate = today();
+        $isAdminDate = false;
+        if (is_admin() && $request->filled('transaction_date')) {
+            try {
+                $targetDate = Carbon::parse($request->input('transaction_date'));
+                $isAdminDate = ! $targetDate->isSameDay(today());
+            } catch (\Throwable) {
+                $targetDate = today();
+            }
+        } elseif (is_admin() && $request->filled('date')) {
+            try {
+                $targetDate = Carbon::parse($request->input('date'));
+                $isAdminDate = ! $targetDate->isSameDay(today());
+            } catch (\Throwable) {
+                $targetDate = today();
+            }
         }
 
         $todayOpening = null;
@@ -297,8 +339,47 @@ class TransactionController extends Controller
             $validated['provider_reference'] ?? null,
         );
 
-        // Associate with today's daily opening (if exists, e.g. for cashiers)
-        if ($todayOpening) {
+        // Associate with daily opening — for admin with backdated targetDate, link to that day's opening
+        if ($isAdminDate) {
+            $targetOpening = DailyOpening::forAgentAndDate($agent->id, $targetDate)->first();
+            if ($targetOpening) {
+                // If process already linked to today's opening, revert that link
+                if ($todayOpening && $transaction->daily_opening_id == $todayOpening->id) {
+                    $todayOpening->total_volume = max(0, (float) $todayOpening->total_volume - (float) $transaction->amount);
+                    $todayOpening->total_commission = max(0, (float) $todayOpening->total_commission - (float) $transaction->commission);
+                    $todayOpening->total_transactions = max(0, (int) $todayOpening->total_transactions - 1);
+                    $todayOpening->save();
+                }
+                $transaction->daily_opening_id = $targetOpening->id;
+                $targetOpening->total_volume = (float) $targetOpening->total_volume + (float) $transaction->amount;
+                $targetOpening->total_commission = (float) $targetOpening->total_commission + (float) $transaction->commission;
+                $targetOpening->total_transactions = (int) $targetOpening->total_transactions + 1;
+                $targetOpening->save();
+                $transaction->update(['daily_opening_id' => $targetOpening->id]);
+            } else {
+                $transaction->update(['daily_opening_id' => null]);
+            }
+            // Backdate created_at and journal entry_date to targetDate
+            $newCreatedAtForStore = $targetDate->copy()->setTime(now()->hour, now()->minute, now()->second);
+            if ($request->filled('transaction_date')) {
+                try {
+                    $newCreatedAtForStore = Carbon::parse($request->input('transaction_date'));
+                } catch (\Throwable) {
+                }
+            }
+            DB::table('transactions')->where('id', $transaction->id)->update(['created_at' => $newCreatedAtForStore, 'updated_at' => now()]);
+            $transaction->refresh();
+            $journalForStore = JournalEntry::where('reference', $transaction->reference)->first();
+            if ($journalForStore) {
+                $journalForStore->update(['entry_date' => $newCreatedAtForStore->toDateString()]);
+            }
+            try {
+                $this->recomputeReconciliationForAgentDate($agent->id, today()->toDateString());
+                $this->recomputeReconciliationForAgentDate($agent->id, $targetDate->toDateString());
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Reconciliation recompute after admin backdated store failed', ['error' => $e->getMessage()]);
+            }
+        } elseif ($todayOpening) {
             $transaction->update(['daily_opening_id' => $todayOpening->id]);
         }
 

@@ -50,6 +50,105 @@
         </div>
     @endif
 
+    <div class="panel" style="max-width:980px; border-left:3px solid var(--acacia-600);">
+        <div class="panel-head">
+            <h3>All Opening Data for {{ $selectedDate }}</h3>
+            <div style="display:flex; gap:8px;">
+                <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-ghost btn-sm">Edit opening</a>
+                <a href="{{ route('daily-opening.index') }}" class="btn btn-ghost btn-sm">All openings</a>
+            </div>
+        </div>
+        <div class="panel-body">
+            @if($dayOpening)
+                <div class="detail-grid">
+                    <div class="detail-item"><div class="dk">Date</div><div class="dv">{{ $dayOpening->opening_date->format('Y-m-d') }} · {{ $dayOpening->opening_date->format('l') }}</div></div>
+                    <div class="detail-item"><div class="dk">Status</div><div class="dv"><span class="tag {{ $dayOpening->is_closed ? 'tag-grey' : 'tag-green' }}">{{ $dayOpening->is_closed ? 'Closed' : 'Open' }}</span> {{ $dayOpening->closed_at ? 'at '.$dayOpening->closed_at->format('H:i') : '' }}</div></div>
+                    <div class="detail-item"><div class="dk">Cash Opening</div><div class="dv">@money($dayOpening->cash_opening)</div></div>
+                    <div class="detail-item"><div class="dk">Total Float Opening</div><div class="dv">@money($dayOpening->totalFloatOpening())</div></div>
+                    <div class="detail-item"><div class="dk">Cash Closing</div><div class="dv">{{ $dayOpening->cash_closing !== null ? money($dayOpening->cash_closing) : '—' }}</div></div>
+                    <div class="detail-item"><div class="dk">Total Float Closing</div><div class="dv">{{ $dayOpening->float_closings ? money(array_sum($dayOpening->float_closings)) : '—' }}</div></div>
+                    <div class="detail-item"><div class="dk">Transactions (stored)</div><div class="dv">{{ $dayOpening->total_transactions }} txs · Vol @money($dayOpening->total_volume) · Comm @money($dayOpening->total_commission)</div></div>
+                    <div class="detail-item"><div class="dk">By</div><div class="dv">{{ $dayOpening->user?->name ?? '—' }}</div></div>
+                </div>
+                <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                    @foreach($run['networks'] as $row)
+                        <span class="tag" style="background:var(--white); border:1px solid var(--line);"><span class="net-dot" style="background:{{ $row['color'] }};"></span> {{ $row['name'] }}: @money($row['opening'])</span>
+                    @endforeach
+                </div>
+                @if($dayOpening->notes)<div style="margin-top:10px; font-size:13px;"><strong>Notes:</strong> {{ $dayOpening->notes }}</div>@endif
+                <div style="margin-top:10px;"><a href="{{ route('daily-opening.show', $dayOpening) }}" class="btn btn-ghost btn-sm">View opening details</a></div>
+            @else
+                <p style="color:var(--ink-soft);">No Daily Opening for <strong>{{ $selectedDate }}</strong> — <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}">Create opening</a> to set cash & float. Reconciliation will use previous closing cash + live balances as fallback.</p>
+                <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+                    @foreach($run['networks'] as $row)
+                        <span class="tag" style="background:var(--white); border:1px solid var(--line);"><span class="net-dot" style="background:{{ $row['color'] }};"></span> {{ $row['name'] }}: @money($row['opening']) <span style="color:var(--ink-soft);">(live)</span></span>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+    </div>
+
+    <div class="panel" style="max-width:980px;">
+        <div class="panel-head">
+            <h3>Transactions Done for {{ $selectedDate }} ({{ $dayTransactions->count() }} completed, {{ $dayFloatTransactions->count() }} float)</h3>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <a href="{{ route('transactions.create') }}?date={{ $selectedDate }}" class="btn btn-ghost btn-sm">+ Add transaction for this date (admin)</a>
+                <a href="{{ route('transactions.index', ['date' => $selectedDate]) }}" class="btn btn-ghost btn-sm">View all</a>
+                <a href="{{ route('float.create', ['date' => $selectedDate]) }}" class="btn btn-ghost btn-sm">+ Add float for this date</a>
+            </div>
+        </div>
+        <div class="panel-body" style="padding:0;">
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Reference</th>
+                            <th>Type</th>
+                            <th>Network</th>
+                            <th>Amount</th>
+                            <th>Customer</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($dayTransactions as $t)
+                            <tr>
+                                <td class="cell-sub">{{ $t->created_at->format('H:i:s') }}</td>
+                                <td><div class="cell-title">{{ $t->reference }}</div><div class="cell-sub">{{ $t->provider_reference ?? '' }}</div></td>
+                                <td>{{ txn_type_label($t->type) }}</td>
+                                <td><span class="net-dot" style="background:{{ $t->network?->color }};"></span> {{ $t->network?->name }}</td>
+                                <td class="cell-title">@money($t->amount)</td>
+                                <td>{{ $t->customer_name ?? '—' }}<div class="cell-sub">{{ $t->customer_phone }}</div></td>
+                                <td><span class="tag {{ status_badge($t->status) }}">{{ $t->status }}</span></td>
+                                <td><a href="{{ route('transactions.receipt', $t) }}" class="btn btn-ghost btn-sm">View</a> @if(is_admin()) <a href="{{ route('transactions.edit', $t) }}" class="btn btn-ghost btn-sm">Edit</a> @endif</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="8" class="empty-state">No transactions for {{ $selectedDate }}.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            @if($dayTransactions->isNotEmpty())
+                <div style="padding:12px 16px; background:var(--sand-50); border-top:1px solid var(--line); display:flex; gap:12px; flex-wrap:wrap; font-size:13px;">
+                    <span><strong>Total for {{ $selectedDate }}:</strong> {{ $dayTransactions->count() }} txs · Vol @money($dayTransactions->sum('amount')) · Comm @money($dayTransactions->sum('commission')) · Fee @money($dayTransactions->sum('fee'))</span>
+                    <span style="color:var(--ink-soft);">Cash in (deposits): @money($dayTransactions->whereIn('type', ['deposit','float_deposit'])->sum('amount')) · Cash out (withdrawals): @money($dayTransactions->where('type','withdrawal')->sum('amount'))</span>
+                </div>
+            @endif
+            @if($dayFloatTransactions->isNotEmpty())
+                <div style="padding:12px 16px; border-top:1px solid var(--line);">
+                    <strong>Float movements for {{ $selectedDate }} ({{ $dayFloatTransactions->count() }}):</strong>
+                    <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+                        @foreach($dayFloatTransactions as $ft)
+                            <span class="tag {{ $ft->type === 'float_topup' || $ft->type === 'cash_in' ? 'tag-green' : 'tag-terracotta' }}">{{ $ft->network?->name }}: {{ str_replace('_',' ',$ft->type) }} @money($ft->amount) at {{ $ft->created_at->format('H:i') }} {{ $ft->notes ? '· '.$ft->notes : '' }}</span>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+        </div>
+    </div>
+
     <form action="{{ route('reconciliation.store') }}" method="POST" data-recon-form>
         @csrf
 

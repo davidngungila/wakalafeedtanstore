@@ -68,6 +68,19 @@
                         <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">If this matches an SMS transaction_reference, that SMS will be linked.</p>
                     </div>
                 </div>
+                @if(is_admin() && isset($selectedDate) && $selectedDate)
+                    <div class="field">
+                        <label>Transaction date (admin — for selected day)</label>
+                        <input type="datetime-local" name="transaction_date" value="{{ old('transaction_date', $selectedDate.'T'.now()->format('H:i')) }}">
+                        <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Back-date this transaction to <strong>{{ $selectedDate }}</strong> for correct reconciliation. Leave as now for today.</p>
+                    </div>
+                @elseif(is_admin())
+                    <div class="field">
+                        <label>Transaction date (admin — optional, for past day)</label>
+                        <input type="datetime-local" name="transaction_date" value="{{ old('transaction_date') }}" placeholder="{{ now()->format('Y-m-d\TH:i') }}">
+                        <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Leave empty for now, or set a past datetime to back-date for reconciliation on that day.</p>
+                    </div>
+                @endif
                 <div class="field">
                     <label>Link to SMS (optional - reference connect to the message)</label>
                     <select name="sms_id">

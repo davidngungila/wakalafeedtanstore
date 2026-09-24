@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Agent;
 use App\Models\DailyOpening;
+use App\Models\FloatTransaction;
 use App\Models\Network;
 use App\Models\Reconciliation;
 use App\Models\ReconciliationCorrection;
@@ -126,6 +127,22 @@ class ReconciliationController extends Controller
             ->map(fn ($d) => Carbon::parse($d)->toDateString())
             ->values();
 
+        // Load all opening data + transactions done for the selected date (admin request)
+        $dayOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($viewDate))->first();
+        $dayTransactions = Transaction::with(['network', 'operator', 'agent'])
+            ->where('agent_id', $agent->id)
+            ->whereDate('created_at', $viewDate)
+            ->latest()
+            ->limit(100)
+            ->get();
+
+        $dayFloatTransactions = FloatTransaction::with(['network', 'operator'])
+            ->where('agent_id', $agent->id)
+            ->whereDate('created_at', $viewDate)
+            ->latest()
+            ->limit(50)
+            ->get();
+
         return view('reconciliation.create', [
             'agent' => $agent,
             'run' => $run,
@@ -133,6 +150,9 @@ class ReconciliationController extends Controller
             'selectedDate' => $viewDate,
             'isAdmin' => $isAdmin,
             'availableDates' => $availableDates,
+            'dayOpening' => $dayOpening,
+            'dayTransactions' => $dayTransactions,
+            'dayFloatTransactions' => $dayFloatTransactions,
         ]);
     }
 
