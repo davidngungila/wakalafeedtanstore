@@ -19,6 +19,7 @@ class OtpMail extends Mailable
     {
         return new Envelope(
             subject: 'Your OTP Code — Wakala Feedtan Store — '.$this->code,
+            to: $this->email,
         );
     }
 
