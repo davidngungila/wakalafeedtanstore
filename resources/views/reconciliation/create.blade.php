@@ -133,7 +133,7 @@
             @if($dayTransactions->isNotEmpty())
                 <div style="padding:12px 16px; background:var(--sand-50); border-top:1px solid var(--line); display:flex; gap:12px; flex-wrap:wrap; font-size:13px;">
                     <span><strong>Total for {{ $selectedDate }}:</strong> {{ $dayTransactions->count() }} txs · Vol @money($dayTransactions->sum('amount')) · Comm @money($dayTransactions->sum('commission')) · Fee @money($dayTransactions->sum('fee'))</span>
-                    <span style="color:var(--ink-soft);">Cash in (deposits): @money($dayTransactions->whereIn('type', ['deposit','float_deposit'])->sum('amount')) · Cash out (withdrawals): @money($dayTransactions->where('type','withdrawal')->sum('amount'))</span>
+                    <span style="color:var(--ink-soft);">Cash in (deposits + airtime): @money($dayTransactions->whereIn('type', ['deposit','float_deposit','airtime'])->sum('amount')) · Cash out (withdrawals): @money($dayTransactions->where('type','withdrawal')->sum('amount'))</span>
                 </div>
             @endif
             @if($dayFloatTransactions->isNotEmpty())

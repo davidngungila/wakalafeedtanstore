@@ -507,7 +507,7 @@ class ReconciliationController extends Controller
             ->get();
 
         $depositsByNetwork = $transactions
-            ->whereIn('type', ['deposit'])
+            ->whereIn('type', ['deposit', 'airtime', 'float_deposit'])
             ->groupBy('network_id')
             ->map(fn ($group): float => (float) $group->sum('amount'));
 
