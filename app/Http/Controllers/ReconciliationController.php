@@ -582,15 +582,24 @@ class ReconciliationController extends Controller
                 $opening = $dailyOpening->getFloatOpening($network->id);
                 if ($opening == 0.0 && $prevCounted !== null) {
                     $opening = $prevCounted;
+                } elseif ($opening == 0.0 && $prevCounted === null) {
+                    // No previous counted and no opening for this network on this date — default 0, not live -356,500 when no data belongs to him
+                    $opening = 0.0;
                 }
             } else {
-                // No opening for this date — use previous day reconciled Counted (not live -356,500) so Vodacom 0 not HaloPesa 1,086,000
+                // No opening for this date — use previous day reconciled Counted; if none and no data, default 0 (not live -356,500)
                 if ($prevCounted !== null) {
                     $opening = $prevCounted;
                 } else {
-                    $opening = (float) ($balance?->opening_balance ?? 0);
-                    if ($opening == 0.0) {
-                        $opening = (float) ($balance?->balance ?? 0);
+                    // Only use live balance if this network actually has activity on this date (deposits/withdrawals/top-ups), otherwise 0
+                    $hasActivity = (abs($deposits) > 0.005 || abs($withdrawals) > 0.005 || abs($floatTopups) > 0.005 || abs($bankIns) > 0.005);
+                    if ($hasActivity) {
+                        $opening = (float) ($balance?->opening_balance ?? 0);
+                        if ($opening == 0.0) {
+                            $opening = (float) ($balance?->balance ?? 0);
+                        }
+                    } else {
+                        $opening = 0.0;
                     }
                 }
             }
