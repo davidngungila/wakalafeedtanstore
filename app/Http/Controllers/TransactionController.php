@@ -687,6 +687,7 @@ class TransactionController extends Controller
             'notes' => ['nullable', 'string', 'max:255'],
             'sms_id' => ['nullable', 'exists:sms_messages,id'],
             'transaction_date' => ['nullable', 'date'],
+            'status' => ['nullable', 'in:completed,pending,failed,reversed'],
         ]);
 
         if ($transaction->status === 'reversed' && ! is_admin()) {
@@ -723,6 +724,8 @@ class TransactionController extends Controller
         $oldReference = $transaction->reference;
         $oldProviderReference = $transaction->provider_reference;
         $wasReversed = $oldStatus === 'reversed';
+        $requestedStatus = (is_admin() && isset($validated['status']) && filled($validated['status'])) ? $validated['status'] : $oldStatus;
+        $isStatusChange = $requestedStatus !== $oldStatus;
 
         $newAmount = (float) $validated['amount'];
         $newType = $validated['type'];
@@ -742,9 +745,37 @@ class TransactionController extends Controller
         $newDateStr = $newCreatedAt->format('Y-m-d');
 
         try {
-            DB::transaction(function () use ($transaction, $oldAmount, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldCommission, $oldStatus, $wasReversed, $newAmount, $newType, $newNetworkId, $newFee, $newCommission, $validated, $isFinancialChange, $isDateChange, $isDateDayChange, $oldCreatedAt, $newCreatedAt, $oldDateStr, $newDateStr, $oldProviderReference): void {
+            DB::transaction(function () use ($transaction, $oldAmount, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldCommission, $oldStatus, $wasReversed, $requestedStatus, $isStatusChange, $newAmount, $newType, $newNetworkId, $newFee, $newCommission, $validated, $isFinancialChange, $isDateChange, $isDateDayChange, $oldCreatedAt, $newCreatedAt, $oldDateStr, $newDateStr, $oldProviderReference): void {
                 $needsFinancialAdjustment = $oldStatus === 'completed' && ($isFinancialChange || $isDateDayChange);
-                $needsReversedReapply = $wasReversed && is_admin() && ($isFinancialChange || $isDateDayChange || $wasReversed);
+                $needsReversedReapply = $wasReversed && is_admin() && ($isFinancialChange || $isDateDayChange || $isStatusChange || $wasReversed);
+                $isStatusToReversed = is_admin() && $isStatusChange && $requestedStatus === 'reversed' && $oldStatus === 'completed';
+                $isStatusToCompleted = is_admin() && $isStatusChange && $requestedStatus === 'completed' && $wasReversed;
+                // Admin status change to reversed via dropdown — revert financial effects like reverse()
+                if ($isStatusToReversed) {
+                    $oldDeltaFloat = $this->floatDelta($oldType, $oldAmount);
+                    $oldBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $oldNetworkId)->lockForUpdate()->first();
+                    if ($oldBalance) {
+                        $oldBalance->balance = (float) $oldBalance->balance - $oldDeltaFloat;
+                        $oldBalance->save();
+                    }
+                    $oldDeltaCash = $this->cashDelta($oldType, $oldAmount);
+                    if ($oldDeltaCash !== 0) {
+                        $agentOld = Agent::where('id', $oldAgentId)->lockForUpdate()->first();
+                        if ($agentOld) {
+                            $agentOld->cash_balance = (float) $agentOld->cash_balance - $oldDeltaCash;
+                            $agentOld->save();
+                        }
+                    }
+                    if ($oldDailyOpeningId) {
+                        $opening = DailyOpening::where('id', $oldDailyOpeningId)->lockForUpdate()->first();
+                        if ($opening) {
+                            $opening->total_volume = max(0, (float) $opening->total_volume - $oldAmount);
+                            $opening->total_commission = max(0, (float) $opening->total_commission - $oldCommission);
+                            $opening->total_transactions = max(0, (int) $opening->total_transactions - 1);
+                            $opening->save();
+                        }
+                    }
+                }
                 // Revert old financial effects if needed (amount/type/network or date day moved)
                 if ($needsFinancialAdjustment) {
                     // Revert old financial effects from the assigned area
@@ -906,8 +937,20 @@ class TransactionController extends Controller
                 if (Schema::hasColumn('transactions', 'running_network_balance')) {
                     $updates['running_network_balance'] = $runningNetwork;
                 }
-                // Admin re-activates reversed transaction: set back to completed
-                if ($wasReversed && is_admin()) {
+                // Admin status change via dropdown — allow to set reversed/completed directly
+                if (is_admin() && $isStatusChange) {
+                    $updates['status'] = $requestedStatus;
+                    if ($requestedStatus === 'reversed') {
+                        $updates['reversed_by'] = auth()->id();
+                        $updates['reversed_at'] = now();
+                        $updates['reversal_reason'] = $validated['notes'] ?? $transaction->reversal_reason ?? 'Status changed to reversed via edit';
+                    } elseif ($wasReversed && $requestedStatus === 'completed') {
+                        $updates['reversed_by'] = null;
+                        $updates['reversed_at'] = null;
+                        $updates['reversal_reason'] = null;
+                    }
+                } elseif ($wasReversed && is_admin()) {
+                    // Admin editing reversed without explicit status change — re-activate as completed
                     $updates['status'] = 'completed';
                     $updates['reversed_by'] = null;
                     $updates['reversed_at'] = null;
@@ -955,9 +998,9 @@ class TransactionController extends Controller
                 }
 
                 // Journal handling: keep GL in sync with the assigned area's transaction
-                // Rebuild if amount/type/network changed OR date (day) changed — entry_date must follow transaction date, and GL must reflect new values
-                // Also handle admin re-activating reversed transaction
-                $needsJournalRebuild = ($isFinancialChange || $isDateDayChange || $wasReversed) && ($oldStatus === 'completed' || ($wasReversed && is_admin()));
+                // Rebuild if amount/type/network/date/status changed — also handle admin status toggle reversed/completed
+                $needsJournalRebuild = ($isFinancialChange || $isDateDayChange || $isStatusChange || $wasReversed) && ($oldStatus === 'completed' || ($wasReversed && is_admin()) || $isStatusToReversed || $isStatusToCompleted);
+                $needsJournalReversal = $isStatusToReversed;
                 if ($needsJournalRebuild) {
                     $existingJournal = JournalEntry::where('reference', $transaction->reference)->first();
                     if ($existingJournal) {

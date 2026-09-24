@@ -164,6 +164,19 @@
                     <textarea name="notes" rows="2" maxlength="255" placeholder="Internal notes…" @if($transaction->status === 'reversed' && !is_admin()) disabled @endif>{{ old('notes', $transaction->notes) }}</textarea>
                     @error('notes')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                 </div>
+                @if(is_admin())
+                <div class="field">
+                    <label>Status — admin can change</label>
+                    <select name="status" id="editStatus" @if($transaction->status === 'reversed' && !is_admin()) disabled @endif>
+                        <option value="completed" {{ old('status', $transaction->status) === 'completed' ? 'selected' : '' }}>Completed</option>
+                        <option value="pending" {{ old('status', $transaction->status) === 'pending' ? 'selected' : '' }}>Pending</option>
+                        <option value="failed" {{ old('status', $transaction->status) === 'failed' ? 'selected' : '' }}>Failed</option>
+                        <option value="reversed" {{ old('status', $transaction->status) === 'reversed' ? 'selected' : '' }}>Reversed</option>
+                    </select>
+                    <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Change status directly — admin only. Reversed will undo balances if pending/completed → reversed; Completed will re-apply if reversed → completed.</p>
+                    @error('status')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
+                </div>
+                @endif
 
                 <div style="display:flex; gap:10px; margin-top:18px;">
                     @if($transaction->status !== 'reversed' || is_admin())
