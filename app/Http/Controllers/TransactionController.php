@@ -1014,7 +1014,7 @@ class TransactionController extends Controller
                 $balance->save();
             }
 
-            if (in_array($transaction->type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
+            if (in_array($transaction->type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime'], true)) {
                 $direction = in_array($transaction->type, ['deposit', 'airtime'], true) ? -1 : 1;
                 $agent = $transaction->agent;
                 $agent->cash_balance = ((float) $agent->cash_balance) + $direction * $amount;
@@ -1117,7 +1117,7 @@ class TransactionController extends Controller
 
     private function cashDelta(string $type, float $amount): float
     {
-        if (! in_array($type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
+        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime'], true)) {
             return 0;
         }
 

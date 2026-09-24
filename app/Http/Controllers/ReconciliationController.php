@@ -494,7 +494,7 @@ class ReconciliationController extends Controller
 
     private function cashDelta(string $type, float $amount): float
     {
-        if (! in_array($type, ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
+        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime'], true)) {
             return 0;
         }
 

@@ -121,7 +121,7 @@ class DailyOpeningController extends Controller
             ->first();
 
         $cashInTypes = ['deposit', 'airtime'];
-        $cashOutTypes = ['withdrawal', 'wallet_to_bank', 'float_deposit', 'float_topup'];
+        $cashOutTypes = ['withdrawal', 'wallet_to_bank'];
 
         $todayDeposits = (float) $todayTransactions->whereIn('type', $cashInTypes)->sum('amount');
         $todayWithdrawals = (float) $todayTransactions->whereIn('type', $cashOutTypes)->sum('amount');

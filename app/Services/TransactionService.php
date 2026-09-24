@@ -58,8 +58,7 @@ class TransactionService
             };
 
             // Agent perspective: customer deposit -> +cash, -float; withdrawal -> -cash, +float
-            // float_topup / float_deposit (topping up float) -> -cash, +float (pay cash to get float) — must be added to float for the day
-            // bank_to_wallet -> +float, cash unchanged
+            // float_topup / float_deposit (topping up float) -> +float only, no cash (bank transfer) — per user: dont need for withdraw cash
             match ($data['type']) {
                 'deposit' => $adjustFloat(-(float) $data['amount']),
                 'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $adjustFloat((float) $data['amount']),
@@ -68,7 +67,7 @@ class TransactionService
 
             $cashDelta = 0;
 
-            if (in_array($data['type'], ['deposit', 'withdrawal', 'float_deposit', 'float_topup', 'wallet_to_bank', 'airtime'], true)) {
+            if (in_array($data['type'], ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime'], true)) {
                 $direction = in_array($data['type'], ['deposit', 'airtime'], true) ? 1 : -1;
                 $cashDelta = $direction * (float) $data['amount'];
                 $agent->cash_balance = ((float) $agent->cash_balance) + $cashDelta;
