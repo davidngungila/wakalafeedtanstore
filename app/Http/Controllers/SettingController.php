@@ -6,6 +6,7 @@ use App\Models\Setting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
 
 class SettingController extends Controller
@@ -69,5 +70,57 @@ class SettingController extends Controller
         }
 
         return back()->with('status', 'Settings saved successfully.');
+    }
+
+    public function sendTestEmail(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'to' => ['required', 'email', 'max:120'],
+        ]);
+
+        $to = $validated['to'];
+
+        // Ensure email config is applied from DB (AppServiceProvider already does on boot, but re-apply for this request in case just saved)
+        try {
+            $email = Setting::where('key', 'email')->value('value');
+            if (is_array($email) && $email) {
+                if (! empty($email['mail_host'])) {
+                    config(['mail.mailers.smtp.host' => $email['mail_host']]);
+                }
+                if (! empty($email['mail_port'])) {
+                    config(['mail.mailers.smtp.port' => (int) $email['mail_port']]);
+                }
+                if (array_key_exists('mail_encryption', $email)) {
+                    config(['mail.mailers.smtp.encryption' => $email['mail_encryption'] ?: null]);
+                }
+                if (! empty($email['mail_username'])) {
+                    config(['mail.mailers.smtp.username' => $email['mail_username']]);
+                }
+                if (array_key_exists('mail_password', $email) && $email['mail_password'] !== '') {
+                    config(['mail.mailers.smtp.password' => $email['mail_password']]);
+                }
+                if (! empty($email['mail_from_address'])) {
+                    config(['mail.from.address' => $email['mail_from_address']]);
+                }
+                if (! empty($email['mail_from_name'])) {
+                    config(['mail.from.name' => $email['mail_from_name']]);
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        try {
+            Mail::raw("This is a test email from Wakala Feedtan Store.\n\nIf you received this, your email settings (SMTP for OTP & Reports) are saved in database (settings key=email) and working.\n\nSent at ".now()->format('Y-m-d H:i:s').' to '.$to, function ($message) use ($to) {
+                $message->to($to)->subject('Test Email — Wakala Feedtan Store — '.now()->format('H:i'));
+            });
+
+            $this->recordAudit('Test email sent', 'Setting', null, ['to' => $to]);
+
+            return response()->json(['success' => true, 'message' => 'Test email sent to '.$to.' — check inbox/spam. Config is saved in database (settings email).']);
+        } catch (\Throwable $e) {
+            \Log::error('Test email failed', ['error' => $e->getMessage(), 'to' => $to]);
+
+            return response()->json(['success' => false, 'message' => 'Failed to send test email: '.$e->getMessage()], 500);
+        }
     }
 }

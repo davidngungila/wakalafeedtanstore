@@ -182,8 +182,23 @@
                     </div>
                     <div class="field" style="margin-top:12px;"><label>Reports Recipients (comma separated emails)</label><input type="text" name="email[reports_recipients]" value="{{ $email['reports_recipients'] ?? '' }}" placeholder="manager@company.com, audit@company.com"></div>
                     <button type="submit" class="btn btn-primary" style="margin-top:16px;">Save email settings</button>
-                    <button type="button" class="btn btn-ghost" style="margin-left:8px;" onclick="fetch('{{ route('settings.store') }}', {method:'POST', headers:{'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'X-Requested-With':'XMLHttpRequest','Accept':'application/json'}, body: new FormData(event.target.closest('form'))}).then(r=>r.json()).then(d=>toast(d.message||'Saved','success')).catch(()=>toast('Error','error'))">Test</button>
+                    <span style="font-size:12px; color:var(--ink-soft); margin-left:8px;">Saved in database (<code>settings</code> <code>key=email</code>)</span>
                 </form>
+                <div style="margin-top:18px; padding:14px; background:var(--sand-50); border:1px solid var(--line); border-radius:10px;">
+                    <strong style="font-size:13px;">Send test email (verify saved config)</strong>
+                    <p style="font-size:12px; color:var(--ink-soft); margin:4px 0 8px;">Sends a test email using the saved database config (OTP & Reports SMTP). Check inbox/spam.</p>
+                    <form id="testEmailForm" action="{{ route('settings.email.test') }}" method="POST" style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+                        @csrf
+                        <div class="field" style="margin-bottom:0; flex:1; min-width:220px;">
+                            <label>To email *</label>
+                            <input type="email" name="to" required placeholder="test@example.com" value="{{ $email['mail_from_address'] ?? $gen['contact_email'] ?? '' }}" style="padding:10px 12px; border:1.5px solid var(--line); border-radius:8px; width:100%;">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                            Send Test Email
+                        </button>
+                    </form>
+                </div>
             @else
                 <h3>Notifications</h3>
                 <form method="POST" action="{{ route('settings.store') }}" data-settings-form>
@@ -259,6 +274,13 @@
                 e.preventDefault();
                 submitForm(form, { method: 'PUT', done: () => toast('Cash point saved successfully.', 'success') });
             });
+        });
+
+        document.getElementById('testEmailForm')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const form = e.target;
+            if (!form.reportValidity()) return;
+            submitForm(form, { method: 'POST', done: (data) => toast(data.message || 'Test email sent', data.success ? 'success' : 'error') });
         });
     </script>
 @endsection

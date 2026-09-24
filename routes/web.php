@@ -190,6 +190,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
 
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
         Route::post('/settings', [SettingController::class, 'store'])->name('settings.store');
+        Route::post('/settings/email/test', [SettingController::class, 'sendTestEmail'])->name('settings.email.test');
     });
 });
 
