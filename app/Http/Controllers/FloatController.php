@@ -68,11 +68,12 @@ class FloatController extends Controller
         ];
         $summary['floatCapacity'] = $summary['floatOut'] + $summary['totalCash'];
 
-        $floatTransactions = FloatTransaction::with(['network', 'operator'])
-            ->where('agent_id', $cashPoint->id)
-            ->latest()
-            ->limit(50)
-            ->get();
+        $floatQuery = FloatTransaction::with(['network', 'operator'])
+            ->where('agent_id', $cashPoint->id);
+        if ($isAdmin) {
+            $floatQuery->whereDate('created_at', $viewDate);
+        }
+        $floatTransactions = $floatQuery->latest()->limit(50)->get();
 
         $networks = Network::active()->orderBy('name')->get(['id', 'name', 'color']);
         $allNetworks = Network::orderBy('name')->get(['id', 'name', 'color']);
@@ -180,18 +181,18 @@ class FloatController extends Controller
         $dayTransactions = collect();
         $dayFloatTransactions = collect();
         if ($isAdmin) {
+            // Load ALL transactions for the selected day (any status) so Reference dropdown is complete
             $dayTransactions = Transaction::with(['network'])
                 ->where('agent_id', $cashPoint->id)
                 ->whereDate('created_at', $viewDate)
-                ->where('status', 'completed')
                 ->latest()
-                ->limit(50)
+                ->limit(100)
                 ->get();
             $dayFloatTransactions = FloatTransaction::with(['network'])
                 ->where('agent_id', $cashPoint->id)
                 ->whereDate('created_at', $viewDate)
                 ->latest()
-                ->limit(50)
+                ->limit(100)
                 ->get();
         }
 
@@ -509,5 +510,53 @@ class FloatController extends Controller
         }
 
         return back()->with('status', 'Float balances updated.');
+    }
+
+    public function destroy(Request $request, FloatTransaction $floatTransaction): JsonResponse|RedirectResponse
+    {
+        $agent = cash_point();
+        if ($agent === null || (int) $floatTransaction->agent_id !== (int) $agent->id) {
+            abort(403);
+        }
+
+        $amount = (float) $floatTransaction->amount;
+        $type = $floatTransaction->type;
+        $networkId = (int) $floatTransaction->network_id;
+        $agentId = (int) $floatTransaction->agent_id;
+        $reference = $floatTransaction->reference;
+
+        DB::transaction(function () use ($floatTransaction, $amount, $type, $networkId, $agentId) {
+            $balance = NetworkBalance::where('agent_id', $agentId)->where('network_id', $networkId)->first();
+            if ($balance) {
+                match ($type) {
+                    'cash_in' => $balance->balance -= $amount,
+                    'cash_out' => $balance->balance += $amount,
+                    'float_topup' => $balance->balance -= $amount,
+                    'float_pull' => $balance->balance += $amount,
+                    default => null,
+                };
+                $balance->save();
+            }
+
+            $agent = Agent::find($agentId);
+            if ($agent) {
+                if (in_array($type, ['cash_out', 'float_pull'], true)) {
+                    $agent->cash_balance = (float) $agent->cash_balance + $amount;
+                } elseif ($type === 'cash_in') {
+                    $agent->cash_balance = (float) $agent->cash_balance - $amount;
+                }
+                $agent->save();
+            }
+
+            $floatTransaction->delete();
+        });
+
+        $this->recordAudit('Float transaction deleted', 'FloatTransaction', $floatTransaction->id, ['reference' => $reference, 'type' => $type, 'amount' => $amount]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Float transaction '.$reference.' deleted and balances reverted.']);
+        }
+
+        return back()->with('status', 'Float transaction '.$reference.' deleted.');
     }
 }

@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'status',
     'performed_by',
     'notes',
+    'daily_opening_id',
 ])]
 class FloatTransaction extends Model
 {

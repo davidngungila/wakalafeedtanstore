@@ -162,6 +162,7 @@
                         <th>Amount</th>
                         <th>Operator</th>
                         <th>Status</th>
+                        @if($isAdmin)<th></th>@endif
                     </tr>
                 </thead>
                 <tbody id="floatActRows">
@@ -190,14 +191,39 @@
                             <td class="cell-title">@money($ft->amount)</td>
                             <td>{{ $ft->operator?->name ?? '—' }}</td>
                             <td><span class="tag tag-green">Completed</span></td>
+                            @if($isAdmin)
+                                <td>
+                                    <button type="button" onclick="event.stopPropagation(); deleteFloat({{ $ft->id }}, '{{ addslashes($ft->reference) }}')" title="Delete" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--danger);">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    </button>
+                                </td>
+                            @endif
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="empty-state">No float transactions yet.</td></tr>
+                        <tr><td colspan="{{ $isAdmin ? 7 : 6 }}" class="empty-state">No float transactions yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
     </div>
+
+    @if($isAdmin)
+        <div class="modal-backdrop" id="deleteFloatModal">
+            <div class="modal" style="max-width:440px;">
+                <div class="modal-head">
+                    <h3>Delete Float Entry</h3>
+                    <button class="modal-close" onclick="closeModal('deleteFloatModal')">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size:13.5px;color:var(--ink-soft);">Delete <strong id="deleteFloatRef"></strong>? This will revert its NetworkBalance and cash effects for that date.</p>
+                </div>
+                <div class="modal-foot">
+                    <button class="btn btn-ghost" onclick="closeModal('deleteFloatModal')">Cancel</button>
+                    <button class="btn btn-danger" onclick="confirmDeleteFloat()">Delete</button>
+                </div>
+            </div>
+        </div>
+    @endif
 
 @endsection
 
@@ -246,5 +272,29 @@
                 submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
             });
         });
+
+        let deleteFloatId = null;
+        function deleteFloat(id, ref) {
+            deleteFloatId = id;
+            document.getElementById('deleteFloatRef').textContent = ref;
+            openModal('deleteFloatModal');
+        }
+        async function confirmDeleteFloat() {
+            if (!deleteFloatId) return;
+            try {
+                const resp = await fetch('/float/' + deleteFloatId, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data.success) {
+                    toast(data.message || 'Float deleted', 'success');
+                    closeModal('deleteFloatModal');
+                    setTimeout(() => location.reload(), 400);
+                } else {
+                    toast(data.message || 'Failed to delete', 'error');
+                }
+            } catch (e) { toast('Network error', 'error'); }
+        }
     </script>
 @endsection
