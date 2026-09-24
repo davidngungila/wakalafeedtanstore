@@ -296,10 +296,40 @@ class TransactionController extends Controller
 
     public function edit(Request $request, Transaction $transaction): View
     {
-        $transaction->load(['network', 'agent', 'operator', 'dailyOpening']);
+        $transaction->load(['network', 'agent', 'operator', 'dailyOpening', 'smsMessages.device', 'smsMessages.network']);
         $combos = $this->combos();
+        $agent = $transaction->agent ?? Agent::find($transaction->agent_id) ?? cash_point();
 
-        return view('transactions.edit', compact('transaction', 'combos'));
+        $smsMessages = SmsMessage::with(['device', 'network'])
+            ->where(function ($q) use ($transaction) {
+                $q->whereNull('transaction_id')
+                    ->orWhere('transaction_id', $transaction->id);
+            })
+            ->latest('server_received_at')
+            ->limit(50)
+            ->get();
+
+        if (filled($transaction->provider_reference)) {
+            $byRef = SmsMessage::with(['device', 'network'])
+                ->where('transaction_reference', $transaction->provider_reference)
+                ->whereNull('transaction_id')
+                ->latest('server_received_at')
+                ->limit(10)
+                ->get();
+            $smsMessages = $smsMessages->concat($byRef)->unique('id')->values();
+        }
+
+        $linkedSmsIds = $transaction->smsMessages->pluck('id')->map(fn ($id) => (string) $id)->toArray();
+        $selectedSms = $request->input('sms') ?? ($linkedSmsIds[0] ?? null);
+
+        $balances = $agent ? $agent->balances()->with('network')->get()->keyBy('network_id') : collect();
+        $networkBalances = $combos['networks']->mapWithKeys(function ($n) use ($balances) {
+            $b = $balances->get($n['id']);
+
+            return [$n['id'] => $b ? (float) $b->balance : 0];
+        });
+
+        return view('transactions.edit', compact('transaction', 'combos', 'smsMessages', 'linkedSmsIds', 'selectedSms', 'networkBalances', 'agent'));
     }
 
     public function update(Request $request, Transaction $transaction): JsonResponse|RedirectResponse
@@ -312,6 +342,7 @@ class TransactionController extends Controller
             'amount' => ['required', 'numeric', 'min:1'],
             'provider_reference' => ['nullable', 'string', 'max:60'],
             'notes' => ['nullable', 'string', 'max:255'],
+            'sms_id' => ['nullable', 'exists:sms_messages,id'],
         ]);
 
         if ($transaction->status === 'reversed') {
@@ -346,6 +377,7 @@ class TransactionController extends Controller
         $oldCommission = (float) ($transaction->commission ?? 0);
         $oldStatus = $transaction->status;
         $oldReference = $transaction->reference;
+        $oldProviderReference = $transaction->provider_reference;
 
         $newAmount = (float) $validated['amount'];
         $newType = $validated['type'];
@@ -454,6 +486,34 @@ class TransactionController extends Controller
                     'running_cash_balance' => $runningCash,
                     'running_float_balance' => $runningFloat,
                 ]);
+
+                // SMS assignment / reference linking (admin edit) — affects SMS inbox as well
+                if (array_key_exists('sms_id', $validated) && filled($validated['sms_id'])) {
+                    $sms = SmsMessage::find((int) $validated['sms_id']);
+                    if ($sms) {
+                        $sms->update([
+                            'processing_status' => 'RECORDED',
+                            'processing_error' => null,
+                            'transaction_id' => $transaction->id,
+                            'transaction_reference' => $transaction->provider_reference,
+                            'amount' => $transaction->amount,
+                            'transaction_type' => $transaction->type,
+                            'customer_name' => $transaction->customer_name,
+                            'customer_phone' => $transaction->customer_phone,
+                            'network_id' => $transaction->network_id,
+                        ]);
+                    }
+                }
+                // Auto-link any previously unlinked SMS that shares the new provider_reference
+                $newProviderRef = $validated['provider_reference'] ?? $oldProviderReference;
+                if (filled($newProviderRef) && $newProviderRef !== $oldProviderReference) {
+                    SmsMessage::where('transaction_reference', $newProviderRef)
+                        ->whereNull('transaction_id')
+                        ->update([
+                            'processing_status' => 'RECORDED',
+                            'transaction_id' => $transaction->id,
+                        ]);
+                }
 
                 // Journal handling: keep GL in sync with the assigned area's transaction
                 // If financial fields changed and transaction is completed, rebuild the journal entry

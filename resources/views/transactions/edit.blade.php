@@ -21,18 +21,39 @@
         </div>
         <div class="panel-body">
             <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; font-size:13px;">
-                <div class="detail-item"><div class="dk">Cash Point / Agent</div><div class="dv">{{ $transaction->agent?->name ?? '—' }} · {{ $transaction->agent?->code ?? '' }}</div><div class="cell-sub">Area: {{ $transaction->agent?->region ?? '—' }} / {{ $transaction->agent?->district ?? '—' }}</div></div>
-                <div class="detail-item"><div class="dk">Current Network</div><div class="dv"><span class="net-dot" style="background:{{ $transaction->network?->color ?? '#999' }};"></span> {{ $transaction->network?->name ?? '—' }}</div></div>
-                <div class="detail-item"><div class="dk">Daily Opening</div><div class="dv">{{ $transaction->dailyOpening ? $transaction->dailyOpening->opening_date->format('Y-m-d') . ' · ' . money($transaction->dailyOpening->cash_opening) : '— (no opening linked)' }}</div></div>
+                <div class="detail-item"><div class="dk">Cash Point / Agent</div><div class="dv">{{ $transaction->agent?->name ?? '—' }} · {{ $transaction->agent?->code ?? '' }}</div><div class="cell-sub">Area: {{ $transaction->agent?->region ?? '—' }} / {{ $transaction->agent?->district ?? '—' }} · Level {{ $transaction->agent?->agent_level ?? '—' }}</div></div>
+                <div class="detail-item"><div class="dk">Current Network</div><div class="dv"><span class="net-dot" style="background:{{ $transaction->network?->color ?? '#999' }};"></span> {{ $transaction->network?->name ?? '—' }} ({{ $transaction->network?->code ?? '—' }})</div></div>
+                <div class="detail-item"><div class="dk">Daily Opening</div><div class="dv">{{ $transaction->dailyOpening ? $transaction->dailyOpening->opening_date->format('Y-m-d') . ' · ' . money($transaction->dailyOpening->cash_opening) : '— (no opening linked)' }}</div><div class="cell-sub">Vol @money($transaction->dailyOpening?->total_volume ?? 0) · Comm @money($transaction->dailyOpening?->total_commission ?? 0) · {{ $transaction->dailyOpening?->total_transactions ?? 0 }} txs</div></div>
                 <div class="detail-item"><div class="dk">Status</div><div class="dv"><span class="tag {{ status_badge($transaction->status) }}">{{ ucfirst($transaction->status) }}</span> @if($transaction->status === 'reversed') <span style="font-size:11px;color:var(--ink-soft);">Cannot edit reversed transactions</span> @endif</div></div>
             </div>
             <div style="margin-top:14px; padding:10px 12px; background:var(--gold-100); border:1px solid var(--line); border-radius:8px; font-size:12.5px; line-height:1.6; color:var(--coffee-700);">
                 <strong>Editing affects the assigned area:</strong> Changing amount, type, or network will automatically reverse the old financial effects and re-apply the new ones against
                 <strong>{{ $transaction->agent?->name ?? 'the assigned cash point' }}</strong> — cash balance, float (NetworkBalance for that network), daily opening totals, and the general ledger (journal entry <code>{{ $transaction->reference }}</code>).
-                This keeps Reports, Finance, and Float in sync. Non-financial edits (name/phone/reference/notes) do not touch balances.
+                This keeps Reports, Finance, and Float in sync. Non-financial edits (name/phone/reference/notes) do not touch balances. Assigning an SMS will mark that SMS as <code>RECORDED</code> and link it.
             </div>
         </div>
     </div>
+
+    @if($transaction->smsMessages->isNotEmpty())
+        <div class="panel">
+            <div class="panel-head">
+                <h3>Currently Linked SMS ({{ $transaction->smsMessages->count() }})</h3>
+                <span class="link">{{ $transaction->provider_reference ?? 'no ref' }}</span>
+            </div>
+            <div class="panel-body" style="display:flex; flex-direction:column; gap:10px;">
+                @foreach($transaction->smsMessages as $sms)
+                    <div style="background:var(--sand-100); border:1px solid var(--line); border-radius:8px; padding:12px;">
+                        <div style="display:flex; justify-content:space-between; gap:8px; font-size:12.5px; margin-bottom:6px;">
+                            <span><strong>{{ $sms->sender }}</strong> · {{ $sms->device?->name ?? '—' }} · {{ $sms->server_received_at?->format('d M Y H:i') }}</span>
+                            <span class="tag {{ sms_status_badge($sms->processing_status, $sms->is_duplicate, $sms->processing_error) }}">{{ sms_status_label($sms->processing_status, $sms->is_duplicate, $sms->processing_error) }}</span>
+                        </div>
+                        <div style="background:var(--white); border:1px solid var(--line); border-radius:6px; padding:8px; font-size:12px; white-space:pre-wrap; word-break:break-word; font-family:ui-monospace,monospace;">{{ $sms->message_body }}</div>
+                        <div style="font-size:11px; color:var(--ink-soft); margin-top:6px;">Ref: {{ $sms->transaction_reference ?? '—' }} · Type {{ $sms->transaction_type ?? '—' }} · Amount {{ $sms->amount ? money($sms->amount) : '—' }}</div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
 
     <div class="panel">
         <div class="panel-head">
@@ -51,7 +72,7 @@
                 <div class="form-row">
                     <div class="field">
                         <label>Network <span style="color:var(--danger);">*</span></label>
-                        <select name="network_id" required @if($transaction->status === 'reversed') disabled @endif>
+                        <select name="network_id" id="editNetwork" required @if($transaction->status === 'reversed') disabled @endif>
                             <option value="">Select network</option>
                             @foreach($combos['networks'] as $network)
                                 <option value="{{ $network->id }}" {{ (string)old('network_id', $transaction->network_id) === (string)$network->id ? 'selected' : '' }}>{{ $network->name }}</option>
@@ -61,7 +82,7 @@
                     </div>
                     <div class="field">
                         <label>Transaction type <span style="color:var(--danger);">*</span></label>
-                        <select name="type" required @if($transaction->status === 'reversed') disabled @endif>
+                        <select name="type" id="editType" required @if($transaction->status === 'reversed') disabled @endif>
                             <option value="deposit" {{ old('type', $transaction->type) === 'deposit' ? 'selected' : '' }}>Customer Deposit</option>
                             <option value="withdrawal" {{ old('type', $transaction->type) === 'withdrawal' ? 'selected' : '' }}>Customer Withdrawal</option>
                             <option value="send_money" {{ old('type', $transaction->type) === 'send_money' ? 'selected' : '' }}>Send Money</option>
@@ -91,15 +112,30 @@
                 <div class="form-row">
                     <div class="field">
                         <label>Amount (TZS) <span style="color:var(--danger);">*</span></label>
-                        <input type="number" name="amount" value="{{ old('amount', $transaction->amount) }}" min="1" step="any" placeholder="e.g. 100000" required @if($transaction->status === 'reversed') disabled @endif>
+                        <input type="number" name="amount" id="editAmount" value="{{ old('amount', $transaction->amount) }}" min="1" step="any" placeholder="e.g. 100000" required @if($transaction->status === 'reversed') disabled @endif>
                         <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Fee and commission will be recalculated automatically.</p>
                         @error('amount')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>
                     <div class="field">
                         <label>Provider reference</label>
-                        <input type="text" name="provider_reference" value="{{ old('provider_reference', $transaction->provider_reference) }}" placeholder="e.g. Tnx 626... or PP..." @if($transaction->status === 'reversed') disabled @endif>
+                        <input type="text" name="provider_reference" id="editProviderRef" value="{{ old('provider_reference', $transaction->provider_reference) }}" placeholder="e.g. Tnx 626... or PP..." @if($transaction->status === 'reversed') disabled @endif>
+                        <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">If this matches an SMS, that SMS will be auto-linked as RECORDED.</p>
                         @error('provider_reference')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>
+                </div>
+                <div class="field">
+                    <label>Assign / Reference SMS (optional — reference connect)</label>
+                    <select name="sms_id" id="editSms">
+                        <option value="">— No change —</option>
+                        @foreach($smsMessages as $sms)
+                            <option value="{{ $sms->id }}" {{ (string)old('sms_id', $selectedSms) === (string)$sms->id ? 'selected' : '' }}>{{ $sms->sender }} · {{ Str::limit($sms->message_body, 70) }} · {{ $sms->transaction_reference ?? 'no ref' }} · {{ $sms->server_received_at->format('d M H:i') }} · {{ $sms->processing_status }}</option>
+                        @endforeach
+                    </select>
+                    <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">
+                        Link an unlinked SMS (Stored/Failed/Parsed) to this transaction. Currently linked: {{ $linkedSmsIds ? implode(', #', $linkedSmsIds) : 'none' }}. Selecting will mark the SMS as <code>RECORDED</code> and set its <code>transaction_id</code>.
+                        @if($transaction->provider_reference) Matching by provider reference <code>{{ $transaction->provider_reference }}</code> will also auto-link on save. @endif
+                    </p>
+                    @error('sms_id')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                 </div>
                 <div class="field">
                     <label>Notes (optional)</label>
@@ -119,6 +155,21 @@
             </form>
         </div>
     </div>
+
+    @if($transaction->status !== 'reversed')
+    <div class="panel" id="impactPanel" style="margin-top:18px; border-left:3px solid var(--terracotta-600);">
+        <div class="panel-head">
+            <h3>Where this edit will affect — Live Preview</h3>
+            <span class="tag tag-terracotta">Assigned area: {{ $agent?->name ?? '—' }}</span>
+        </div>
+        <div class="panel-body">
+            <div id="impactPreview" style="font-size:13px; line-height:1.6;"></div>
+            <div style="margin-top:12px; padding:10px 12px; background:var(--sand-100); border:1px solid var(--line); border-radius:8px; font-size:12px; color:var(--ink-soft);">
+                <strong>Legend:</strong> Cash <span style="color:var(--success);">▲ increasing</span> means agent receives cash (deposit/airtime), <span style="color:var(--danger);">▼ decreasing</span> means agent pays out (withdrawal). Float <span style="color:var(--danger);">▼</span> = float out (given to network), <span style="color:var(--success);">▲</span> = float in. SMS linking does not affect balances, only inbox status.
+            </div>
+        </div>
+    </div>
+    @endif
 
     @if($transaction->status !== 'reversed')
     <div class="panel" style="margin-top:18px;">
@@ -178,5 +229,108 @@
                 submitForm(form, { method: 'DELETE', done: (data) => { toast(data.message || 'Deleted', 'success'); setTimeout(() => window.location.href = '{{ route('transactions.index') }}', 700); } });
             });
         });
+
+        // Live impact preview
+        (function(){
+            const oldTxn = @json([
+                'amount' => (float) $transaction->amount,
+                'type' => $transaction->type,
+                'network_id' => (int) $transaction->network_id,
+                'network_name' => $transaction->network?->name ?? '—',
+                'fee' => (float) $transaction->fee,
+                'commission' => (float) $transaction->commission,
+                'provider_reference' => $transaction->provider_reference,
+            ]);
+            const networks = @json($combos['networks']->map(fn($n)=>['id'=>$n['id'],'name'=>$n['name'],'color'=>$n['color']])->values());
+            const netMap = Object.fromEntries(networks.map(n=>[String(n.id), n]));
+            const balances = @json($networkBalances);
+            const agentCash = {{ (float) ($agent?->cash_balance ?? 0) }};
+            const agentName = @json($agent?->name ?? 'Agent');
+            const opening = @json([
+                'exists' => $transaction->dailyOpening ? true : false,
+                'date' => $transaction->dailyOpening?->opening_date?->format('Y-m-d'),
+                'volume' => (float) ($transaction->dailyOpening?->total_volume ?? 0),
+                'commission' => (float) ($transaction->dailyOpening?->total_commission ?? 0),
+                'count' => (int) ($transaction->dailyOpening?->total_transactions ?? 0),
+            ]);
+            function floatDelta(type, amount){ amount=Number(amount)||0; if(['deposit','float_deposit','float_topup'].includes(type)) return -amount; if(['withdrawal','bank_to_wallet'].includes(type)) return amount; return -amount; }
+            function cashDelta(type, amount){ amount=Number(amount)||0; if(!['deposit','withdrawal','float_deposit','float_topup','wallet_to_bank','airtime'].includes(type)) return 0; let dir = ['deposit','float_deposit','float_topup','airtime'].includes(type) ? 1 : -1; if(type==='wallet_to_bank') dir=-1; return dir*amount; }
+            function feeFor(type, amount){ amount=Number(amount)||0; if(type==='withdrawal') return Math.min(5000, Math.max(200, Math.round(amount*0.002*100)/100)); if(type==='bill_payment') return Math.round(amount*0.003*100)/100; if(['bank_to_wallet','wallet_to_bank'].includes(type)) return Math.round(amount*0.001*100)/100; return 0; }
+            function money(n){ return 'TZS ' + Number(n).toLocaleString('en-US',{maximumFractionDigits:2}); }
+            function arrow(delta){ if(delta>0) return '<span style="color:var(--success);">▲ +' + money(delta) + '</span>'; if(delta<0) return '<span style="color:var(--danger);">▼ ' + money(delta) + '</span>'; return '<span style="color:var(--ink-soft);">—</span>'; }
+            function updatePreview(){
+                const newAmount = parseFloat(document.getElementById('editAmount')?.value) || 0;
+                const newType = document.getElementById('editType')?.value || oldTxn.type;
+                const newNetworkId = document.getElementById('editNetwork')?.value || String(oldTxn.network_id);
+                const newProviderRef = document.getElementById('editProviderRef')?.value?.trim() || '';
+                const newSms = document.getElementById('editSms')?.value || '';
+                const isFinancialChange = newAmount !== oldTxn.amount || newType !== oldTxn.type || String(newNetworkId) !== String(oldTxn.network_id);
+                const oldFloat = floatDelta(oldTxn.type, oldTxn.amount);
+                const newFloat = floatDelta(newType, newAmount);
+                const oldCash = cashDelta(oldTxn.type, oldTxn.amount);
+                const newCash = cashDelta(newType, newAmount);
+                const netCash = newCash - oldCash;
+                const oldFee = Number(oldTxn.fee)||0; const newFee = feeFor(newType, newAmount);
+                // For network-specific preview
+                const oldNetName = netMap[String(oldTxn.network_id)]?.name || oldTxn.network_name;
+                const newNetName = netMap[String(newNetworkId)]?.name || '—';
+                const oldBal = Number(balances[String(oldTxn.network_id)] ?? 0);
+                const newBal = Number(balances[String(newNetworkId)] ?? 0);
+                let floatHtml = '';
+                if(String(oldTxn.network_id) === String(newNetworkId)){
+                    const curFloat = oldBal;
+                    const afterFloat = curFloat - oldFloat + newFloat;
+                    floatHtml = `<div><strong>Float (${oldNetName})</strong>: ${money(curFloat)} → ${money(afterFloat)} ${arrow(newFloat - oldFloat)} <span style="color:var(--ink-soft);">(revert ${arrow(-oldFloat)} then apply ${arrow(newFloat)})</span></div>`;
+                    if(!isFinancialChange) floatHtml = `<div><strong>Float (${oldNetName})</strong>: ${money(curFloat)} <span style="color:var(--ink-soft);">— no change (same network/type/amount)</span></div>`;
+                } else {
+                    const curOld = oldBal, afterOld = curOld - oldFloat;
+                    const curNew = newBal, afterNew = curNew + newFloat;
+                    floatHtml = `<div><strong>Float ${oldNetName} (old)</strong>: ${money(curOld)} → ${money(afterOld)} ${arrow(-oldFloat)} (reverted)</div><div><strong>Float ${newNetName} (new)</strong>: ${money(curNew)} → ${money(afterNew)} ${arrow(newFloat)} (applied)</div>`;
+                }
+                const curCashAfter = agentCash - oldCash + newCash;
+                let cashHtml = `<div><strong>Cash (${agentName})</strong>: ${money(agentCash)} → ${money(curCashAfter)} ${arrow(netCash)} <span style="color:var(--ink-soft);">(was ${arrow(oldCash)} now ${arrow(newCash)})</span></div>`;
+                if(!isFinancialChange) cashHtml = `<div><strong>Cash (${agentName})</strong>: ${money(agentCash)} <span style="color:var(--ink-soft);">— no change</span></div>`;
+                let openingHtml = '';
+                if(opening.exists){
+                    const volAfter = opening.volume - (isFinancialChange?oldTxn.amount:0) + (isFinancialChange?newAmount:0);
+                    const commAfter = (Number(opening.commission)||0) - (isFinancialChange?Number(oldTxn.commission):0) + (isFinancialChange?0:0); // commission preview rough
+                    openingHtml = `<div><strong>Daily Opening ${opening.date}</strong>: Vol ${money(opening.volume)} → ${money(volAfter)} ${arrow((isFinancialChange?newAmount:0) - (isFinancialChange?oldTxn.amount:0))} · Count ${opening.count} → ${opening.count + (isFinancialChange?0:0)}</div>`;
+                    if(!isFinancialChange) openingHtml = `<div><strong>Daily Opening ${opening.date}</strong>: Vol ${money(opening.volume)} <span style="color:var(--ink-soft);">— no change</span></div>`;
+                } else {
+                    openingHtml = `<div><strong>Daily Opening</strong>: <span style="color:var(--ink-soft);">No opening linked — will link to today's opening if exists, else no opening change</span></div>`;
+                }
+                let journalHtml = `<div><strong>Journal (GL) ${oldTxn.provider_reference || oldTxn.amount}</strong>: ${isFinancialChange ? 'will be <span style="color:var(--danger);">deleted & re-posted</span> with new amount ' + money(newAmount) + ' (fee ' + money(newFee) + ')' : '<span style="color:var(--ink-soft);">— no change</span>'}</div>`;
+                let smsHtml = '';
+                const sel = document.getElementById('editSms');
+                if(sel && sel.value){
+                    const txt = sel.options[sel.selectedIndex]?.text?.slice(0,80) || '';
+                    smsHtml = `<div><strong>SMS link</strong>: will link <code>#${sel.value}</code> → <span style="color:var(--success);">RECORDED</span> <span style="color:var(--ink-soft);">(${txt}…)</span></div>`;
+                } else if(newProviderRef && newProviderRef !== (oldTxn.provider_reference||'')){
+                    smsHtml = `<div><strong>SMS link</strong>: provider ref changed to <code>${newProviderRef}</code> → any unlinked SMS with same ref will be auto-linked as RECORDED</div>`;
+                } else {
+                    smsHtml = `<div><strong>SMS link</strong>: <span style="color:var(--ink-soft);">— no SMS change</span></div>`;
+                }
+                const container = document.getElementById('impactPreview');
+                if(container){
+                    container.innerHTML = `
+                        <div style="display:grid; gap:10px;">
+                            ${cashHtml}
+                            ${floatHtml}
+                            <div><strong>Fees</strong>: ${money(oldFee)} → ${money(newFee)} ${arrow(newFee - oldFee)} <span style="color:var(--ink-soft);"> (recalculated)</span></div>
+                            ${openingHtml}
+                            ${journalHtml}
+                            ${smsHtml}
+                        </div>
+                        ${!isFinancialChange ? '<div style="margin-top:10px; padding:8px; background:var(--sand-50); border-radius:6px; font-size:12px; color:var(--ink-soft);">Only non-financial fields changed (name/phone/notes) — balances, opening and GL will <strong>not</strong> be touched. Only SMS linking may occur.</div>' : ''}
+                    `;
+                }
+            }
+            ['editAmount','editType','editNetwork','editProviderRef','editSms'].forEach(id=>{
+                const el=document.getElementById(id);
+                if(el) el.addEventListener('input', updatePreview);
+                if(el) el.addEventListener('change', updatePreview);
+            });
+            updatePreview();
+        })();
     </script>
 @endsection
