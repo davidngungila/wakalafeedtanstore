@@ -121,9 +121,8 @@ class SendDailyReportEmail extends Command
         $filename = 'daily-report-'.$day->format('Ymd').'.pdf';
 
         try {
-            Mail::send([], [], function ($message) use ($recipients, $subject, $pdfContent, $filename, $dayStr, $business) {
+            Mail::send('emails.daily-report-email', ['day' => $day, 'dayStr' => $dayStr, 'business' => $business], function ($message) use ($recipients, $subject, $pdfContent, $filename) {
                 $message->to($recipients)->subject($subject);
-                $message->html('<p>Daily report for <strong>'.$dayStr.'</strong> — Wakala Feedtan Store</p><p>Attached PDF with opening, transactions, float, and reconciliation for the day.</p><p style="color:#6B5A48; font-size:12px;">'.$business['name'].' — '.$business['address'].'</p>');
                 $message->attachData($pdfContent, $filename, ['mime' => 'application/pdf']);
             });
 

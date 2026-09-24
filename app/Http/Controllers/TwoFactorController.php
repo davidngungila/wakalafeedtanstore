@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\OtpMail;
 use App\Models\User;
 use App\Support\TwoFactor;
 use Illuminate\Http\JsonResponse;
@@ -99,9 +100,7 @@ class TwoFactorController extends Controller
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         Cache::put('otp_email_'.$user->id, $code, 300);
         try {
-            Mail::raw('Your Wakala Feedtan Store OTP code is: '.$code."\n\nValid for 5 minutes.", function ($message) use ($user) {
-                $message->to($user->email)->subject('Your OTP Code — Wakala — '.now()->format('H:i'));
-            });
+            Mail::send(new OtpMail($code, $user->email, 5));
             $msg = 'OTP resent to '.$user->email.' — check inbox/spam';
 
             return $request->expectsJson() ? response()->json(['success' => true, 'message' => $msg]) : back()->with('status', $msg);

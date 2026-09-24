@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\OtpMail;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -51,17 +52,14 @@ class AuthController extends Controller
         $request->session()->put('two_factor_user_email', $user->email);
         $request->session()->regenerate();
 
-        // If OTP via email is enabled in settings, generate and send email OTP (also allow TOTP)
+        // If OTP via email is enabled in settings, generate and send beautiful OTP email (system colors/fonts)
         try {
             $emailSettings = Setting::where('key', 'email')->value('value');
             $otpViaEmail = is_array($emailSettings) && ($emailSettings['otp_via_email'] ?? '1') == '1' && ($emailSettings['otp_enabled'] ?? '1') == '1';
             if ($otpViaEmail) {
                 $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
                 Cache::put('otp_email_'.$user->id, $code, 300);
-                $to = $user->email;
-                Mail::raw('Your Wakala Feedtan Store OTP code is: '.$code."\n\nValid for 5 minutes. If you did not request this, ignore.", function ($message) use ($to) {
-                    $message->to($to)->subject('Your OTP Code — Wakala Feedtan Store — '.now()->format('H:i'));
-                });
+                Mail::send(new OtpMail($code, $user->email, 5));
             }
         } catch (\Throwable $e) {
             \Log::warning('OTP email failed', ['error' => $e->getMessage(), 'user_id' => $user->id]);
