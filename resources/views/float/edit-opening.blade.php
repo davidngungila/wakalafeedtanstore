@@ -182,6 +182,18 @@
             recalc();
         })();
 
+        // When selecting day, load that day's data (opening, cash refs, float top-ups)
+        const openingDateInput = document.querySelector('input[name="opening_date"]');
+        if (openingDateInput) {
+            let lastLoaded = openingDateInput.value;
+            openingDateInput.addEventListener('change', (e) => {
+                const val = e.target.value;
+                if (!val || val === lastLoaded) return;
+                // Navigate to same page with new date so server loads that day's opening + previous reconciled + top-ups
+                window.location.href = '{{ route('float.opening.edit') }}?date=' + encodeURIComponent(val);
+            });
+        }
+
         document.getElementById('applyAdditionalCash')?.addEventListener('click', () => {
             const base = parseFloat('{{ $previousClosingCash ?? 0 }}') || 0;
             const addInput = document.getElementById('additionalCashInput');
