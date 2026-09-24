@@ -23,6 +23,10 @@
     </div>
 
     <p style="margin:16px 0 0; font-size:11.5px; color:#A98968; text-align:center;">
+        <strong>OTP via email is enabled</strong> — check <strong>supervisor@feedtanstore.com</strong> inbox/spam for 6-digit code (also valid in authenticator). Valid 5 min.
+    </p>
+
+    <p style="margin:16px 0 0; font-size:11.5px; color:#A98968; text-align:center;">
         Need help? Reply to this email or contact <strong>{{ \App\Models\Setting::where('key','general')->value('value')['contact_email'] ?? 'your administrator' }}</strong>
     </p>
 
