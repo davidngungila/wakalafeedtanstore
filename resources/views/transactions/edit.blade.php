@@ -123,6 +123,24 @@
                         @error('provider_reference')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>
                 </div>
+                <div class="form-row">
+                    <div class="field">
+                        <label>Transaction date & time <span style="color:var(--danger);">*</span></label>
+                        <input type="datetime-local" name="transaction_date" id="editDate" value="{{ old('transaction_date', $transaction->created_at->format('Y-m-d\TH:i')) }}" required @if($transaction->status === 'reversed') disabled @endif>
+                        <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">When it actually happened. Changing moves it between Daily Openings, Reconciliation days, Reports & Journal dates. Was: {{ $transaction->created_at->format('d M Y H:i') }}</p>
+                        @error('transaction_date')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
+                    </div>
+                    <div class="field">
+                        <label>Daily Opening (auto)</label>
+                        <div style="padding:10px 12px; border:1.5px solid var(--line); border-radius:8px; background:var(--sand-50); font-size:13px;">
+                            @if($transaction->dailyOpening)
+                                {{ $transaction->dailyOpening->opening_date->format('Y-m-d') }} · Vol @money($transaction->dailyOpening->total_volume)
+                            @else
+                                <span style="color:var(--ink-soft);">No opening linked — will auto-link to opening for new date if exists</span>
+                            @endif
+                        </div>
+                    </div>
+                </div>
                 <div class="field">
                     <label>Assign / Reference SMS (optional — reference connect)</label>
                     <select name="sms_id" id="editSms">
@@ -240,6 +258,10 @@
                 'fee' => (float) $transaction->fee,
                 'commission' => (float) $transaction->commission,
                 'provider_reference' => $transaction->provider_reference,
+                'created_at' => $transaction->created_at->format('Y-m-d\TH:i'),
+                'created_date' => $transaction->created_at->format('Y-m-d'),
+                'created_human' => $transaction->created_at->format('d M Y H:i'),
+                'daily_opening_date' => $transaction->dailyOpening?->opening_date?->format('Y-m-d'),
             ]);
             const networks = @json($combos['networks']->map(fn($n)=>['id'=>$n['id'],'name'=>$n['name'],'color'=>$n['color']])->values());
             const netMap = Object.fromEntries(networks.map(n=>[String(n.id), n]));
@@ -264,6 +286,11 @@
                 const newNetworkId = document.getElementById('editNetwork')?.value || String(oldTxn.network_id);
                 const newProviderRef = document.getElementById('editProviderRef')?.value?.trim() || '';
                 const newSms = document.getElementById('editSms')?.value || '';
+                const newDateRaw = document.getElementById('editDate')?.value || oldTxn.created_at;
+                const newDate = newDateRaw ? newDateRaw.slice(0,10) : oldTxn.created_date;
+                const oldDate = oldTxn.created_date;
+                const isDateChange = newDate !== oldDate;
+                const isDateTimeChange = newDateRaw !== oldTxn.created_at;
                 const isFinancialChange = newAmount !== oldTxn.amount || newType !== oldTxn.type || String(newNetworkId) !== String(oldTxn.network_id);
                 const oldFloat = floatDelta(oldTxn.type, oldTxn.amount);
                 const newFloat = floatDelta(newType, newAmount);
@@ -290,16 +317,27 @@
                 const curCashAfter = agentCash - oldCash + newCash;
                 let cashHtml = `<div><strong>Cash (${agentName})</strong>: ${money(agentCash)} → ${money(curCashAfter)} ${arrow(netCash)} <span style="color:var(--ink-soft);">(was ${arrow(oldCash)} now ${arrow(newCash)})</span></div>`;
                 if(!isFinancialChange) cashHtml = `<div><strong>Cash (${agentName})</strong>: ${money(agentCash)} <span style="color:var(--ink-soft);">— no change</span></div>`;
+                let dateHtml = `<div><strong>Date</strong>: ${oldTxn.created_human} (${oldDate}) → ${newDateRaw ? new Date(newDateRaw).toLocaleString() + ' (' + newDate + ')' : '—'} ${isDateChange ? '<span style="color:var(--terracotta-600);">📅 day moves</span> <span style="color:var(--ink-soft);">— daily opening, reconciliation day, reports bucket & journal entry_date will shift</span>' : (isDateTimeChange ? '<span style="color:var(--ink-soft);">time shift only</span>' : '<span style="color:var(--ink-soft);">— no date change</span>')}</div>`;
                 let openingHtml = '';
-                if(opening.exists){
+                if(isDateChange){
+                    if(opening.exists){
+                        const volAfterOld = opening.volume - oldTxn.amount;
+                        const oldOpeningAfter = `<div><strong>Daily Opening ${opening.date} (old)</strong>: Vol ${money(opening.volume)} → ${money(volAfterOld)} ${arrow(-oldTxn.amount)} · Count ${opening.count} → ${Math.max(0, opening.count - 1)} <span style="color:var(--ink-soft);">(reverted)</span></div>`;
+                        const newOpeningInfo = `<div><strong>Daily Opening ${newDate} (new)</strong>: will ${isFinancialChange ? 'apply ' + money(newAmount) : 'move ' + money(oldTxn.amount)} <span style="color:var(--success);">+${money(isFinancialChange?newAmount:oldTxn.amount)}</span> <span style="color:var(--ink-soft);">(if opening exists for that date; else transaction becomes unlinked but still counted via date for reports/reconciliation)</span></div>`;
+                        openingHtml = oldOpeningAfter + newOpeningInfo;
+                    } else {
+                        openingHtml = `<div><strong>Daily Opening</strong>: No opening linked on ${oldDate} → will link to opening for <strong>${newDate}</strong> if exists, else remain unlinked. Reports & reconciliation use <code>whereDate(created_at)</code> so they auto-follow date.</div>`;
+                    }
+                } else if(opening.exists){
                     const volAfter = opening.volume - (isFinancialChange?oldTxn.amount:0) + (isFinancialChange?newAmount:0);
-                    const commAfter = (Number(opening.commission)||0) - (isFinancialChange?Number(oldTxn.commission):0) + (isFinancialChange?0:0); // commission preview rough
                     openingHtml = `<div><strong>Daily Opening ${opening.date}</strong>: Vol ${money(opening.volume)} → ${money(volAfter)} ${arrow((isFinancialChange?newAmount:0) - (isFinancialChange?oldTxn.amount:0))} · Count ${opening.count} → ${opening.count + (isFinancialChange?0:0)}</div>`;
                     if(!isFinancialChange) openingHtml = `<div><strong>Daily Opening ${opening.date}</strong>: Vol ${money(opening.volume)} <span style="color:var(--ink-soft);">— no change</span></div>`;
                 } else {
                     openingHtml = `<div><strong>Daily Opening</strong>: <span style="color:var(--ink-soft);">No opening linked — will link to today's opening if exists, else no opening change</span></div>`;
                 }
-                let journalHtml = `<div><strong>Journal (GL) ${oldTxn.provider_reference || oldTxn.amount}</strong>: ${isFinancialChange ? 'will be <span style="color:var(--danger);">deleted & re-posted</span> with new amount ' + money(newAmount) + ' (fee ' + money(newFee) + ')' : '<span style="color:var(--ink-soft);">— no change</span>'}</div>`;
+                const needsJournal = isFinancialChange || isDateChange;
+                let journalHtml = `<div><strong>Journal (GL) ${oldTxn.provider_reference || oldTxn.amount}</strong>: ${needsJournal ? 'will be <span style="color:var(--danger);">deleted & re-posted</span> with ${isFinancialChange ? 'new amount ' + money(newAmount) + ' (fee ' + money(newFee) + ')' : 'same amount'}${isDateChange ? ' and <span style="color:var(--terracotta-600);">entry_date → ' + newDate + '</span>' : ''}` : '<span style="color:var(--ink-soft);">— no change</span>'}</div>`;
+                let reconHtml = `<div><strong>Reconciliation</strong>: ${isDateChange ? `will recompute for <code>${oldDate}</code> and <code>${newDate}</code> (expected cash/float, variances, status)` : (isFinancialChange ? `will recompute for <code>${oldDate}</code> (expected cash/float)` : '<span style="color:var(--ink-soft);">— no recompute</span>')} <span style="color:var(--ink-soft);">— reports use live whereDate queries so they auto-reflect</span></div>`;
                 let smsHtml = '';
                 const sel = document.getElementById('editSms');
                 if(sel && sel.value){
@@ -312,20 +350,23 @@
                 }
                 const container = document.getElementById('impactPreview');
                 if(container){
+                    const noMoneyChange = !isFinancialChange && !isDateChange;
                     container.innerHTML = `
                         <div style="display:grid; gap:10px;">
+                            ${dateHtml}
                             ${cashHtml}
                             ${floatHtml}
                             <div><strong>Fees</strong>: ${money(oldFee)} → ${money(newFee)} ${arrow(newFee - oldFee)} <span style="color:var(--ink-soft);"> (recalculated)</span></div>
                             ${openingHtml}
                             ${journalHtml}
+                            ${reconHtml}
                             ${smsHtml}
                         </div>
-                        ${!isFinancialChange ? '<div style="margin-top:10px; padding:8px; background:var(--sand-50); border-radius:6px; font-size:12px; color:var(--ink-soft);">Only non-financial fields changed (name/phone/notes) — balances, opening and GL will <strong>not</strong> be touched. Only SMS linking may occur.</div>' : ''}
+                        ${noMoneyChange ? '<div style="margin-top:10px; padding:8px; background:var(--sand-50); border-radius:6px; font-size:12px; color:var(--ink-soft);">Only non-financial fields changed (name/phone/notes) — balances, opening and GL will <strong>not</strong> be touched. Only SMS linking / date may have moved reconciliation buckets.</div>' : ''}
                     `;
                 }
             }
-            ['editAmount','editType','editNetwork','editProviderRef','editSms'].forEach(id=>{
+            ['editAmount','editType','editNetwork','editProviderRef','editSms','editDate'].forEach(id=>{
                 const el=document.getElementById(id);
                 if(el) el.addEventListener('input', updatePreview);
                 if(el) el.addEventListener('change', updatePreview);

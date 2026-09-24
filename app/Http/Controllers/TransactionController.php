@@ -8,6 +8,7 @@ use App\Models\DailyOpening;
 use App\Models\JournalEntry;
 use App\Models\Network;
 use App\Models\NetworkBalance;
+use App\Models\Reconciliation;
 use App\Models\SmsMessage;
 use App\Models\Transaction;
 use App\Services\ExportService;
@@ -18,6 +19,7 @@ use Dompdf\Dompdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -343,6 +345,7 @@ class TransactionController extends Controller
             'provider_reference' => ['nullable', 'string', 'max:60'],
             'notes' => ['nullable', 'string', 'max:255'],
             'sms_id' => ['nullable', 'exists:sms_messages,id'],
+            'transaction_date' => ['nullable', 'date'],
         ]);
 
         if ($transaction->status === 'reversed') {
@@ -386,14 +389,21 @@ class TransactionController extends Controller
         $newFee = $this->feeFor($newType, $newAmount);
         $newCommission = $this->commissionFor($agent, $newNetworkId, $newType, $newAmount);
 
-        // If nothing changed, just update metadata quickly
+        $oldCreatedAt = $transaction->created_at ? Carbon::parse($transaction->created_at) : now();
+        $newCreatedAt = isset($validated['transaction_date']) && filled($validated['transaction_date'])
+            ? Carbon::parse($validated['transaction_date'])
+            : $oldCreatedAt->copy();
         $isFinancialChange = $oldAmount !== $newAmount || $oldType !== $newType || $oldNetworkId !== $newNetworkId;
+        $isDateChange = $oldCreatedAt->format('Y-m-d H:i:s') !== $newCreatedAt->format('Y-m-d H:i:s');
+        $isDateDayChange = $oldCreatedAt->format('Y-m-d') !== $newCreatedAt->format('Y-m-d');
+        $oldDateStr = $oldCreatedAt->format('Y-m-d');
+        $newDateStr = $newCreatedAt->format('Y-m-d');
 
         try {
-            DB::transaction(function () use ($transaction, $oldAmount, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldCommission, $oldStatus, $newAmount, $newType, $newNetworkId, $newFee, $newCommission, $validated, $isFinancialChange): void {
-                // Only adjust financial areas if transaction was completed and financial fields changed
-                // Also handle case where only non-financial fields changed (name/phone) -> no balance adjustment
-                if ($isFinancialChange && $oldStatus === 'completed') {
+            DB::transaction(function () use ($transaction, $oldAmount, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldCommission, $oldStatus, $newAmount, $newType, $newNetworkId, $newFee, $newCommission, $validated, $isFinancialChange, $isDateChange, $isDateDayChange, $oldCreatedAt, $newCreatedAt, $oldDateStr, $newDateStr): void {
+                $needsFinancialAdjustment = $oldStatus === 'completed' && ($isFinancialChange || $isDateDayChange);
+                // Revert old financial effects if needed (amount/type/network or date day moved)
+                if ($needsFinancialAdjustment) {
                     // Revert old financial effects from the assigned area
                     $oldDeltaFloat = $this->floatDelta($oldType, $oldAmount);
                     $oldBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $oldNetworkId)->lockForUpdate()->first();
@@ -419,9 +429,20 @@ class TransactionController extends Controller
                             $opening->total_transactions = max(0, (int) $opening->total_transactions - 1);
                             $opening->save();
                         }
+                    } elseif ($isDateDayChange) {
+                        // No daily_opening_id but transaction was on old date — try to find opening for old date and decrement if exists
+                        $oldOpeningByDate = DailyOpening::forAgentAndDate($oldAgentId, $oldCreatedAt)->first();
+                        if ($oldOpeningByDate) {
+                            $oldOpeningByDate->total_volume = max(0, (float) $oldOpeningByDate->total_volume - $oldAmount);
+                            $oldOpeningByDate->total_commission = max(0, (float) $oldOpeningByDate->total_commission - $oldCommission);
+                            $oldOpeningByDate->total_transactions = max(0, (int) $oldOpeningByDate->total_transactions - 1);
+                            $oldOpeningByDate->save();
+                        }
                     }
+                }
 
-                    // Apply new financial effects to the (same) assigned area — respects network change
+                if ($needsFinancialAdjustment) {
+                    // Apply new financial effects to the (same) assigned area — respects network and date change
                     $newDeltaFloat = $this->floatDelta($newType, $newAmount);
                     $newBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $newNetworkId)->lockForUpdate()->first();
                     if (! $newBalance) {
@@ -448,13 +469,25 @@ class TransactionController extends Controller
                         }
                     }
 
-                    $targetOpeningId = $oldDailyOpeningId;
-                    if (! $targetOpeningId) {
-                        $todayOpening = DailyOpening::forAgentAndDate($oldAgentId, today())->first();
-                        if ($todayOpening && ! $todayOpening->is_closed) {
-                            $targetOpeningId = $todayOpening->id;
+                    // Determine target opening for new date
+                    $targetOpeningId = null;
+                    $targetOpening = DailyOpening::forAgentAndDate($oldAgentId, $newCreatedAt)->first();
+                    if ($targetOpening) {
+                        $targetOpeningId = $targetOpening->id;
+                    } elseif (! $isDateDayChange) {
+                        // Same day — keep old opening linkage if exists
+                        $targetOpeningId = $oldDailyOpeningId;
+                        if (! $targetOpeningId) {
+                            $todayOpening = DailyOpening::forAgentAndDate($oldAgentId, today())->first();
+                            if ($todayOpening && ! $todayOpening->is_closed) {
+                                $targetOpeningId = $todayOpening->id;
+                            }
                         }
+                    } else {
+                        // Date changed to a day with no opening — leave unlinked (transaction will be counted via whereDate for reports/reconciliation)
+                        $targetOpeningId = null;
                     }
+
                     if ($targetOpeningId) {
                         $opening = DailyOpening::where('id', $targetOpeningId)->lockForUpdate()->first();
                         if ($opening) {
@@ -463,9 +496,16 @@ class TransactionController extends Controller
                             $opening->total_transactions = (int) $opening->total_transactions + 1;
                             $opening->save();
                         }
-                        // Ensure transaction keeps link to opening (especially if it was null before)
+                        // Ensure transaction keeps link to opening for new date
                         $transaction->daily_opening_id = $targetOpeningId;
+                    } else {
+                        // No opening for new date — ensure we clear old linkage if date moved
+                        if ($isDateDayChange) {
+                            $transaction->daily_opening_id = null;
+                        }
                     }
+                } elseif ($isFinancialChange && $oldStatus === 'completed') {
+                    // This branch is now covered by needsFinancialAdjustment above; kept for safety but no-op
                 }
 
                 // Refresh assigned agent for running balances after adjustments
@@ -473,7 +513,7 @@ class TransactionController extends Controller
                 $runningCash = $agentForRunning ? (float) $agentForRunning->cash_balance : $transaction->running_cash_balance;
                 $runningFloat = $agentForRunning ? (float) $agentForRunning->totalFloat() : $transaction->running_float_balance;
 
-                $transaction->update([
+                $updates = [
                     'network_id' => $newNetworkId,
                     'type' => $newType,
                     'customer_name' => $validated['customer_name'] ?? null,
@@ -485,7 +525,19 @@ class TransactionController extends Controller
                     'notes' => $validated['notes'] ?? $transaction->notes,
                     'running_cash_balance' => $runningCash,
                     'running_float_balance' => $runningFloat,
-                ]);
+                ];
+
+                if ($isDateChange) {
+                    $updates['created_at'] = $newCreatedAt;
+                }
+
+                $transaction->update($updates);
+
+                // If date changed, also force created_at via query to bypass Eloquent touch guard
+                if ($isDateChange) {
+                    DB::table('transactions')->where('id', $transaction->id)->update(['created_at' => $newCreatedAt, 'updated_at' => now()]);
+                    $transaction->refresh();
+                }
 
                 // SMS assignment / reference linking (admin edit) — affects SMS inbox as well
                 if (array_key_exists('sms_id', $validated) && filled($validated['sms_id'])) {
@@ -516,8 +568,9 @@ class TransactionController extends Controller
                 }
 
                 // Journal handling: keep GL in sync with the assigned area's transaction
-                // If financial fields changed and transaction is completed, rebuild the journal entry
-                if ($isFinancialChange && $oldStatus === 'completed') {
+                // Rebuild if amount/type/network changed OR date (day) changed — entry_date must follow transaction date, and GL must reflect new values
+                $needsJournalRebuild = ($isFinancialChange || $isDateDayChange) && $oldStatus === 'completed';
+                if ($needsJournalRebuild) {
                     $existingJournal = JournalEntry::where('reference', $transaction->reference)->first();
                     if ($existingJournal) {
                         // Delete old lines and the entry itself, then re-post fresh so debits/credits match new amount
@@ -539,6 +592,28 @@ class TransactionController extends Controller
                     if ($transaction->status === 'completed') {
                         app(TransactionJournalService::class)->postForTransaction($transaction);
                     }
+
+                    // If date (day) changed, ensure journal entry_date follows new transaction date
+                    if ($isDateDayChange && $transaction->status === 'completed') {
+                        $journal = JournalEntry::where('reference', $transaction->reference)->first();
+                        if ($journal && $journal->entry_date->format('Y-m-d') !== $newCreatedAt->format('Y-m-d')) {
+                            $journal->update(['entry_date' => $newCreatedAt->toDateString()]);
+                        }
+                    }
+                }
+
+                // Auto-update reconciliation for affected dates so Reports/Reconciliation stay correct
+                try {
+                    if ($isDateDayChange) {
+                        $this->recomputeReconciliationForAgentDate($oldAgentId, $oldDateStr);
+                        if ($newDateStr !== $oldDateStr) {
+                            $this->recomputeReconciliationForAgentDate($oldAgentId, $newDateStr);
+                        }
+                    } elseif ($isFinancialChange && $oldStatus === 'completed') {
+                        $this->recomputeReconciliationForAgentDate($oldAgentId, $oldDateStr);
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning('Reconciliation auto-recompute failed after transaction edit', ['error' => $e->getMessage(), 'reference' => $oldReference]);
                 }
             });
         } catch (\Throwable $e) {
@@ -551,8 +626,8 @@ class TransactionController extends Controller
 
         $this->recordAudit('Transaction updated', 'Transaction', $transaction->id, [
             'reference' => $oldReference,
-            'old' => ['amount' => $oldAmount, 'type' => $oldType, 'network_id' => $oldNetworkId],
-            'new' => ['amount' => $newAmount, 'type' => $newType, 'network_id' => $newNetworkId],
+            'old' => ['amount' => $oldAmount, 'type' => $oldType, 'network_id' => $oldNetworkId, 'date' => $oldDateStr],
+            'new' => ['amount' => $newAmount, 'type' => $newType, 'network_id' => $newNetworkId, 'date' => $newDateStr],
         ]);
 
         if ($request->expectsJson()) {
@@ -567,6 +642,8 @@ class TransactionController extends Controller
         if ($transaction->status === 'reversed') {
             // Already reversed — just delete without double-reversing balances
             $reference = $transaction->reference;
+            $oldAgentIdForRec = (int) $transaction->agent_id;
+            $oldDateForRec = $transaction->created_at ? Carbon::parse($transaction->created_at)->format('Y-m-d') : null;
             DB::transaction(function () use ($transaction, $reference): void {
                 $journal = JournalEntry::where('reference', $reference)->first();
                 if ($journal) {
@@ -580,6 +657,15 @@ class TransactionController extends Controller
                 }
                 $transaction->delete();
             });
+
+            // Recompute reconciliation for that date (reversed tx was not counted, but clean anyway)
+            if ($oldDateForRec) {
+                try {
+                    $this->recomputeReconciliationForAgentDate($oldAgentIdForRec, $oldDateForRec);
+                } catch (\Throwable $e) {
+                    \Log::warning('Reconciliation recompute after delete (reversed) failed', ['error' => $e->getMessage()]);
+                }
+            }
 
             $this->recordAudit('Transaction deleted (was reversed)', 'Transaction', $transaction->id, ['reference' => $reference]);
 
@@ -597,6 +683,7 @@ class TransactionController extends Controller
         $oldAgentId = (int) $transaction->agent_id;
         $oldDailyOpeningId = $transaction->daily_opening_id;
         $oldReference = $transaction->reference;
+        $oldDateStrForDelete = $transaction->created_at ? Carbon::parse($transaction->created_at)->format('Y-m-d') : null;
 
         try {
             DB::transaction(function () use ($transaction, $oldAmount, $oldCommission, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldReference): void {
@@ -641,6 +728,15 @@ class TransactionController extends Controller
 
                 $transaction->delete();
             });
+
+            // Recompute reconciliation for that date so Reports/Reconciliation reflect deletion
+            if ($oldDateStrForDelete) {
+                try {
+                    $this->recomputeReconciliationForAgentDate($oldAgentId, $oldDateStrForDelete);
+                } catch (\Throwable $e) {
+                    \Log::warning('Reconciliation recompute after delete failed', ['error' => $e->getMessage()]);
+                }
+            }
         } catch (\Throwable $e) {
             if ($request->expectsJson()) {
                 return response()->json(['success' => false, 'message' => 'Failed to delete transaction: '.$e->getMessage()], 422);
@@ -888,5 +984,152 @@ class TransactionController extends Controller
             'bank_to_wallet', 'wallet_to_bank' => round($amount * 0.001, 2),
             default => 0,
         };
+    }
+
+    /**
+     * Recompute a stored reconciliation for an agent+date after a transaction edit/delete.
+     * Keeps Reports/Reconciliation in sync when transaction date/amount changes.
+     * If no reconciliation exists for that date, nothing to do (future buildRun will be correct).
+     */
+    private function recomputeReconciliationForAgentDate(int $agentId, string $date): void
+    {
+        $reconciliation = Reconciliation::where('agent_id', $agentId)
+            ->where('reconciliation_date', $date)
+            ->first();
+
+        if (! $reconciliation) {
+            return;
+        }
+
+        $agent = Agent::find($agentId);
+        if (! $agent) {
+            return;
+        }
+
+        // Rebuild expected values using same logic as ReconciliationController::buildRun
+        $dailyOpening = DailyOpening::forAgentAndDate($agentId, Carbon::parse($date))->first();
+
+        $transactions = Transaction::query()
+            ->where('agent_id', $agentId)
+            ->whereDate('created_at', $date)
+            ->where('status', 'completed')
+            ->whereIn('type', ['deposit', 'float_deposit', 'withdrawal'])
+            ->get();
+
+        $depositsByNetwork = $transactions
+            ->whereIn('type', ['deposit', 'float_deposit'])
+            ->groupBy('network_id')
+            ->map(fn ($group): float => (float) $group->sum('amount'));
+
+        $withdrawalsByNetwork = $transactions
+            ->where('type', 'withdrawal')
+            ->groupBy('network_id')
+            ->map(fn ($group): float => (float) $group->sum('amount'));
+
+        $networks = Network::active()->orderBy('name')->get(['id', 'name', 'color']);
+        $balances = $agent->balances()->get()->keyBy('network_id');
+
+        $rows = $networks->map(function (Network $network) use ($dailyOpening, $balances, $depositsByNetwork, $withdrawalsByNetwork): array {
+            $balance = $balances->get($network->id);
+            $opening = $dailyOpening !== null
+                ? $dailyOpening->getFloatOpening($network->id)
+                : (float) ($balance?->opening_balance ?? 0);
+            if ($opening == 0.0) {
+                $opening = (float) ($balance?->balance ?? 0);
+            }
+            $deposits = (float) ($depositsByNetwork[$network->id] ?? 0);
+            $withdrawals = (float) ($withdrawalsByNetwork[$network->id] ?? 0);
+
+            return [
+                'id' => $network->id,
+                'name' => $network->name,
+                'color' => $network->color,
+                'opening' => $opening,
+                'deposits' => $deposits,
+                'withdrawals' => $withdrawals,
+                'expected' => round($opening - $deposits + $withdrawals, 2),
+            ];
+        })->values()->all();
+
+        $openingCash = $dailyOpening !== null
+            ? (float) $dailyOpening->cash_opening
+            : (float) ($agent->reconciliations()->where('reconciliation_date', '<', $date)->orderByDesc('reconciliation_date')->first()?->counted_cash ?? $agent->cash_balance);
+
+        $cashDeposits = (float) $transactions->whereIn('type', ['deposit', 'float_deposit'])->sum('amount');
+        $cashWithdrawals = (float) $transactions->where('type', 'withdrawal')->sum('amount');
+        $expectedCash = round($openingCash + $cashDeposits - $cashWithdrawals, 2);
+        $expectedFloat = round(array_sum(array_column($rows, 'expected')), 2);
+
+        // Preserve counted values, recompute variances
+        $countedCash = (float) $reconciliation->counted_cash;
+        $countedFloatTotal = (float) collect($reconciliation->network_balances ?? [])->sum('counted');
+
+        // Rebuild network_balances with new expected but same counted
+        $oldBalances = collect($reconciliation->network_balances ?? [])->keyBy('network_id');
+        $newNetworkBalances = collect($rows)->map(function (array $row) use ($oldBalances): array {
+            $old = $oldBalances->get($row['id']);
+            $counted = $old ? (float) ($old['counted'] ?? $row['expected']) : (float) $row['expected'];
+
+            return [
+                'network_id' => $row['id'],
+                'network' => $row['name'],
+                'opening' => $row['opening'],
+                'deposits' => $row['deposits'],
+                'withdrawals' => $row['withdrawals'],
+                'expected' => $row['expected'],
+                'system' => $row['expected'],
+                'counted' => $counted,
+                'variance' => round($counted - $row['expected'], 2),
+            ];
+        })->values()->all();
+
+        $countedFloatTotal = (float) collect($newNetworkBalances)->sum('counted');
+        $cashVariance = round($countedCash - $expectedCash, 2);
+        $floatVariance = round($countedFloatTotal - $expectedFloat, 2);
+        $tieOut = round(($openingCash + array_sum(array_column($rows, 'opening'))) - ($countedCash + $countedFloatTotal), 2);
+
+        $status = abs($cashVariance) < 0.005 && abs($floatVariance) < 0.005 && abs($tieOut) < 0.005
+            ? 'reconciled'
+            : 'variance';
+
+        // If corrections exist that resolve variance, mark resolved
+        $corrections = $reconciliation->corrections;
+        if ($corrections->isNotEmpty()) {
+            $channels = ['cash' => ['variance' => $cashVariance]];
+            foreach ($newNetworkBalances as $b) {
+                $channels['float.'.$b['network']] = ['variance' => $b['variance']];
+            }
+            $allResolved = true;
+            foreach ($channels as $key => $ch) {
+                $sum = 0.0;
+                if ($key === 'cash') {
+                    $sum = (float) $corrections->where('scope', 'cash')->sum(fn ($c) => $c->signedAmount());
+                } else {
+                    $netName = substr($key, 6);
+                    $sum = (float) $corrections->where('scope', 'float')->filter(fn ($c) => $c->network?->name === $netName)->sum(fn ($c) => $c->signedAmount());
+                }
+                if (abs($ch['variance'] - $sum) >= 0.005) {
+                    $allResolved = false;
+                    break;
+                }
+            }
+            if ($allResolved && $status === 'variance') {
+                $status = 'resolved';
+            }
+        }
+
+        $reconciliation->update([
+            'opening_cash' => $openingCash,
+            'cash_deposits' => $cashDeposits,
+            'cash_withdrawals' => $cashWithdrawals,
+            'expected_cash' => $expectedCash,
+            'opening_float' => round(array_sum(array_column($rows, 'opening')), 2),
+            'total_float' => $expectedFloat,
+            'cash_variance' => $cashVariance,
+            'float_variance' => $floatVariance,
+            'tie_out' => $tieOut,
+            'network_balances' => $newNetworkBalances,
+            'status' => $status,
+        ]);
     }
 }
