@@ -81,9 +81,19 @@
                         <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Leave empty for now, or set a past datetime to back-date for reconciliation on that day.</p>
                     </div>
                 @endif
+                <div class="field" style="background:var(--sand-50); border:1.5px solid var(--line); border-radius:10px; padding:12px;">
+                    <label style="color:var(--terracotta-600);">Select SMS to autofill (optional — computes float top-up automatically)</label>
+                    <select id="txnSmsSelect" style="width:100%; padding:10px 12px; border:1.5px solid var(--line); border-radius:8px; background:var(--white);">
+                        <option value="">— No autofill — manual entry —</option>
+                        @foreach($smsMessages as $sms)
+                            <option value="{{ $sms->id }}" data-network="{{ $sms->network_id ?? '' }}" data-amount="{{ $sms->amount ?? '' }}" data-type="{{ $sms->transaction_type ?? '' }}" data-phone="{{ $sms->customer_phone ?? '' }}" data-name="{{ $sms->customer_name ?? '' }}" data-ref="{{ $sms->transaction_reference ?? '' }}" data-sms="{{ Str::limit($sms->message_body, 100) }}">{{ $sms->sender }} · {{ Str::limit($sms->message_body, 70) }} · {{ $sms->transaction_reference ?? 'no ref' }} · {{ $sms->amount ? money($sms->amount) : '' }} · {{ $sms->server_received_at->format('d M H:i') }} · {{ $sms->processing_status }}</option>
+                        @endforeach
+                    </select>
+                    <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Pick a received SMS (e.g. for float top-up) — will autofill Network, Amount, Type, Customer, Provider ref and link the SMS. For top-up float, it will set <code>float_topup</code> + amount and provider ref.</p>
+                </div>
                 <div class="field">
                     <label>Link to SMS (optional - reference connect to the message)</label>
-                    <select name="sms_id">
+                    <select name="sms_id" id="txnSmsLink">
                         <option value="">— No SMS link —</option>
                         @foreach($smsMessages as $sms)
                             <option value="{{ $sms->id }}" {{ (string)old('sms_id', $selectedSms) === (string)$sms->id ? 'selected' : '' }}>{{ $sms->sender }} · {{ Str::limit($sms->message_body, 60) }} · {{ $sms->transaction_reference ?? 'no ref' }} · {{ $sms->server_received_at->format('d M H:i') }}</option>
@@ -121,5 +131,51 @@
                 submitForm(form, { method: 'POST', done: (data) => { toast(data.message, 'success'); setTimeout(() => window.location.href = '{{ route('transactions.index') }}', 700); } });
             });
         });
+
+        const smsSelect = document.getElementById('txnSmsSelect');
+        if (smsSelect) {
+            smsSelect.addEventListener('change', () => {
+                const opt = smsSelect.options[smsSelect.selectedIndex];
+                if (!opt || !opt.value) return;
+                const network = opt.dataset.network;
+                const amount = opt.dataset.amount;
+                const type = opt.dataset.type;
+                const phone = opt.dataset.phone;
+                const name = opt.dataset.name;
+                const ref = opt.dataset.ref;
+                const form = smsSelect.closest('form');
+                if (network) {
+                    const sel = form.querySelector('select[name=network_id]');
+                    if (sel) sel.value = network;
+                }
+                if (amount) {
+                    const inp = form.querySelector('input[name=amount]');
+                    if (inp) inp.value = amount;
+                }
+                if (type) {
+                    const sel = form.querySelector('select[name=type]');
+                    if (sel) {
+                        let mapped = type;
+                        if (['float_topup','float_deposit'].includes(type)) mapped = 'float_topup';
+                        if (sel.querySelector('option[value="'+mapped+'"]')) sel.value = mapped;
+                    }
+                }
+                if (phone) {
+                    const inp = form.querySelector('input[name=customer_phone]');
+                    if (inp) inp.value = phone;
+                }
+                if (name) {
+                    const inp = form.querySelector('input[name=customer_name]');
+                    if (inp) inp.value = name;
+                }
+                if (ref) {
+                    const inp = form.querySelector('input[name=provider_reference]');
+                    if (inp) inp.value = ref;
+                }
+                const linkSel = document.getElementById('txnSmsLink');
+                if (linkSel) linkSel.value = opt.value;
+                toast('Autofilled from SMS ' + ref, 'success');
+            });
+        }
     </script>
 @endsection
