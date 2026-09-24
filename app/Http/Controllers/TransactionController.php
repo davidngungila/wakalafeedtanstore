@@ -1437,6 +1437,10 @@ class TransactionController extends Controller
             return;
         }
 
+        if ($reconciliation->is_locked) {
+            return;
+        }
+
         $agent = Agent::find($agentId);
         if (! $agent) {
             return;

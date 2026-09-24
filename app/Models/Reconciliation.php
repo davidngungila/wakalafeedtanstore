@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Crypt;
     'tie_out',
     'network_balances',
     'status',
+    'is_locked',
     'notes',
     'reconciled_by',
 ])]
@@ -43,6 +44,7 @@ class Reconciliation extends Model
             'float_variance' => 'decimal:2',
             'tie_out' => 'decimal:2',
             'network_balances' => 'array',
+            'is_locked' => 'boolean',
         ];
     }
 

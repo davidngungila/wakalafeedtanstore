@@ -9,13 +9,28 @@
             <p class="sub">
                 {{ $reconciliation->reconciliation_date->format('l, j F Y') }}
                 · <span class="tag {{ status_badge($reconciliation->status) }}">{{ ucfirst($reconciliation->status) }}</span>
+                @if($reconciliation->is_locked)
+                    · <span class="tag" style="background:var(--coffee-900); color:#fff;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px; vertical-align:middle; margin-right:4px;"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Locked — not changed by transactions</span>
+                @endif
                 @if ($reconciliation->agent)
                     · {{ $reconciliation->agent->code }}
                 @endif
             </p>
         </div>
         <div class="view-actions" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-            <a href="{{ route('reconciliation.edit', $reconciliation) }}" class="btn btn-primary btn-sm" style="background:var(--acacia-600);">
+            <form method="POST" action="{{ route('reconciliation.toggle-lock', $reconciliation) }}" style="display:inline;" data-lock-form>
+                @csrf
+                <button type="submit" class="btn {{ $reconciliation->is_locked ? 'btn-ghost' : 'btn-primary' }} btn-sm" style="{{ $reconciliation->is_locked ? 'border:1px solid var(--acacia-600); color:var(--acacia-600);' : 'background:var(--coffee-900);' }}">
+                    @if($reconciliation->is_locked)
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        Locked
+                    @else
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                        Lock Report
+                    @endif
+                </button>
+            </form>
+            <a href="{{ route('reconciliation.edit', $reconciliation) }}" class="btn btn-primary btn-sm" style="background:var(--acacia-600); {{ $reconciliation->is_locked ? 'opacity:0.5; pointer-events:none;' : '' }}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 1 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 Recorrect Full
             </a>
@@ -368,6 +383,12 @@
         document.getElementById('deleteReconShowForm')?.addEventListener('submit', (e) => {
             e.preventDefault();
             submitForm(e.target, { method: 'POST', done: () => window.location.href = '{{ route('reconciliation.index') }}' });
+        });
+        document.querySelectorAll('[data-lock-form]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 500) });
+            });
         });
     </script>
 @endsection

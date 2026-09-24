@@ -298,6 +298,9 @@ class ReconciliationController extends Controller
 
     public function edit(Reconciliation $reconciliation): View
     {
+        if ($reconciliation->is_locked) {
+            abort(403, 'Reconciliation is locked and cannot be recorrected. Unlock first.');
+        }
         $reconciliation->load(['agent']);
         $run = $this->runFromRecord($reconciliation);
         $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
@@ -520,6 +523,14 @@ class ReconciliationController extends Controller
 
     public function storeCorrection(Request $request, Reconciliation $reconciliation)
     {
+        if ($reconciliation->is_locked) {
+            $msg = 'Reconciliation is locked and cannot be corrected. Unlock first.';
+            if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return back()->with('error', $msg);
+        }
         try {
             $validated = $request->validate([
                 'scope' => ['required', 'in:cash,float'],
@@ -614,6 +625,26 @@ class ReconciliationController extends Controller
 
             return back()->with('error', 'Failed to delete: '.$e->getMessage());
         }
+    }
+
+    public function toggleLock(Request $request, Reconciliation $reconciliation): JsonResponse|RedirectResponse
+    {
+        $agent = cash_point();
+        if ($agent && (int) $reconciliation->agent_id !== (int) $agent->id && ! is_admin()) {
+            abort(403);
+        }
+
+        $reconciliation->update(['is_locked' => ! $reconciliation->is_locked]);
+
+        $msg = $reconciliation->is_locked ? 'Reconciliation locked — will not change with any transaction.' : 'Reconciliation unlocked — will update with transactions.';
+
+        $this->recordAudit($reconciliation->is_locked ? 'Reconciliation locked' : 'Reconciliation unlocked', 'Reconciliation', $reconciliation->id, ['date' => $reconciliation->reconciliation_date, 'is_locked' => $reconciliation->is_locked]);
+
+        if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+            return response()->json(['success' => true, 'message' => $msg, 'is_locked' => $reconciliation->is_locked]);
+        }
+
+        return back()->with('status', $msg);
     }
 
     /**

@@ -87,6 +87,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::get('/reconciliation', [ReconciliationController::class, 'index'])->name('reconciliation.index');
     Route::get('/reconciliation/create', [ReconciliationController::class, 'create'])->name('reconciliation.create');
     Route::post('/reconciliation', [ReconciliationController::class, 'store'])->name('reconciliation.store');
+    Route::post('/reconciliation/{reconciliation}/toggle-lock', [ReconciliationController::class, 'toggleLock'])->name('reconciliation.toggle-lock');
     Route::get('/reconciliation/{reconciliation}/edit', [ReconciliationController::class, 'edit'])->name('reconciliation.edit');
     Route::put('/reconciliation/{reconciliation}', [ReconciliationController::class, 'update'])->name('reconciliation.update');
     Route::get('/reconciliation/{reconciliation}/export', [ReconciliationController::class, 'exportSingle'])->name('reconciliation.export.single');
