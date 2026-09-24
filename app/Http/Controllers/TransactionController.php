@@ -331,7 +331,31 @@ class TransactionController extends Controller
             return [$n['id'] => $b ? (float) $b->balance : 0];
         });
 
-        return view('transactions.edit', compact('transaction', 'combos', 'smsMessages', 'linkedSmsIds', 'selectedSms', 'networkBalances', 'agent'));
+        $oldTxnData = [
+            'amount' => (float) $transaction->amount,
+            'type' => $transaction->type,
+            'network_id' => (int) $transaction->network_id,
+            'network_name' => $transaction->network?->name ?? '—',
+            'fee' => (float) $transaction->fee,
+            'commission' => (float) $transaction->commission,
+            'provider_reference' => $transaction->provider_reference,
+            'created_at' => $transaction->created_at->format('Y-m-d').'T'.$transaction->created_at->format('H:i'),
+            'created_date' => $transaction->created_at->format('Y-m-d'),
+            'created_human' => $transaction->created_at->format('d M Y H:i'),
+            'daily_opening_date' => $transaction->dailyOpening ? $transaction->dailyOpening->opening_date->format('Y-m-d') : null,
+        ];
+
+        $openingData = [
+            'exists' => $transaction->dailyOpening ? true : false,
+            'date' => $transaction->dailyOpening ? $transaction->dailyOpening->opening_date->format('Y-m-d') : null,
+            'volume' => (float) ($transaction->dailyOpening ? $transaction->dailyOpening->total_volume : 0),
+            'commission' => (float) ($transaction->dailyOpening ? $transaction->dailyOpening->total_commission : 0),
+            'count' => (int) ($transaction->dailyOpening ? $transaction->dailyOpening->total_transactions : 0),
+        ];
+
+        $networksData = $combos['networks']->map(fn ($n) => ['id' => $n->id, 'name' => $n->name, 'color' => $n->color])->values();
+
+        return view('transactions.edit', compact('transaction', 'combos', 'smsMessages', 'linkedSmsIds', 'selectedSms', 'networkBalances', 'agent', 'oldTxnData', 'openingData', 'networksData'));
     }
 
     public function update(Request $request, Transaction $transaction): JsonResponse|RedirectResponse

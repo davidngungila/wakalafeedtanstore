@@ -250,31 +250,13 @@
 
         // Live impact preview
         (function(){
-            const oldTxn = @json([
-                'amount' => (float) $transaction->amount,
-                'type' => $transaction->type,
-                'network_id' => (int) $transaction->network_id,
-                'network_name' => $transaction->network?->name ?? '—',
-                'fee' => (float) $transaction->fee,
-                'commission' => (float) $transaction->commission,
-                'provider_reference' => $transaction->provider_reference,
-                'created_at' => $transaction->created_at->format('Y-m-d').'T'.$transaction->created_at->format('H:i'),
-                'created_date' => $transaction->created_at->format('Y-m-d'),
-                'created_human' => $transaction->created_at->format('d M Y H:i'),
-                'daily_opening_date' => $transaction->dailyOpening ? $transaction->dailyOpening->opening_date->format('Y-m-d') : null,
-            ]);
-            const networks = @json($combos['networks']->map(fn($n)=>['id'=>$n['id'],'name'=>$n['name'],'color'=>$n['color']])->values());
+            const oldTxn = @json($oldTxnData);
+            const networks = @json($networksData);
             const netMap = Object.fromEntries(networks.map(n=>[String(n.id), n]));
             const balances = @json($networkBalances);
-            const agentCash = {{ (float) ($agent?->cash_balance ?? 0) }};
-            const agentName = @json($agent?->name ?? 'Agent');
-            const opening = @json([
-                'exists' => $transaction->dailyOpening ? true : false,
-                'date' => $transaction->dailyOpening ? $transaction->dailyOpening->opening_date->format('Y-m-d') : null,
-                'volume' => (float) ($transaction->dailyOpening ? $transaction->dailyOpening->total_volume : 0),
-                'commission' => (float) ($transaction->dailyOpening ? $transaction->dailyOpening->total_commission : 0),
-                'count' => (int) ($transaction->dailyOpening ? $transaction->dailyOpening->total_transactions : 0),
-            ]);
+            const agentCash = {{ (float) ($agent ? $agent->cash_balance : 0) }};
+            const agentName = @json($agent ? $agent->name : 'Agent');
+            const opening = @json($openingData);
             function floatDelta(type, amount){ amount=Number(amount)||0; if(['deposit','float_deposit','float_topup'].includes(type)) return -amount; if(['withdrawal','bank_to_wallet'].includes(type)) return amount; return -amount; }
             function cashDelta(type, amount){ amount=Number(amount)||0; if(!['deposit','withdrawal','float_deposit','float_topup','wallet_to_bank','airtime'].includes(type)) return 0; let dir = ['deposit','float_deposit','float_topup','airtime'].includes(type) ? 1 : -1; if(type==='wallet_to_bank') dir=-1; return dir*amount; }
             function feeFor(type, amount){ amount=Number(amount)||0; if(type==='withdrawal') return Math.min(5000, Math.max(200, Math.round(amount*0.002*100)/100)); if(type==='bill_payment') return Math.round(amount*0.003*100)/100; if(['bank_to_wallet','wallet_to_bank'].includes(type)) return Math.round(amount*0.001*100)/100; return 0; }
