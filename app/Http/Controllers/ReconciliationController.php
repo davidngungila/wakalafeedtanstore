@@ -85,7 +85,7 @@ class ReconciliationController extends Controller
         ];
     }
 
-    public function create(): View|RedirectResponse
+    public function create(Request $request): View|RedirectResponse
     {
         $agent = cash_point();
 
@@ -93,11 +93,46 @@ class ReconciliationController extends Controller
             return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first before reconciling.');
         }
 
-        $run = $this->buildRun($agent, today()->toDateString());
+        $isAdmin = is_admin();
+        $rawDate = $request->input('date', $request->input('reconciliation_date', today()->toDateString()));
+
+        try {
+            $viewDate = Carbon::parse($rawDate)->toDateString();
+        } catch (\Throwable) {
+            $viewDate = today()->toDateString();
+        }
+
+        // Non-admin can only reconcile today
+        if (! $isAdmin) {
+            $viewDate = today()->toDateString();
+        }
+
+        // Disallow future dates
+        if ($viewDate > today()->toDateString()) {
+            $viewDate = today()->toDateString();
+        }
+
+        $run = $this->buildRun($agent, $viewDate);
+
+        $existing = Reconciliation::where('agent_id', $agent->id)
+            ->where('reconciliation_date', $viewDate)
+            ->latest()
+            ->first();
+
+        $availableDates = DailyOpening::where('agent_id', $agent->id)
+            ->orderByDesc('opening_date')
+            ->limit(30)
+            ->pluck('opening_date')
+            ->map(fn ($d) => Carbon::parse($d)->toDateString())
+            ->values();
 
         return view('reconciliation.create', [
             'agent' => $agent,
             'run' => $run,
+            'existing' => $existing,
+            'selectedDate' => $viewDate,
+            'isAdmin' => $isAdmin,
+            'availableDates' => $availableDates,
         ]);
     }
 

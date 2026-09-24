@@ -13,6 +13,43 @@
         </div>
     </div>
 
+    @if($isAdmin)
+        <div class="panel" style="border-left:3px solid var(--terracotta-600);">
+            <div class="panel-head">
+                <h3>Admin — Select Date for Reconciliation</h3>
+                <span class="tag tag-terracotta">Any previous day</span>
+            </div>
+            <div class="panel-body">
+                <form method="GET" action="{{ route('reconciliation.create') }}" style="display:flex; gap:10px; align-items:end; flex-wrap:wrap;">
+                    <div class="field" style="margin-bottom:0;">
+                        <label>Reconciliation date</label>
+                        <input type="date" name="date" value="{{ $selectedDate }}" max="{{ today()->toDateString() }}" onchange="this.form.submit()">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Load day</button>
+                    <a href="{{ route('reconciliation.create') }}" class="btn btn-ghost">Today</a>
+                    @if($availableDates->isNotEmpty())
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-left:8px;">
+                            <span style="font-size:12px; color:var(--ink-soft);">Recent openings:</span>
+                            @foreach($availableDates->take(5) as $d)
+                                <a href="{{ route('reconciliation.create', ['date' => $d]) }}" class="tag {{ $d === $selectedDate ? 'tag-green' : 'tag-terracotta' }}" style="text-decoration:none;">{{ $d }}</a>
+                            @endforeach
+                        </div>
+                    @endif
+                </form>
+                @if($existing)
+                    <div style="margin-top:12px; padding:10px 12px; background:var(--gold-100); border:1px solid var(--line); border-radius:8px; font-size:13px;">
+                        <strong>Already reconciled for {{ $selectedDate }}:</strong> Status <span class="tag {{ $existing->status === 'reconciled' ? 'tag-green' : ($existing->status === 'variance' ? 'tag-red' : 'tag-gold') }}">{{ ucfirst($existing->status) }}</span> · Expected cash @money($existing->expected_cash) · Counted @money($existing->counted_cash) · <a href="{{ route('reconciliation.show', $existing) }}">View existing</a> — you can still create another for this date, or edit the existing.
+                    </div>
+                @else
+                    <div style="margin-top:12px; font-size:12px; color:var(--ink-soft);">No reconciliation yet for {{ $selectedDate }} — this form will create one. All options (cash, float per network, tie-out) are loaded for that day's opening + activity.</div>
+                @endif
+                <div style="margin-top:10px; font-size:12px; color:var(--ink-soft); line-height:1.6;">
+                    Admin can load <strong>any previous day</strong> and reconcile it with full data: opening cash/float, deposits/withdrawals, expected closing, counted closing, variances. This updates Reports and the selected day's reconciliation; other days remain unchanged.
+                </div>
+            </div>
+        </div>
+    @endif
+
     <form action="{{ route('reconciliation.store') }}" method="POST" data-recon-form>
         @csrf
 
