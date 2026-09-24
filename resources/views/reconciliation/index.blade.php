@@ -93,13 +93,19 @@
                             <td><span class="tag {{ status_badge($record->status) }}">{{ ucfirst($record->status) }}</span></td>
                             <td class="cell-sub">{{ $record->reconciler?->name ?? '—' }}</td>
                             <td>
-                                <div class="row-actions">
-                                    <button onclick="window.location='{{ route('reconciliation.show', $record) }}'" title="More details" style="width:auto;padding:0 12px;gap:6px;">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"></path></svg>
-                                        <span>More</span>
+                                <div class="row-actions" style="gap:6px;">
+                                    <a href="{{ route('reconciliation.show', $record) }}" title="View report" style="width:32px;height:32px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--coffee-700); text-decoration:none;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    </a>
+                                    <button type="button" onclick="toggleLock('{{ $record->getRouteKey() }}', {{ $record->is_locked ? 'true' : 'false' }})" title="{{ $record->is_locked ? 'Unlock report' : 'Lock report — not changed by transactions' }}" style="width:32px;height:32px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:{{ $record->is_locked ? 'var(--acacia-600)' : 'var(--ink-soft)' }}; {{ $record->is_locked ? 'background:var(--acacia-100); border-color:var(--acacia-600);' : '' }}">
+                                        @if($record->is_locked)
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                        @else
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                                        @endif
                                     </button>
                                     @if(is_admin())
-                                        <button type="button" onclick="openDeleteReconModal('{{ $record->getRouteKey() }}', '{{ $record->code }}', '{{ $record->reconciliation_date }}')" title="Delete reconciled" style="width:32px;height:32px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--danger);">
+                                        <button type="button" onclick="openDeleteReconModal('{{ $record->getRouteKey() }}', '{{ $record->code }}', '{{ $record->reconciliation_date }}')" title="Delete report" style="width:32px;height:32px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--danger);">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                         </button>
                                     @endif
@@ -189,7 +195,23 @@
             const form = document.getElementById('deleteReconForm');
             submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 500) });
         }
+        async function toggleLock(key, isLocked) {
+            try {
+                const resp = await fetch('/reconciliation/' + encodeURIComponent(key) + '/toggle-lock', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data.success) {
+                    toast(data.message || (isLocked ? 'Unlocked' : 'Locked'), 'success');
+                    setTimeout(() => location.reload(), 400);
+                } else {
+                    toast(data.message || 'Failed to toggle lock', 'error');
+                }
+            } catch (e) { toast('Network error', 'error'); }
+        }
         window.openDeleteReconModal = openDeleteReconModal;
         window.confirmDeleteRecon = confirmDeleteRecon;
+        window.toggleLock = toggleLock;
     </script>
 @endsection
