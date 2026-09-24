@@ -531,7 +531,7 @@ class ReconciliationController extends Controller
             ->get();
 
         $depositsByNetwork = $transactions
-            ->whereIn('type', ['deposit', 'airtime', 'float_deposit'])
+            ->whereIn('type', ['deposit', 'airtime', 'send_money', 'float_deposit'])
             ->groupBy('network_id')
             ->map(fn ($group): float => (float) $group->sum('amount'));
 
@@ -648,11 +648,11 @@ class ReconciliationController extends Controller
 
     private function cashDelta(string $type, float $amount): float
     {
-        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime'], true)) {
+        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'send_money', 'float_deposit'], true)) {
             return 0;
         }
 
-        $direction = in_array($type, ['deposit', 'airtime'], true) ? 1 : -1;
+        $direction = in_array($type, ['deposit', 'airtime', 'send_money', 'float_deposit'], true) ? 1 : -1;
 
         return $direction * $amount;
     }
@@ -660,7 +660,7 @@ class ReconciliationController extends Controller
     private function floatDelta(string $type, float $amount): float
     {
         return match ($type) {
-            'deposit' => -$amount,
+            'deposit', 'airtime', 'send_money' => -$amount,
             'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $amount,
             default => -$amount,
         };

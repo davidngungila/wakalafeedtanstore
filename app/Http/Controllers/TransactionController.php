@@ -1386,7 +1386,7 @@ class TransactionController extends Controller
     private function floatDelta(string $type, float $amount): float
     {
         return match ($type) {
-            'deposit' => -$amount,
+            'deposit', 'airtime', 'send_money' => -$amount,
             'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $amount,
             default => -$amount,
         };
@@ -1394,11 +1394,11 @@ class TransactionController extends Controller
 
     private function cashDelta(string $type, float $amount): float
     {
-        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime'], true)) {
+        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'send_money'], true)) {
             return 0;
         }
 
-        $direction = in_array($type, ['deposit', 'airtime'], true) ? 1 : -1;
+        $direction = in_array($type, ['deposit', 'airtime', 'send_money'], true) ? 1 : -1;
 
         return $direction * $amount;
     }
