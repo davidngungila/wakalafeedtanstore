@@ -9,7 +9,7 @@
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F2E9;padding:24px 12px;">
         <tr>
             <td align="center">
-                <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(76,52,28,.08);">
+<table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(76,52,28,.08);">
                     <tr>
                         <td style="background:#C2592B;padding:18px 28px;">
                             <span style="color:#FFFFFF;font-size:18px;font-weight:700;letter-spacing:.3px;">
@@ -19,6 +19,7 @@
                                 {{ $gen['business_name'] ?? 'Wakala Platform' }}
                             </span>
                             <span style="display:block;color:#F5D9C8;font-size:12px;margin-top:2px;">{{ $gen['address'] ?? '' }}</span>
+                            <span style="display:block;color:#F5D9C8;font-size:11px;margin-top:4px;">{{ $gen['contact_email'] ?? '' }} · {{ $gen['contact_phone'] ?? '' }}</span>
                         </td>
                     </tr>
                     <tr>
