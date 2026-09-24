@@ -258,10 +258,10 @@
                 'fee' => (float) $transaction->fee,
                 'commission' => (float) $transaction->commission,
                 'provider_reference' => $transaction->provider_reference,
-                'created_at' => $transaction->created_at->format('Y-m-d\TH:i'),
+                'created_at' => $transaction->created_at->format('Y-m-d').'T'.$transaction->created_at->format('H:i'),
                 'created_date' => $transaction->created_at->format('Y-m-d'),
                 'created_human' => $transaction->created_at->format('d M Y H:i'),
-                'daily_opening_date' => $transaction->dailyOpening?->opening_date?->format('Y-m-d'),
+                'daily_opening_date' => $transaction->dailyOpening ? $transaction->dailyOpening->opening_date->format('Y-m-d') : null,
             ]);
             const networks = @json($combos['networks']->map(fn($n)=>['id'=>$n['id'],'name'=>$n['name'],'color'=>$n['color']])->values());
             const netMap = Object.fromEntries(networks.map(n=>[String(n.id), n]));
@@ -270,10 +270,10 @@
             const agentName = @json($agent?->name ?? 'Agent');
             const opening = @json([
                 'exists' => $transaction->dailyOpening ? true : false,
-                'date' => $transaction->dailyOpening?->opening_date?->format('Y-m-d'),
-                'volume' => (float) ($transaction->dailyOpening?->total_volume ?? 0),
-                'commission' => (float) ($transaction->dailyOpening?->total_commission ?? 0),
-                'count' => (int) ($transaction->dailyOpening?->total_transactions ?? 0),
+                'date' => $transaction->dailyOpening ? $transaction->dailyOpening->opening_date->format('Y-m-d') : null,
+                'volume' => (float) ($transaction->dailyOpening ? $transaction->dailyOpening->total_volume : 0),
+                'commission' => (float) ($transaction->dailyOpening ? $transaction->dailyOpening->total_commission : 0),
+                'count' => (int) ($transaction->dailyOpening ? $transaction->dailyOpening->total_transactions : 0),
             ]);
             function floatDelta(type, amount){ amount=Number(amount)||0; if(['deposit','float_deposit','float_topup'].includes(type)) return -amount; if(['withdrawal','bank_to_wallet'].includes(type)) return amount; return -amount; }
             function cashDelta(type, amount){ amount=Number(amount)||0; if(!['deposit','withdrawal','float_deposit','float_topup','wallet_to_bank','airtime'].includes(type)) return 0; let dir = ['deposit','float_deposit','float_topup','airtime'].includes(type) ? 1 : -1; if(type==='wallet_to_bank') dir=-1; return dir*amount; }
