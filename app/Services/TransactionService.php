@@ -78,7 +78,7 @@ class TransactionService
                 $agent->save();
             }
 
-            $txn = Transaction::create([
+            $payload = [
                 'daily_opening_id' => $dailyOpening?->id,
                 'reference' => $reference,
                 'agent_id' => $agent->id,
@@ -95,8 +95,11 @@ class TransactionService
                 'notes' => $notes,
                 'running_cash_balance' => $agent->cash_balance,
                 'running_float_balance' => $agent->totalFloat(),
-                'running_network_balance' => $balance->balance,
-            ]);
+            ];
+            if (\Illuminate\Support\Facades\Schema::hasColumn('transactions', 'running_network_balance')) {
+                $payload['running_network_balance'] = $balance->balance;
+            }
+            $txn = Transaction::create($payload);
 
             if ($dailyOpening !== null) {
                 $dailyOpening->addTransactionVolume((float) $txn->amount, (float) $txn->commission);

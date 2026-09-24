@@ -21,6 +21,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class TransactionController extends Controller
@@ -553,8 +554,10 @@ class TransactionController extends Controller
                     'notes' => $validated['notes'] ?? $transaction->notes,
                     'running_cash_balance' => $runningCash,
                     'running_float_balance' => $runningFloat,
-                    'running_network_balance' => $runningNetwork,
                 ];
+                if (Schema::hasColumn('transactions', 'running_network_balance')) {
+                    $updates['running_network_balance'] = $runningNetwork;
+                }
 
                 if ($isDateChange) {
                     $updates['created_at'] = $newCreatedAt;
