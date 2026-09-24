@@ -149,9 +149,31 @@
 
     <div class="panel">
         <div class="panel-head">
-            <h3>Recent float activity</h3>
-            <span class="link">Latest 50</span>
+            <h3>Float activity — filter by dates</h3>
+            <span class="link">{{ request('from') || request('to') || request('date_filter') ? 'Filtered' : 'Latest 50' }}</span>
         </div>
+        <form method="GET" action="{{ route('float.index') }}" style="padding:12px 16px; border-bottom:1px solid var(--line); display:flex; gap:8px; flex-wrap:wrap; align-items:end; background:var(--sand-50);">
+            @if($isAdmin)
+                <input type="hidden" name="date" value="{{ $selectedDate }}">
+            @endif
+            <div class="field" style="margin-bottom:0;">
+                <label style="font-size:11px;">From</label>
+                <input type="date" name="from" value="{{ request('from') }}" style="padding:8px 10px; border:1.5px solid var(--line); border-radius:8px; font-size:13px;">
+            </div>
+            <div class="field" style="margin-bottom:0;">
+                <label style="font-size:11px;">To</label>
+                <input type="date" name="to" value="{{ request('to') }}" style="padding:8px 10px; border:1.5px solid var(--line); border-radius:8px; font-size:13px;">
+            </div>
+            <div class="field" style="margin-bottom:0;">
+                <label style="font-size:11px;">Single date</label>
+                <input type="date" name="date_filter" value="{{ request('date_filter') }}" style="padding:8px 10px; border:1.5px solid var(--line); border-radius:8px; font-size:13px;">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            <a href="{{ route('float.index', $isAdmin ? ['date' => $selectedDate] : []) }}" class="btn btn-ghost btn-sm">Clear dates</a>
+            @if(request('from') || request('to') || request('date_filter'))
+                <span style="font-size:12px; color:var(--ink-soft);">Filtering {{ $floatTransactions->count() }} transactions</span>
+            @endif
+        </form>
         <div class="table-scroll">
             <table style="min-width:700px;">
                 <thead>

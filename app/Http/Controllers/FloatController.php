@@ -138,8 +138,28 @@ class FloatController extends Controller
 
         $floatQuery = FloatTransaction::with(['network', 'operator'])
             ->where('agent_id', $cashPoint->id);
-        if ($isAdmin) {
+        // Date filter for float transactions (admin and all) — supports single date or range
+        if ($request->filled('from')) {
+            try {
+                $from = Carbon::parse($request->input('from'))->startOfDay();
+                $floatQuery->where('created_at', '>=', $from);
+            } catch (\Throwable) {
+            }
+        } elseif ($isAdmin) {
             $floatQuery->whereDate('created_at', $viewDate);
+        }
+        if ($request->filled('to')) {
+            try {
+                $to = Carbon::parse($request->input('to'))->endOfDay();
+                $floatQuery->where('created_at', '<=', $to);
+            } catch (\Throwable) {
+            }
+        } elseif ($request->filled('date_filter')) {
+            try {
+                $df = Carbon::parse($request->input('date_filter'))->toDateString();
+                $floatQuery->whereDate('created_at', $df);
+            } catch (\Throwable) {
+            }
         }
         $floatTransactions = $floatQuery->latest()->limit(50)->get();
 
