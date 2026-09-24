@@ -10,6 +10,8 @@ use App\Models\Reconciliation;
 use App\Models\ReconciliationCorrection;
 use App\Models\Transaction;
 use App\Services\ExportService;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Dompdf\Dompdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -273,6 +275,86 @@ class ReconciliationController extends Controller
         $run = $this->runFromRecord($reconciliation);
 
         return view('reconciliation.show', compact('reconciliation', 'channels', 'networks', 'run'));
+    }
+
+    public function exportSingle(Request $request, Reconciliation $reconciliation)
+    {
+        $reconciliation->load(['agent', 'reconciler', 'corrections.network', 'corrections.creator']);
+
+        $run = $this->runFromRecord($reconciliation);
+        $channels = $this->settledChannels($reconciliation);
+
+        $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
+
+        // For excel fallback to generic list-style export of this single record
+        if ($format === 'excel') {
+            $export = app(ExportService::class);
+            $columns = [
+                ['key' => 'field', 'label' => 'Field'],
+                ['key' => 'value', 'label' => 'Value'],
+            ];
+            $rows = collect([
+                ['field' => 'Reconciliation', 'value' => $reconciliation->code],
+                ['field' => 'Date', 'value' => $reconciliation->reconciliation_date->format('Y-m-d')],
+                ['field' => 'Agent', 'value' => $reconciliation->agent?->code.' — '.$reconciliation->agent?->name],
+                ['field' => 'Status', 'value' => ucfirst($reconciliation->status)],
+                ['field' => 'Opening Cash', 'value' => money($run['openingCash'])],
+                ['field' => 'Opening Float', 'value' => money($run['openingFloat'])],
+                ['field' => 'Expected Cash', 'value' => money($run['expectedCash'])],
+                ['field' => 'Counted Cash', 'value' => money($run['countedCash'])],
+                ['field' => 'Cash Variance', 'value' => money($run['cashVariance'])],
+                ['field' => 'Expected Float', 'value' => money($run['expectedFloat'])],
+                ['field' => 'Counted Float', 'value' => money($run['countedFloat'])],
+                ['field' => 'Float Variance', 'value' => money($run['countedFloat'] - $run['expectedFloat'])],
+                ['field' => 'Tie-out', 'value' => money($run['tieOut'])],
+            ]);
+
+            return $export->excel('Reconciliation-'.$reconciliation->code, $columns, $rows);
+        }
+
+        // Full complete PDF report
+        $exportService = app(ExportService::class);
+        $business = $exportService->businessInfo();
+        $generatedAt = now()->format('d M Y H:i');
+        $generatedBy = auth()->user()?->name ?? 'System';
+
+        // Load activity for this date for complete report
+        $dayOpening = DailyOpening::forAgentAndDate($reconciliation->agent_id, Carbon::parse($reconciliation->reconciliation_date))->first();
+        $dayTransactions = Transaction::with(['network'])
+            ->where('agent_id', $reconciliation->agent_id)
+            ->whereDate('created_at', $reconciliation->reconciliation_date)
+            ->whereNotIn('type', ['float_topup', 'float_deposit'])
+            ->latest()
+            ->limit(100)
+            ->get();
+        $dayFloatTransactions = FloatTransaction::with(['network'])
+            ->where('agent_id', $reconciliation->agent_id)
+            ->whereDate('created_at', $reconciliation->reconciliation_date)
+            ->latest()
+            ->limit(50)
+            ->get();
+
+        $title = 'Reconciliation '.$reconciliation->code;
+        $subtitle = $reconciliation->reconciliation_date->format('l, d M Y').' — '.$reconciliation->agent?->code.' — '.ucfirst($reconciliation->status);
+
+        try {
+            $pdf = Pdf::loadView('exports.reconciliation-pdf', compact('reconciliation', 'run', 'channels', 'business', 'generatedAt', 'generatedBy', 'title', 'subtitle', 'dayOpening', 'dayTransactions', 'dayFloatTransactions'));
+            $pdf->setPaper('a4', 'landscape');
+            $pdf->setOptions(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true, 'isPhpEnabled' => true]);
+
+            return $pdf->download('reconciliation-'.$reconciliation->code.'-'.$reconciliation->reconciliation_date->format('Ymd').'.pdf');
+        } catch (\Throwable $e) {
+            $html = view('exports.reconciliation-pdf', compact('reconciliation', 'run', 'channels', 'business', 'generatedAt', 'generatedBy', 'title', 'subtitle', 'dayOpening', 'dayTransactions', 'dayFloatTransactions'))->render();
+            $dompdf = new Dompdf(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true]);
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('A4', 'landscape');
+            $dompdf->render();
+
+            return response($dompdf->output(), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="reconciliation-'.$reconciliation->code.'-'.$reconciliation->reconciliation_date->format('Ymd').'.pdf"',
+            ]);
+        }
     }
 
     public function createCorrection(Reconciliation $reconciliation): View

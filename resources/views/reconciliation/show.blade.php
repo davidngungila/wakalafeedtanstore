@@ -14,7 +14,9 @@
                 @endif
             </p>
         </div>
-        <div class="view-actions">
+        <div class="view-actions" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <a href="{{ route('reconciliation.export.single', $reconciliation) }}?format=pdf" class="btn btn-primary btn-sm" target="_blank">📄 Export PDF (Full Report)</a>
+            <a href="{{ route('reconciliation.export.single', $reconciliation) }}?format=excel" class="btn btn-ghost btn-sm">📊 Export Excel</a>
             <a href="{{ route('reconciliation.index') }}" class="btn btn-ghost">← Back to list</a>
             @if(is_admin())
                 <button type="button" onclick="openModal('deleteReconShowModal')" class="btn btn-danger">Delete reconciled</button>
