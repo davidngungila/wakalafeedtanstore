@@ -141,46 +141,22 @@
                                 <td>@money($op->totalFloatOpening())</td>
                                 <td>{{ $op->total_transactions }} txs<br><span class="cell-sub">@money($op->total_volume)</span></td>
                                 <td><span class="tag {{ $op->is_closed ? 'tag-grey' : 'tag-green' }}">{{ $op->is_closed ? 'Closed' : 'Open' }}</span>@if($op->opening_date->toDateString() === $selectedDate) <span class="tag tag-gold">Viewing</span> @endif</td>
-                                <td style="white-space:nowrap;">
-                                    <a href="{{ route('float.index', ['date' => $op->opening_date->toDateString()]) }}" class="btn btn-ghost btn-sm">View</a>
-                                    <a href="{{ route('float.opening.edit', ['date' => $op->opening_date->toDateString()]) }}" class="btn btn-ghost btn-sm">Edit</a>
-                                    <button type="button" onclick="deleteDay('{{ $op->opening_date->toDateString() }}', '{{ $op->opening_date->format('Y-m-d') }}', false)" class="btn btn-ghost btn-sm" style="color:var(--danger);">Delete</button>
+                                <td style="white-space:nowrap; text-align:center;">
+                                    <a href="{{ route('float.index', ['date' => $op->opening_date->toDateString()]) }}" title="View day" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--ink);margin-right:4px;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    </a>
+                                    <a href="{{ route('float.opening.edit', ['date' => $op->opening_date->toDateString()]) }}" title="Edit opening" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--acacia-600);margin-right:4px;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                    </a>
+                                    <button type="button" onclick="deleteDay('{{ $op->opening_date->toDateString() }}', '{{ $op->opening_date->format('Y-m-d') }}', false)" title="Delete day" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--danger);">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    </button>
                                 </td>
                             </tr>
                             @endforeach
                         </tbody>
                     </table>
                 </div>
-                <div style="padding:10px 12px; background:var(--sand-50); border-top:1px solid var(--line); font-size:12px; color:var(--ink-soft);">
-                    Viewing <strong>{{ $selectedDate }}</strong> — Click <em>View</em> to load that day’s balances, <em>Edit</em> to change opening cash/float, <em>Delete</em> to remove full single day (opening only). For 2026-09-24 full management, use View then Edit/Delete below.
-                </div>
-            </div>
-        </div>
-
-        {{-- Manage Selected Single Day — focused edit/delete for 2026-09-24 etc --}}
-        <div class="panel" style="border-left:3px solid var(--acacia-600);">
-            <div class="panel-head">
-                <h3>Manage Day {{ $viewDate->format('Y-m-d') }} — Full Single Day</h3>
-                <span class="link">Edit or delete this day’s opening & activity</span>
-            </div>
-            <div class="panel-body">
-                @if($todayOpening)
-                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                        <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-primary btn-sm">✏️ Edit Opening</a>
-                        <a href="{{ route('daily-opening.show', $todayOpening) }}" class="btn btn-ghost btn-sm">View Daily Opening</a>
-                        <button type="button" onclick="deleteDay('{{ $selectedDate }}', '{{ $viewDate->format('Y-m-d') }}', false)" class="btn btn-danger btn-sm">🗑️ Delete Day (opening only)</button>
-                        <button type="button" onclick="if(confirm('Delete opening + ALL transactions & float for {{ $selectedDate }}? This reverts balances!')) deleteDay('{{ $selectedDate }}', '{{ $viewDate->format('Y-m-d') }}', true)" class="btn btn-ghost btn-sm" style="color:var(--danger); border-color:var(--danger);">Delete Day + Transactions</button>
-                    </div>
-                    <div style="margin-top:8px; font-size:12px; color:var(--ink-soft);">
-                        Edit = change cash/float opening for this date · Delete Day = removes DailyOpening · Delete + Transactions = also deletes all customer transactions & float for this date and reverts balances.
-                    </div>
-                @else
-                    <div style="padding:10px; background:var(--sand-100); border-radius:6px; font-size:13px;">
-                        No opening for <strong>{{ $selectedDate }}</strong> —
-                        <a href="{{ route('float.opening.edit', ['date' => $selectedDate]) }}" class="btn btn-primary btn-sm">Create Opening</a>
-                        <span style="color:var(--ink-soft);"> then add float/cash for this day.</span>
-                    </div>
-                @endif
             </div>
         </div>
         @endif
