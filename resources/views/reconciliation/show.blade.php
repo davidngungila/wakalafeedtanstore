@@ -17,13 +17,29 @@
         <div class="view-actions">
             <a href="{{ route('reconciliation.index') }}" class="btn btn-ghost">← Back to list</a>
             @if(is_admin())
-                <form method="POST" action="{{ route('reconciliation.destroy', $reconciliation) }}" onsubmit="return confirm('Delete reconciliation {{ $reconciliation->code }} for {{ $reconciliation->reconciliation_date->format('Y-m-d') }}? This will delete its corrections and cannot be undone.')" style="display:inline;">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="btn btn-danger">Delete reconciled</button>
-                </form>
+                <button type="button" onclick="openModal('deleteReconShowModal')" class="btn btn-danger">Delete reconciled</button>
             @endif
         </div>
+
+    <div class="modal-backdrop" id="deleteReconShowModal">
+        <div class="modal" style="max-width:440px;">
+            <div class="modal-head">
+                <h3>Delete Reconciliation</h3>
+                <button class="modal-close" onclick="closeModal('deleteReconShowModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13.5px;color:var(--ink-soft);">Delete reconciliation <strong>{{ $reconciliation->code }}</strong> for <strong>{{ $reconciliation->reconciliation_date->format('Y-m-d') }}</strong>? This cannot be undone. Its {{ $reconciliation->corrections->count() }} correction(s) will also be removed.</p>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="closeModal('deleteReconShowModal')">Cancel</button>
+                <form id="deleteReconShowForm" method="POST" action="{{ route('reconciliation.destroy', $reconciliation) }}" style="display:inline;">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
     </div>
 
     @if ($errors->any())
@@ -279,4 +295,13 @@
                 @endforelse
             </div>
         </div>
+@endsection
+
+@section('scripts')
+    <script>
+        document.getElementById('deleteReconShowForm')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            submitForm(e.target, { method: 'POST', done: () => window.location.href = '{{ route('reconciliation.index') }}' });
+        });
+    </script>
 @endsection

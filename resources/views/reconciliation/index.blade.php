@@ -99,13 +99,9 @@
                                         <span>More</span>
                                     </button>
                                     @if(is_admin())
-                                        <form method="POST" action="{{ route('reconciliation.destroy', $record) }}" onsubmit="return confirm('Delete reconciliation {{ $record->code }} for {{ $record->reconciliation_date }}? This cannot be undone.')" style="display:inline;">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" title="Delete reconciled" style="width:32px;height:32px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--danger);">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                            </button>
-                                        </form>
+                                        <button type="button" onclick="openDeleteReconModal('{{ $record->getRouteKey() }}', '{{ $record->code }}', '{{ $record->reconciliation_date }}')" title="Delete reconciled" style="width:32px;height:32px;border-radius:7px;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;color:var(--danger);">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                        </button>
                                     @endif
                                 </div>
                             </td>
@@ -118,7 +114,25 @@
         </div>
     </div>
 
-    <!-- New reconciliation modal -->
+    <div class="modal-backdrop" id="deleteReconModal">
+        <div class="modal" style="max-width:440px;">
+            <div class="modal-head">
+                <h3>Delete Reconciliation</h3>
+                <button class="modal-close" onclick="closeModal('deleteReconModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13.5px;color:var(--ink-soft);">Delete reconciliation <strong id="deleteReconCode"></strong> for <strong id="deleteReconDate"></strong>? This cannot be undone. Its corrections will also be removed.</p>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="closeModal('deleteReconModal')">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmDeleteRecon()">Delete</button>
+            </div>
+        </div>
+    </div>
+    <form id="deleteReconForm" method="POST" style="display:none;">
+        @csrf
+        @method('DELETE')
+    </form>
 
 @endsection
 
@@ -160,5 +174,22 @@
                 submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
             });
         });
+
+        let deleteReconKey = null;
+        function openDeleteReconModal(key, code, date) {
+            deleteReconKey = key;
+            document.getElementById('deleteReconCode').textContent = '#' + code;
+            document.getElementById('deleteReconDate').textContent = date;
+            const form = document.getElementById('deleteReconForm');
+            form.action = '/reconciliation/' + encodeURIComponent(key);
+            openModal('deleteReconModal');
+        }
+        function confirmDeleteRecon() {
+            if (!deleteReconKey) return;
+            const form = document.getElementById('deleteReconForm');
+            submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 500) });
+        }
+        window.openDeleteReconModal = openDeleteReconModal;
+        window.confirmDeleteRecon = confirmDeleteRecon;
     </script>
 @endsection
