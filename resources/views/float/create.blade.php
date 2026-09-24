@@ -27,6 +27,19 @@
                         <input type="date" name="float_date" value="{{ old('float_date', $selectedDate) }}" max="{{ today()->toDateString() }}">
                         <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Pick the day this float movement actually happened. It will be counted for that day's reports/reconciliation and use that day's opening if exists. Leave as today for live float.</p>
                     </div>
+                    @if(isset($dayTransactions) && $dayTransactions->isNotEmpty())
+                        <div class="field">
+                            <label>Reference Transaction (optional — select to autofill)</label>
+                            <select id="floatTxnSelect" style="width:100%; padding:10px 12px; border:1.5px solid var(--line); border-radius:8px; background:var(--white);">
+                                <option value="">— No reference —</option>
+                                @foreach($dayTransactions as $t)
+                                    <option value="{{ $t->id }}" data-network="{{ $t->network_id }}" data-amount="{{ $t->amount }}" data-type="{{ $t->type }}" data-ref="{{ $t->provider_reference ?? $t->reference }}">{{ $t->created_at->format('H:i') }} · {{ $t->reference }} · {{ txn_type_label($t->type) }} · {{ $t->network?->name }} · @money($t->amount) · {{ Str::limit($t->customer_name ?? $t->customer_phone, 24) }}</option>
+                                @endforeach
+                            </select>
+                            <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Pick a transaction received on {{ $viewDate->format('d M Y') }} to autofill network/amount and link. Will update that transaction's notes and appear in reconciliation for this date.</p>
+                            <input type="hidden" name="transaction_id" id="floatLinkedTxn" value="{{ old('transaction_id') }}">
+                        </div>
+                    @endif
                 @endif
                 <div class="form-row">
                     <div class="field">
@@ -75,5 +88,54 @@
                 submitForm(form, { method: 'POST', done: () => setTimeout(() => window.location.href = '{{ route('float.index') }}', 600) });
             });
         });
+
+        const txnSelect = document.getElementById('floatTxnSelect');
+        if (txnSelect) {
+            txnSelect.addEventListener('change', () => {
+                const opt = txnSelect.options[txnSelect.selectedIndex];
+                const linked = document.getElementById('floatLinkedTxn');
+                if (!opt || !opt.value) {
+                    if (linked) linked.value = '';
+                    return;
+                }
+                if (linked) linked.value = opt.value;
+                const networkId = opt.dataset.network;
+                const amount = opt.dataset.amount;
+                const type = opt.dataset.type;
+                const ref = opt.dataset.ref;
+                const form = txnSelect.closest('form');
+                if (networkId) {
+                    const sel = form.querySelector('select[name=network_id]');
+                    if (sel) sel.value = networkId;
+                }
+                if (amount) {
+                    const inp = form.querySelector('input[name=amount]');
+                    if (inp) inp.value = amount;
+                }
+                const typeMap = {
+                    'deposit': 'float_pull',
+                    'withdrawal': 'float_topup',
+                    'float_deposit': 'float_topup',
+                    'float_topup': 'float_topup',
+                    'bank_to_wallet': 'float_topup',
+                    'wallet_to_bank': 'float_pull',
+                    'send_money': 'float_pull',
+                    'bill_payment': 'float_pull',
+                    'airtime': 'float_pull',
+                    'data': 'float_pull'
+                };
+                if (type && typeMap[type]) {
+                    const sel = form.querySelector('select[name=type]');
+                    if (sel) sel.value = typeMap[type];
+                }
+                const notes = form.querySelector('textarea[name=notes]');
+                if (notes && ref) {
+                    const addition = 'Ref txn ' + ref;
+                    if (!notes.value.includes(addition)) {
+                        notes.value = (notes.value ? notes.value + ' | ' : '') + addition;
+                    }
+                }
+            });
+        }
     </script>
 @endsection

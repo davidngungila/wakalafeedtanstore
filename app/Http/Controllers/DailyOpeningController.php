@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailyOpening;
+use App\Models\FloatTransaction;
 use App\Models\Network;
+use App\Models\Reconciliation;
 use App\Models\Transaction;
 use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
@@ -93,13 +95,30 @@ class DailyOpeningController extends Controller
             abort(403);
         }
 
-        $networks = Network::active()->orderBy('name')->get(['id', 'name', 'color']);
+        $openingDate = $dailyOpening->opening_date;
+        $isToday = $openingDate->isSameDay(today());
+        $isAdmin = is_admin();
+
+        $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
         $currentBalances = $agent->balances()->with('network')->get()->keyBy('network_id');
 
         $todayTransactions = Transaction::where('agent_id', $agent->id)
-            ->whereDate('created_at', today())
+            ->whereDate('created_at', $openingDate)
             ->where('status', 'completed')
+            ->with(['network', 'operator'])
+            ->latest()
             ->get();
+
+        $todayFloatTransactions = FloatTransaction::where('agent_id', $agent->id)
+            ->whereDate('created_at', $openingDate)
+            ->with(['network', 'operator'])
+            ->latest()
+            ->get();
+
+        $reconciliationForDay = Reconciliation::where('agent_id', $agent->id)
+            ->where('reconciliation_date', $openingDate->toDateString())
+            ->latest()
+            ->first();
 
         $cashInTypes = ['deposit', 'bank_to_wallet', 'float_deposit', 'float_topup'];
         $cashOutTypes = ['withdrawal', 'wallet_to_bank', 'send_money', 'bill_payment', 'airtime', 'data'];
@@ -133,6 +152,10 @@ class DailyOpeningController extends Controller
         $cashCurrent = $agent->cash_balance;
         $floatCurrent = $agent->totalFloat();
 
+        $openingDate = $dailyOpening->opening_date;
+        $isToday = $openingDate->isSameDay(today());
+        $isAdmin = is_admin();
+
         return view('daily_opening.show', compact(
             'dailyOpening',
             'agent',
@@ -147,6 +170,12 @@ class DailyOpeningController extends Controller
             'expectedClosingCash',
             'cashCurrent',
             'floatCurrent',
+            'todayTransactions',
+            'todayFloatTransactions',
+            'reconciliationForDay',
+            'openingDate',
+            'isToday',
+            'isAdmin',
         ));
     }
 
@@ -186,7 +215,7 @@ class DailyOpeningController extends Controller
         ]);
 
         $todayTransactions = Transaction::where('agent_id', $agent->id)
-            ->whereDate('created_at', today())
+            ->whereDate('created_at', $dailyOpening->opening_date)
             ->where('status', 'completed')
             ->get();
 

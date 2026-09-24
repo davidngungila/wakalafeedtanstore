@@ -175,7 +175,18 @@ class FloatController extends Controller
 
         $networks = Network::active()->pluck('name', 'id');
 
-        return view('float.create', compact('networks', 'selectedDate', 'viewDate', 'isAdmin', 'todayOpening'));
+        $dayTransactions = collect();
+        if ($isAdmin) {
+            $dayTransactions = Transaction::with(['network'])
+                ->where('agent_id', $cashPoint->id)
+                ->whereDate('created_at', $viewDate)
+                ->where('status', 'completed')
+                ->latest()
+                ->limit(50)
+                ->get();
+        }
+
+        return view('float.create', compact('networks', 'selectedDate', 'viewDate', 'isAdmin', 'todayOpening', 'dayTransactions'));
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse
@@ -186,6 +197,7 @@ class FloatController extends Controller
             'amount' => ['required', 'numeric', 'min:1'],
             'notes' => ['nullable', 'string', 'max:255'],
             'float_date' => ['nullable', 'date'],
+            'transaction_id' => ['nullable', 'exists:transactions,id'],
         ]);
 
         $agent = cash_point();
@@ -288,6 +300,23 @@ class FloatController extends Controller
                 $ft->created_at = $now;
                 $ft->updated_at = $now;
                 $ft->save();
+            }
+
+            // If admin selected a transaction to reference, link and update that transaction's notes for full system traceability
+            if (! empty($validated['transaction_id'])) {
+                $linkedTxn = Transaction::find($validated['transaction_id']);
+                if ($linkedTxn) {
+                    $refNote = 'Float '.$validated['type'].' '.money($amount).' ('.$reference.') on '.$targetDate->toDateString();
+                    if (! empty($validated['notes'])) {
+                        $refNote .= ' — '.$validated['notes'];
+                    }
+                    $linkedTxn->notes = trim(($linkedTxn->notes ? $linkedTxn->notes.' | ' : '').$refNote);
+                    $linkedTxn->save();
+
+                    // Also ensure the float transaction notes reference the transaction
+                    $ft->notes = trim(($ft->notes ? $ft->notes.' | ' : '').'Linked txn '.$linkedTxn->reference.' ('.$linkedTxn->type.' '.money($linkedTxn->amount).')');
+                    $ft->save();
+                }
             }
         });
 

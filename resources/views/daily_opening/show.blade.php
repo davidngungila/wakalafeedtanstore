@@ -5,16 +5,56 @@
 @section('content')
     <div class="view-head">
         <div>
-            <h2>Daily Opening</h2>
-            <p class="sub">{{ $dailyOpening->opening_date->format('l, j F Y') }} · {!! $dailyOpening->is_closed ? '<span class="tag tag-grey">Closed</span>' : '<span class="tag tag-green">Open</span>' !!}</p>
+            <h2>Daily Opening — {{ $dailyOpening->opening_date->format('d M Y') }}</h2>
+            <p class="sub">{{ $dailyOpening->opening_date->format('l, j F Y') }} · {!! $dailyOpening->is_closed ? '<span class="tag tag-grey">Closed</span>' : '<span class="tag tag-green">Open</span>' !!} · {{ $isAdmin ? 'Admin view' : '' }}</p>
         </div>
         <div class="view-actions">
             @if (! $dailyOpening->is_closed)
-                <button class="btn btn-primary" onclick="openCloseModal()">Close Day</button>
+                <button class="btn btn-primary" onclick="openCloseModal()">{{ $isToday ? 'Close Day' : 'Close ' . $openingDate->format('d M Y') }}</button>
             @endif
             <a href="{{ route('daily-opening.index') }}" class="btn btn-ghost">History</a>
+            @if($isAdmin)
+                <a href="{{ route('float.opening.edit', ['date' => $openingDate->toDateString()]) }}" class="btn btn-ghost">Edit opening</a>
+            @endif
         </div>
     </div>
+
+    @if($isAdmin || ! $isToday)
+        <div class="panel" style="border-left:3px solid var(--terracotta-600);">
+            <div class="panel-head">
+                <h3>Detailed Options — {{ $openingDate->format('d M Y') }}</h3>
+                <span class="tag tag-terracotta">{{ $todayCount }} txs · @money($todayVolume)</span>
+            </div>
+            <div class="panel-body">
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                    <a href="{{ route('transactions.index', ['date' => $openingDate->toDateString()]) }}" class="btn btn-ghost btn-sm">View transactions for this date ({{ $todayCount }})</a>
+                    <a href="{{ route('transactions.create') }}?date={{ $openingDate->toDateString() }}" class="btn btn-ghost btn-sm">+ Add transaction for {{ $openingDate->format('d M Y') }}</a>
+                    <a href="{{ route('float.index', ['date' => $openingDate->toDateString()]) }}" class="btn btn-ghost btn-sm">Float for {{ $openingDate->format('d M Y') }}</a>
+                    <a href="{{ route('float.create', ['date' => $openingDate->toDateString()]) }}" class="btn btn-ghost btn-sm">+ Add float for this date</a>
+                    <a href="{{ route('reconciliation.create', ['date' => $openingDate->toDateString()]) }}" class="btn btn-ghost btn-sm">Reconcile {{ $openingDate->format('d M Y') }}</a>
+                    @if($reconciliationForDay)
+                        <a href="{{ route('reconciliation.show', $reconciliationForDay) }}" class="btn btn-ghost btn-sm">View reconciliation ({{ ucfirst($reconciliationForDay->status) }})</a>
+                    @endif
+                </div>
+                <div class="detail-grid">
+                    <div class="detail-item"><div class="dk">Opening Cash</div><div class="dv">@money($dailyOpening->cash_opening)</div></div>
+                    <div class="detail-item"><div class="dk">Opening Float (total)</div><div class="dv">@money(array_sum($dailyOpening->float_openings ?? []))</div></div>
+                    <div class="detail-item"><div class="dk">Expected Closing Cash</div><div class="dv">@money($expectedClosingCash)</div></div>
+                    <div class="detail-item"><div class="dk">Current Cash</div><div class="dv">@money($cashCurrent)</div></div>
+                    <div class="detail-item"><div class="dk">Volume</div><div class="dv">@money($todayVolume) · {{ $todayCount }} txs</div></div>
+                    <div class="detail-item"><div class="dk">Commission</div><div class="dv">@money($todayCommission)</div></div>
+                    <div class="detail-item"><div class="dk">Float movements today</div><div class="dv">{{ $todayFloatTransactions->count() }} entries</div></div>
+                    <div class="detail-item"><div class="dk">Reconciliation</div><div class="dv">@if($reconciliationForDay) <span class="tag {{ $reconciliationForDay->status === 'reconciled' ? 'tag-green' : ($reconciliationForDay->status === 'variance' ? 'tag-red' : 'tag-gold') }}">{{ ucfirst($reconciliationForDay->status) }}</span> {{ $reconciliationForDay->reconciliation_date->format('Y-m-d') }} @else <span style="color:var(--ink-soft);">Not yet reconciled</span> @endif</div></div>
+                </div>
+                <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">
+                    @foreach($networks as $net)
+                        @php $openingFloat = $dailyOpening->getFloatOpening($net->id); @endphp
+                        <span class="tag" style="background:var(--white); border:1px solid var(--line);"><span class="net-dot" style="background:{{ $net->color }};"></span> {{ $net->name }}: @money($openingFloat)</span>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
 
     @if ($errors->any())
         <div class="box-alert">
@@ -119,8 +159,13 @@
 
     <div class="panel">
         <div class="panel-head">
-            <h3>Today's Transactions</h3>
-            <a href="{{ route('transactions.index', ['status' => 'completed']) }}" class="link">View all</a>
+            <h3>Transactions for {{ $openingDate->format('d M Y') }} ({{ $todayCount }})</h3>
+            <div style="display:flex; gap:8px;">
+                <a href="{{ route('transactions.index', ['date' => $openingDate->toDateString(), 'status' => 'completed']) }}" class="link">View all for this date</a>
+                @if($isAdmin)
+                    <a href="{{ route('transactions.create') }}?date={{ $openingDate->toDateString() }}" class="link">+ Add</a>
+                @endif
+            </div>
         </div>
         <div class="table-scroll">
             <table style="min-width:720px;">
@@ -137,14 +182,7 @@
                     </tr>
                 </thead>
                 <tbody id="dailyTxnRows">
-                    @php
-                        $todayTxns = \App\Models\Transaction::where('agent_id', $agent->id)
-                            ->whereDate('created_at', today())
-                            ->with(['network', 'operator'])
-                            ->latest()
-                            ->get();
-                    @endphp
-                    @forelse ($todayTxns as $txn)
+                    @forelse ($todayTransactions as $txn)
                         <tr data-id="{{ $txn->id }}">
                             <td>
                                 <div class="cell-title">{{ $txn->created_at->format('H:i:s') }}</div>
@@ -166,11 +204,34 @@
                             <td><span class="tag {{ status_badge($txn->status) }}">{{ ucfirst($txn->status) }}</span></td>
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="empty-state">No transactions today.</td></tr>
+                        <tr><td colspan="8" class="empty-state">No transactions for {{ $openingDate->format('d M Y') }}.</td></tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+        @if($todayFloatTransactions->isNotEmpty())
+            <div style="padding:12px 16px; border-top:1px solid var(--line); background:var(--sand-50);">
+                <strong>Float movements for {{ $openingDate->format('d M Y') }} ({{ $todayFloatTransactions->count() }}):</strong>
+                <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+                    @foreach($todayFloatTransactions as $ft)
+                        <span class="tag {{ $ft->type === 'float_topup' || $ft->type === 'cash_in' ? 'tag-green' : 'tag-terracotta' }}">{{ $ft->network?->name }}: {{ str_replace('_',' ',$ft->type) }} @money($ft->amount) at {{ $ft->created_at->format('H:i') }}</span>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+        @if($reconciliationForDay)
+            <div style="padding:12px 16px; border-top:1px solid var(--line); display:flex; gap:8px; align-items:center; font-size:13px;">
+                <span>Reconciliation for {{ $openingDate->format('Y-m-d') }}:</span>
+                <span class="tag {{ $reconciliationForDay->status === 'reconciled' ? 'tag-green' : ($reconciliationForDay->status === 'variance' ? 'tag-red' : 'tag-gold') }}">{{ ucfirst($reconciliationForDay->status) }}</span>
+                <a href="{{ route('reconciliation.show', $reconciliationForDay) }}" class="btn btn-ghost btn-sm">View</a>
+                <a href="{{ route('reconciliation.create', ['date' => $openingDate->toDateString()]) }}" class="btn btn-ghost btn-sm">Re-reconcile</a>
+            </div>
+        @else
+            <div style="padding:12px 16px; border-top:1px solid var(--line); font-size:13px;">
+                <a href="{{ route('reconciliation.create', ['date' => $openingDate->toDateString()]) }}" class="btn btn-ghost btn-sm">Reconcile {{ $openingDate->format('d M Y') }}</a>
+                <span style="color:var(--ink-soft);">— not yet reconciled for this date</span>
+            </div>
+        @endif
     </div>
 
     <!-- Close Day Modal -->
@@ -230,7 +291,7 @@
 @section('scripts')
     <script>
         @php
-            $dailyTxns = $todayTxns->map(fn ($t) => [
+            $dailyTxns = $todayTransactions->map(fn ($t) => [
                 'id' => $t->id,
                 'reference' => $t->reference,
                 'type' => $t->type,
