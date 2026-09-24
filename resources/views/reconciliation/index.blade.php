@@ -140,6 +140,22 @@
         @method('DELETE')
     </form>
 
+    <div class="modal-backdrop" id="lockReconModal">
+        <div class="modal" style="max-width:440px;">
+            <div class="modal-head">
+                <h3 id="lockReconTitle">Lock Report</h3>
+                <button class="modal-close" onclick="closeModal('lockReconModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13.5px;color:var(--ink-soft);" id="lockReconMessage">Are you sure you want to lock this report? It will not be changed by any transaction until unlocked.</p>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="closeModal('lockReconModal')">Cancel</button>
+                <button class="btn btn-primary" id="confirmLockBtn" onclick="confirmToggleLock()">Yes, lock report</button>
+            </div>
+        </div>
+    </div>
+
 @endsection
 
 @section('scripts')
@@ -195,15 +211,27 @@
             const form = document.getElementById('deleteReconForm');
             submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 500) });
         }
-        async function toggleLock(key, isLocked) {
+        let lockReconKey = null;
+        let lockReconIsLocked = false;
+        function toggleLock(key, isLocked) {
+            lockReconKey = key;
+            lockReconIsLocked = isLocked;
+            document.getElementById('lockReconTitle').textContent = isLocked ? 'Unlock Report' : 'Lock Report';
+            document.getElementById('lockReconMessage').textContent = isLocked ? 'Are you sure you want to unlock this report? It will again be changed by transactions.' : 'Are you sure you want to lock this report? It will not be changed by any transaction until unlocked.';
+            document.getElementById('confirmLockBtn').textContent = isLocked ? 'Yes, unlock report' : 'Yes, lock report';
+            openModal('lockReconModal');
+        }
+        async function confirmToggleLock() {
+            if (!lockReconKey) return;
             try {
-                const resp = await fetch('/reconciliation/' + encodeURIComponent(key) + '/toggle-lock', {
+                const resp = await fetch('/reconciliation/' + encodeURIComponent(lockReconKey) + '/toggle-lock', {
                     method: 'POST',
                     headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
                 });
                 const data = await resp.json().catch(() => ({}));
                 if (resp.ok && data.success) {
-                    toast(data.message || (isLocked ? 'Unlocked' : 'Locked'), 'success');
+                    toast(data.message || (lockReconIsLocked ? 'Unlocked' : 'Locked'), 'success');
+                    closeModal('lockReconModal');
                     setTimeout(() => location.reload(), 400);
                 } else {
                     toast(data.message || 'Failed to toggle lock', 'error');
@@ -213,5 +241,6 @@
         window.openDeleteReconModal = openDeleteReconModal;
         window.confirmDeleteRecon = confirmDeleteRecon;
         window.toggleLock = toggleLock;
+        window.confirmToggleLock = confirmToggleLock;
     </script>
 @endsection
