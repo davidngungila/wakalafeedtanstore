@@ -169,7 +169,7 @@
                                         <a href="{{ route('float.day', ['date' => $selectedDateEncrypted]) }}" title="View day" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--ink);margin-right:3px;">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                         </a>
-                                        <button type="button" onclick="if(confirm('Delete float {{ $ft->reference }}?')) deleteFloatFromRecon({{ $ft->id }}, '{{ $ft->reference }}')" title="Delete" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--danger);">
+                                        <button type="button" onclick="openDeleteFloatReconModal({{ $ft->id }}, '{{ addslashes($ft->reference) }}')" title="Delete" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:var(--white);display:inline-flex;align-items:center;justify-content:center;color:var(--danger);">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
                                         </button>
                                     </td>
@@ -382,6 +382,22 @@
             </div>
         </div>
     </form>
+
+    <div class="modal-backdrop" id="deleteFloatReconModal">
+        <div class="modal" style="max-width:440px;">
+            <div class="modal-head">
+                <h3>Delete Float</h3>
+                <button class="modal-close" onclick="closeModal('deleteFloatReconModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13.5px; color:var(--ink-soft);">Delete float <strong id="deleteFloatReconRef"></strong>? This reverts its balance and will affect this reconciliation expected.</p>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="closeModal('deleteFloatReconModal')">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmDeleteFloatRecon()">Delete</button>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @section('scripts')
@@ -464,15 +480,26 @@
             recalc();
         })();
 
-        async function deleteFloatFromRecon(id, ref) {
-            if (!confirm('Delete float ' + ref + '? This reverts its balance and will affect this reconciliation expected.')) return;
+        let deleteFloatReconId = null;
+        function openDeleteFloatReconModal(id, ref) {
+            deleteFloatReconId = id;
+            document.getElementById('deleteFloatReconRef').textContent = ref;
+            openModal('deleteFloatReconModal');
+        }
+        async function confirmDeleteFloatRecon() {
+            if (!deleteFloatReconId) return;
             try {
-                const resp = await fetch('/float/' + id, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
+                const resp = await fetch('/float/' + deleteFloatReconId, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
                 const data = await resp.json().catch(() => ({}));
-                if (resp.ok && data.success) { toast(data.message || 'Float deleted', 'success'); setTimeout(() => location.reload(), 500); }
-                else toast(data.message || 'Failed to delete', 'error');
+                if (resp.ok && data.success) {
+                    toast(data.message || 'Float deleted', 'success');
+                    closeModal('deleteFloatReconModal');
+                    setTimeout(() => location.reload(), 500);
+                } else toast(data.message || 'Failed to delete', 'error');
             } catch (e) { toast('Network error', 'error'); }
         }
+        // Legacy direct call kept for backwards compat (now uses modal)
+        async function deleteFloatFromRecon(id, ref) { openDeleteFloatReconModal(id, ref); }
 
         document.querySelectorAll('[data-recon-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
