@@ -72,6 +72,17 @@ class SettingController extends Controller
         return back()->with('status', 'Settings saved successfully.');
     }
 
+    public function showTestEmail(Request $request): View
+    {
+        $email = Setting::where('key', 'email')->value('value');
+        $prefill = $email['mail_from_address'] ?? Setting::where('key', 'general')->value('value')['contact_email'] ?? '';
+        if ($request->filled('to')) {
+            $prefill = $request->input('to');
+        }
+
+        return view('settings.test-email', compact('prefill'));
+    }
+
     public function sendTestEmail(Request $request): JsonResponse
     {
         $validated = $request->validate([

@@ -89,7 +89,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path><path d="m9 12 2 2 4-4"></path></svg>
         </div>
         <h1>Two-factor verification</h1>
-        <p class="sub">Enter the code from your authenticator app to finish signing in as <b>{{ $email }}</b>.</p>
+        <p class="sub">Enter the code from your authenticator app <em>or the OTP sent to your email</em> to finish signing in as <b>{{ $email }}</b>.</p>
+        <div style="background:var(--acacia-100); border:1px solid var(--acacia-600); border-radius:8px; padding:10px 12px; font-size:12.5px; color:var(--acacia-600); margin-bottom:16px; text-align:center;">
+            <span style="font-weight:700;">OTP via email is enabled</span> — check <b>{{ $email }}</b> inbox/spam for 6-digit code (also valid in authenticator). Valid 5 min.
+        </div>
 
         @if ($errors->any())
             <div class="error">{{ $errors->first() }}</div>
@@ -104,9 +107,12 @@
             <button type="submit" class="btn" id="verifyBtn">Verify &amp; sign in</button>
         </form>
 
-        <div class="alt">
+        <div class="alt" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
             <a href="#" id="recoveryToggle">Use a recovery code instead</a>
+            <span style="color:var(--line);">|</span>
+            <button type="button" id="resendOtpBtn" style="background:none; border:none; color:var(--acacia-600); font-weight:700; cursor:pointer; font-size:13px;">Resend OTP to email</button>
         </div>
+        <div id="resendStatus" style="display:none; margin-top:10px; padding:8px; border-radius:8px; font-size:12px; text-align:center;"></div>
 
         <form method="POST" action="{{ route('two-factor.cancel') }}" class="foot">
             @csrf
@@ -156,6 +162,40 @@
         plain.addEventListener('submit', function () {
             btn.disabled = true;
             btn.textContent = 'Verifying…';
+        });
+
+        document.getElementById('resendOtpBtn')?.addEventListener('click', async () => {
+            const btn2 = document.getElementById('resendOtpBtn');
+            const status = document.getElementById('resendStatus');
+            btn2.disabled = true;
+            btn2.textContent = 'Sending…';
+            status.style.display = 'block';
+            status.style.background = 'var(--sand-100)';
+            status.style.color = 'var(--ink-soft)';
+            status.textContent = 'Sending OTP to email…';
+            try {
+                const resp = await fetch('{{ route('two-factor.resend') }}', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data.success) {
+                    status.style.background = 'var(--acacia-100)';
+                    status.style.color = 'var(--acacia-600)';
+                    status.textContent = data.message || 'OTP resent — check inbox/spam';
+                } else {
+                    status.style.background = 'var(--danger-100)';
+                    status.style.color = 'var(--danger)';
+                    status.textContent = data.message || 'Failed to resend';
+                }
+            } catch (e) {
+                status.style.background = 'var(--danger-100)';
+                status.style.color = 'var(--danger)';
+                status.textContent = 'Network error';
+            } finally {
+                btn2.disabled = false;
+                btn2.textContent = 'Resend OTP to email';
+            }
         });
     </script>
 </body>

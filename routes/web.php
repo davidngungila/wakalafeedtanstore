@@ -39,6 +39,7 @@ Route::middleware('guest')->group(function () {
 
     Route::get('/two-factor', [TwoFactorController::class, 'show'])->name('two-factor.show');
     Route::post('/two-factor', [TwoFactorController::class, 'verify'])->name('two-factor.verify');
+    Route::post('/two-factor/resend', [TwoFactorController::class, 'resend'])->name('two-factor.resend');
     Route::post('/two-factor/cancel', [TwoFactorController::class, 'cancel'])->name('two-factor.cancel');
 });
 
@@ -190,6 +191,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
 
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
         Route::post('/settings', [SettingController::class, 'store'])->name('settings.store');
+        Route::get('/settings/email/test', [SettingController::class, 'showTestEmail'])->name('settings.email.test.page');
         Route::post('/settings/email/test', [SettingController::class, 'sendTestEmail'])->name('settings.email.test');
     });
 });

@@ -186,18 +186,31 @@
                 </form>
                 <div style="margin-top:18px; padding:14px; background:var(--sand-50); border:1px solid var(--line); border-radius:10px;">
                     <strong style="font-size:13px;">Send test email (verify saved config)</strong>
-                    <p style="font-size:12px; color:var(--ink-soft); margin:4px 0 8px;">Sends a test email using the saved database config (OTP & Reports SMTP). Check inbox/spam.</p>
+                    <p style="font-size:12px; color:var(--ink-soft); margin:4px 0 8px;">Sends a test email using the saved database config (OTP & Reports SMTP). Check inbox/spam. Shows progress until sent.</p>
                     <form id="testEmailForm" action="{{ route('settings.email.test') }}" method="POST" style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
                         @csrf
                         <div class="field" style="margin-bottom:0; flex:1; min-width:220px;">
                             <label>To email *</label>
                             <input type="email" name="to" required placeholder="test@example.com" value="{{ $email['mail_from_address'] ?? $gen['contact_email'] ?? '' }}" style="padding:10px 12px; border:1.5px solid var(--line); border-radius:8px; width:100%;">
                         </div>
-                        <button type="submit" class="btn btn-primary btn-sm">
+                        <button type="submit" class="btn btn-primary btn-sm" id="testEmailInlineBtn">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                             Send Test Email
                         </button>
+                        <a href="{{ route('settings.email.test.page') }}" class="btn btn-ghost btn-sm">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                            Open dedicated page with progress
+                        </a>
                     </form>
+                    <div id="testEmailInlineProgress" style="display:none; margin-top:10px; padding:10px; background:var(--white); border:1px solid var(--line); border-radius:8px;">
+                        <div style="display:flex; align-items:center; gap:8px; font-size:13px;">
+                            <div style="width:16px; height:16px; border:2px solid var(--line); border-top-color:var(--terracotta-600); border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+                            <span id="testEmailInlineProgressText">Sending…</span>
+                        </div>
+                        <div style="margin-top:8px; height:6px; background:var(--line); border-radius:3px; overflow:hidden;">
+                            <div id="testEmailInlineBar" style="height:100%; width:0%; background:var(--terracotta-600); transition:width 0.4s ease;"></div>
+                        </div>
+                    </div>
                 </div>
             @else
                 <h3>Notifications</h3>
@@ -276,11 +289,48 @@
             });
         });
 
-        document.getElementById('testEmailForm')?.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const form = e.target;
-            if (!form.reportValidity()) return;
-            submitForm(form, { method: 'POST', done: (data) => toast(data.message || 'Test email sent', data.success ? 'success' : 'error') });
-        });
+        (function() {
+            const form = document.getElementById('testEmailForm');
+            const progress = document.getElementById('testEmailInlineProgress');
+            const bar = document.getElementById('testEmailInlineBar');
+            const text = document.getElementById('testEmailInlineProgressText');
+            const btn = document.getElementById('testEmailInlineBtn');
+            let timer = null, val = 0;
+            function startInline() {
+                if (!progress) return;
+                progress.style.display = 'block';
+                bar.style.width = '0%';
+                val = 0;
+                text.textContent = 'Sending test email…';
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+                timer = setInterval(() => {
+                    val = Math.min(90, val + Math.random()*15);
+                    bar.style.width = val + '%';
+                    if (val > 40) text.textContent = 'Connecting to SMTP…';
+                    if (val > 70) text.textContent = 'Sending…';
+                }, 350);
+            }
+            function stopInline(success, msg) {
+                clearInterval(timer);
+                if (bar) bar.style.width = '100%';
+                if (text) text.textContent = success ? 'Done!' : 'Failed';
+                setTimeout(() => { if (progress) progress.style.display = 'none'; }, success ? 800 : 1500);
+                if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+                toast(msg || (success ? 'Test email sent' : 'Failed'), success ? 'success' : 'error');
+            }
+            form?.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!form.reportValidity()) return;
+                startInline();
+                try {
+                    const resp = await fetch(form.action, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }, body: new FormData(form) });
+                    const data = await resp.json().catch(() => ({}));
+                    stopInline(resp.ok && data.success, data.message || (resp.ok ? 'Test email sent' : 'Failed'));
+                } catch (err) {
+                    stopInline(false, 'Network error');
+                }
+            });
+        })();
     </script>
 @endsection
