@@ -324,7 +324,7 @@ class DashboardController extends Controller
 
         $todayRow = Transaction::whereDate('created_at', $today)
             ->where('status', 'completed')
-            ->selectRaw('COALESCE(SUM(CASE WHEN type IN (?, ?, ?, ?, ?) THEN amount ELSE 0 END),0) as inflows', $inTypes)
+            ->selectRaw('COALESCE(SUM(CASE WHEN type IN (?, ?, ?, ?, ?, ?) THEN amount ELSE 0 END),0) as inflows', $inTypes)
             ->selectRaw('COALESCE(SUM(CASE WHEN type IN (?, ?) THEN amount ELSE 0 END),0) as outflows', $outTypes)
             ->first();
 
