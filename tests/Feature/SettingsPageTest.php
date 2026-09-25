@@ -21,6 +21,7 @@ class SettingsPageTest extends TestCase
             ['settings.cash-point', 'Cash Point Settings', 'Save cash point'],
             ['settings.email', 'Email Settings', 'Save email settings'],
             ['settings.sms', 'SMS Settings', 'Save SMS settings'],
+            ['settings.sms.send.page', 'Send SMS', 'Send test SMS'],
         ];
 
         foreach ($pages as [$routeName, $title, $button]) {
@@ -31,6 +32,20 @@ class SettingsPageTest extends TestCase
                 ->assertSee($button)
                 ->assertDontSee('settings-nav', false);
         }
+    }
+
+    public function test_sms_settings_page_shows_connection_check_and_links_to_sender_page(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->get(route('settings.sms'))
+            ->assertOk()
+            ->assertSee('Check connection')
+            ->assertSee('data-sms-connection-led', false)
+            ->assertSee(route('settings.sms.connection'), false)
+            ->assertSee(route('settings.sms.send.page'), false)
+            ->assertDontSee('Send a single test SMS', false);
     }
 
     public function test_cash_point_settings_form_uses_post_method_spoofing(): void
@@ -58,6 +73,7 @@ class SettingsPageTest extends TestCase
         $response->assertSee(route('settings.cash-point'));
         $response->assertSee(route('settings.email'));
         $response->assertSee(route('settings.sms'));
+        $response->assertSee(route('settings.sms.send.page'));
     }
 
     public function test_layout_persists_sidebar_state_across_refreshes(): void
@@ -105,6 +121,10 @@ class SettingsPageTest extends TestCase
 
         $this->actingAs($supervisor)
             ->get(route('settings.security'))
+            ->assertForbidden();
+
+        $this->actingAs($supervisor)
+            ->get(route('settings.sms.send.page'))
             ->assertForbidden();
     }
 }

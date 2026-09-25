@@ -55,7 +55,10 @@ class SettingController extends Controller
     {
         $settings = Setting::all()->pluck('value', 'key');
         $smsSetting = Setting::where('key', 'sms')->first();
-        $smsConfigured = filled($smsSetting?->sms_authorization_token);
+        $smsValue = $smsSetting?->value;
+        $smsConfigured = is_array($smsValue)
+            && filled($smsValue['sender_id'] ?? null)
+            && filled($smsSetting?->sms_authorization_token);
         $agent = cash_point();
 
         return view('settings.index', compact('section', 'settings', 'agent', 'smsConfigured'));

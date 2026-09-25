@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Setting;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -64,16 +65,28 @@ class SmsSender
         ], $this->settings());
     }
 
+    public function checkConnection(): Response
+    {
+        return $this->client($this->settings())
+            ->get((string) config('sms.outbound.balance_endpoint', '/api/v2/balance'))
+            ->throw();
+    }
+
     private function post(string $endpoint, array $payload, array $settings): Response
+    {
+        return $this->client($settings)
+            ->asJson()
+            ->post($endpoint, $payload)
+            ->throw();
+    }
+
+    private function client(array $settings): PendingRequest
     {
         return Http::baseUrl(rtrim((string) config('sms.outbound.base_url', 'https://messaging-service.co.tz'), '/'))
             ->acceptJson()
-            ->asJson()
             ->withToken($settings['token'])
             ->connectTimeout((int) config('sms.outbound.connect_timeout', 5))
-            ->timeout((int) config('sms.outbound.timeout', 15))
-            ->post($endpoint, $payload)
-            ->throw();
+            ->timeout((int) config('sms.outbound.timeout', 15));
     }
 
     private function settings(): array

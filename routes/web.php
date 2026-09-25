@@ -201,6 +201,10 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::get('/settings/cash-point', [SettingController::class, 'cashPoint'])->name('settings.cash-point');
         Route::get('/settings/email', [SettingController::class, 'email'])->name('settings.email');
         Route::get('/settings/sms', [SettingController::class, 'sms'])->name('settings.sms');
+        Route::get('/settings/sms/send', [OutboundSmsController::class, 'sendPage'])->name('settings.sms.send.page');
+        Route::get('/settings/sms/connection', [OutboundSmsController::class, 'connection'])
+            ->middleware('throttle:10,1')
+            ->name('settings.sms.connection');
         Route::post('/settings', [SettingController::class, 'store'])->name('settings.store');
         Route::post('/settings/sms/send', [OutboundSmsController::class, 'single'])
             ->middleware('throttle:10,1')

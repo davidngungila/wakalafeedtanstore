@@ -318,7 +318,10 @@
         .led{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none;vertical-align:middle;}
         .led-on{background:var(--acacia-600);box-shadow:0 0 0 0 rgba(31,157,85,.45);animation:ledPulse 1.6s infinite;}
         .led-off{background:#c8c3b8;}
+        .led-checking{background:var(--gold-500);box-shadow:0 0 0 0 rgba(212,162,76,.5);animation:ledPulseGold 1s infinite;}
+        .led-error{background:var(--danger);box-shadow:0 0 0 0 rgba(179,58,58,.35);}
         @keyframes ledPulse{0%{box-shadow:0 0 0 0 rgba(31,157,85,.45);}70%{box-shadow:0 0 0 9px rgba(31,157,85,0);}100%{box-shadow:0 0 0 0 rgba(31,157,85,0);}}
+        @keyframes ledPulseGold{0%{box-shadow:0 0 0 0 rgba(212,162,76,.5);}70%{box-shadow:0 0 0 9px rgba(212,162,76,0);}100%{box-shadow:0 0 0 0 rgba(212,162,76,0);}}
         .tab-panel.hidden{display:none;}
         .table-scroll{overflow-x:auto;}
         .table-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-top:1px solid var(--line);flex-wrap:wrap;}
@@ -717,9 +720,13 @@
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                                 Email
                             </a>
-                            <a href="{{ route('settings.sms') }}" class="sb-drop-sub {{ in_array($routeName, ['settings.sms', 'settings.sms.send', 'settings.sms.send-bulk'], true) ? 'active' : '' }}">
+                            <a href="{{ route('settings.sms') }}" class="sb-drop-sub {{ $routeName === 'settings.sms' ? 'active' : '' }}">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 20l1-4.2a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-9 8.4 8.4 0 0 1 9 8.5Z"></path><path d="M8 10h.01M12 10h.01M16 10h.01"></path></svg>
-                                SMS
+                                SMS Settings
+                            </a>
+                            <a href="{{ route('settings.sms.send.page') }}" class="sb-drop-sub {{ $routeName === 'settings.sms.send.page' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"></path><path d="m22 2-7 20-4-9-9-4 20-7Z"></path></svg>
+                                Send SMS
                             </a>
                         @endif
                         <a href="{{ route('account.index') }}" class="sb-drop-sub {{ $isAccountArea ? 'active' : '' }}">

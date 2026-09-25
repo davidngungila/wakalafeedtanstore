@@ -28,7 +28,7 @@
             'notifications' => 'Choose how operational updates are delivered.',
             'cash-point' => 'Manage the cash point identity and operating details.',
             'email' => 'Configure SMTP, email authentication, and report delivery.',
-            'sms' => 'Configure outbound SMS credentials and send test messages.',
+            'sms' => 'Configure outbound SMS credentials and verify provider connectivity.',
         ];
     @endphp
     <div class="view-head">
@@ -218,30 +218,17 @@
                     <p style="font-size:12px; color:var(--ink-soft); margin-bottom:16px;">The token is stored encrypted in the database. Leave it blank when updating the sender ID to keep the existing token.</p>
                     <button type="submit" class="btn btn-primary">Save SMS settings</button>
                 </form>
-                <div style="margin-top:24px; display:grid; gap:16px;">
-                    <div style="padding:16px; background:var(--sand-50); border:1px solid var(--line); border-radius:10px;">
-                        <strong style="font-size:13px;">Send a single test SMS</strong>
-                        <p style="font-size:12px; color:var(--ink-soft); margin:4px 0 10px;">Uses the saved sender ID and token. Test sends may be charged by the provider.</p>
-                        <form data-sms-test-form method="POST" action="{{ route('settings.sms.send') }}">
-                            @csrf
-                            <div class="form-row">
-                                <div class="field"><label>Phone number *</label><input type="text" name="to" required maxlength="30" placeholder="255716718040" inputmode="tel"></div>
-                                <div class="field"><label>Message *</label><textarea name="text" required maxlength="1000" rows="3" placeholder="Write a test message…"></textarea></div>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Send test SMS</button>
-                        </form>
+                <div id="smsConnectionCard" data-sms-connection-url="{{ route('settings.sms.connection') }}" style="margin-top:20px; padding:16px; background:var(--sand-50); border:1px solid var(--line); border-radius:10px;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span id="smsConnectionLed" class="led led-off" data-sms-connection-led aria-hidden="true"></span>
+                        <div>
+                            <strong id="smsConnectionLabel" style="display:block; font-size:13px;">{{ $smsConfigured ? 'Provider connection not checked' : 'SMS provider not configured' }}</strong>
+                            <div id="smsConnectionMessage" role="status" aria-live="polite" style="margin-top:3px; font-size:12px; color:var(--ink-soft);">{{ $smsConfigured ? 'Check the provider before sending.' : 'Save the sender ID and token to check the provider.' }}</div>
+                        </div>
                     </div>
-                    <div style="padding:16px; background:var(--sand-50); border:1px solid var(--line); border-radius:10px;">
-                        <strong style="font-size:13px;">Send a bulk test SMS</strong>
-                        <p style="font-size:12px; color:var(--ink-soft); margin:4px 0 10px;">Separate up to {{ config('sms.outbound.max_bulk_recipients', 100) }} recipients with commas, spaces, or line breaks. The same message is sent to each recipient.</p>
-                        <form data-sms-test-form method="POST" action="{{ route('settings.sms.send-bulk') }}">
-                            @csrf
-                            <div class="field"><label>Recipients *</label><textarea name="recipients" required rows="2" placeholder="255716718040, 0716718041"></textarea></div>
-                            <div class="field" style="margin-top:12px;"><label>Message *</label><textarea name="text" required maxlength="1000" rows="3" placeholder="Write a test message…"></textarea></div>
-                            <button type="submit" class="btn btn-primary" style="margin-top:12px;">Send bulk test SMS</button>
-                        </form>
-                    </div>
+                    <button type="button" id="smsConnectionButton" data-sms-connection-check class="btn btn-ghost btn-sm" style="margin-top:12px;">Check connection</button>
                 </div>
+                <a href="{{ route('settings.sms.send.page') }}" class="btn btn-primary" style="margin-top:16px;">Open SMS sender</a>
             @elseif ($section === 'notifications')
                 <h3>Notifications</h3>
                 <form method="POST" action="{{ route('settings.store') }}" data-settings-form>
@@ -312,12 +299,55 @@
             });
         });
 
-        document.querySelectorAll('[data-sms-test-form]').forEach(form => {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                submitForm(form, { method: 'POST', done: () => form.reset() });
+        (function() {
+            const card = document.getElementById('smsConnectionCard');
+            if (!card) return;
+
+            const button = card.querySelector('[data-sms-connection-check]');
+            const led = card.querySelector('[data-sms-connection-led]');
+            const label = document.getElementById('smsConnectionLabel');
+            const message = document.getElementById('smsConnectionMessage');
+            const url = card.dataset.smsConnectionUrl;
+            const originalButtonText = button.textContent;
+
+            const setState = (state, title, detail) => {
+                led.className = state === 'checking'
+                    ? 'led led-checking'
+                    : state === 'connected' ? 'led led-on' : 'led led-error';
+                label.textContent = title;
+                message.textContent = detail;
+                led.title = title;
+            };
+
+            button.addEventListener('click', async () => {
+                button.disabled = true;
+                button.textContent = 'Checking…';
+                card.setAttribute('aria-busy', 'true');
+                setState('checking', 'Checking provider connection…', 'Contacting the SMS provider…');
+
+                try {
+                    const response = await fetch(url, {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                        },
+                    });
+                    const data = await response.json().catch(() => ({}));
+
+                    if (response.ok && data.connected) {
+                        setState('connected', 'Provider connected', data.message || 'SMS provider connection verified.');
+                    } else {
+                        setState('error', 'Provider unavailable', data.message || 'The SMS provider could not be reached. Check the API settings and try again.');
+                    }
+                } catch {
+                    setState('error', 'Provider unavailable', 'The SMS provider could not be reached. Check your connection and try again.');
+                } finally {
+                    button.disabled = false;
+                    button.textContent = originalButtonText;
+                    card.removeAttribute('aria-busy');
+                }
             });
-        });
+        })();
 
         document.querySelectorAll('[data-cashpoint-form]').forEach(form => {
             form.addEventListener('submit', (e) => {

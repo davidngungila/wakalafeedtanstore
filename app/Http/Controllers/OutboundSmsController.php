@@ -7,9 +7,40 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
+use RuntimeException;
 
 class OutboundSmsController extends Controller
 {
+    public function sendPage(): View
+    {
+        return view('settings.sms-send');
+    }
+
+    public function connection(SmsSender $sms): JsonResponse
+    {
+        try {
+            $sms->checkConnection();
+        } catch (RuntimeException) {
+            return response()->json([
+                'connected' => false,
+                'message' => 'Save the sender ID and authorization token before checking the connection.',
+            ], 422);
+        } catch (\Throwable $exception) {
+            Log::warning('Outbound SMS provider connection check failed.', ['exception' => $exception::class]);
+
+            return response()->json([
+                'connected' => false,
+                'message' => 'The SMS provider could not be reached. Check the API settings and try again.',
+            ], 502);
+        }
+
+        return response()->json([
+            'connected' => true,
+            'message' => 'SMS provider connection verified.',
+        ]);
+    }
+
     public function single(Request $request, SmsSender $sms): JsonResponse
     {
         $validated = $request->validate([
