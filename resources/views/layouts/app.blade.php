@@ -127,18 +127,6 @@
         .sb-drop-sub:hover{color:#fff;background:rgba(255,255,255,.06);}
         .sb-drop-sub.active{color:var(--gold-500);background:rgba(212,162,76,.12);}
         .sb-drop-sub svg{width:14px;height:14px;flex:none;}
-        .sb-footer{padding:14px 20px 20px;border-top:1px solid rgba(255,255,255,.08);}
-        .sb-user{display:flex;align-items:center;gap:11px;}
-        .sb-avatar{
-            width:36px;height:36px;border-radius:50%;flex:none;
-            background:linear-gradient(155deg,var(--acacia-500),var(--acacia-600));
-            display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;
-        }
-        .sb-user-text{overflow:hidden;white-space:nowrap;}
-        .sb-user-text strong{display:block;color:#fff;font-size:13.5px;}
-        .sb-user-text span{display:block;color:rgba(255,255,255,.5);font-size:11.5px;}
-        .sidebar.collapsed .sb-user-text{display:none;}
-
         /* Main */
         .main{margin-left:var(--sidebar-w);transition:margin-left .25s ease;min-height:100vh;display:flex;flex-direction:column;}
         .sidebar.collapsed ~ .main{margin-left:var(--sidebar-w-collapsed);}
@@ -721,19 +709,6 @@
                     </div>
                 </div>
             </nav>
-            <div class="sb-footer">
-                <a href="{{ route('profile.index') }}" class="sb-user" style="text-decoration:none;">
-                    @if ($currentUser->avatarUrl())
-                        <div class="sb-avatar"><img src="{{ $currentUser->avatarUrl() }}" alt=""></div>
-                    @else
-                        <div class="sb-avatar {{ $currentUser->role === 'admin' ? 'gold' : '' }}">{{ $initials }}</div>
-                    @endif
-                    <div class="sb-user-text">
-                        <strong>{{ $currentUser->name }}</strong>
-                        <span>{{ $currentUser->role === 'admin' ? 'System Admin' : ucfirst($currentUser->role) }}</span>
-                    </div>
-                </a>
-            </div>
         </aside>
 
         <!-- Main -->
