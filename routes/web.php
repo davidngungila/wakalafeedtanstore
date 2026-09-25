@@ -147,6 +147,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::get('/audit', AuditLogController::class)->name('audit.index');
         Route::get('/users/export', [UserController::class, 'export'])->name('users.export');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
+        Route::get('/users/sessions', [UserController::class, 'sessions'])->name('users.sessions');
         Route::get('/users/{user}', [UserController::class, 'show'])->name('users.show');
     });
 

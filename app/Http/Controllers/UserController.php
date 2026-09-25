@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Agent;
 use App\Models\User;
 use App\Services\ExportService;
+use App\Support\SessionFormatter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -29,6 +31,37 @@ class UserController extends Controller
         $exportRoute = route('users.export');
 
         return view('users.index', compact('users', 'agents', 'exportColumns', 'exportRoute') + ['activeRole' => $request->input('role', 'all')]);
+    }
+
+    public function sessions(Request $request): View
+    {
+        $currentSessionId = $request->session()->getId();
+        $sessionLifetime = (int) config('session.lifetime', 120);
+        $activeSince = now()->subMinutes($sessionLifetime)->timestamp;
+
+        $sessions = DB::table('sessions')
+            ->select([
+                'sessions.id',
+                'sessions.user_id',
+                'sessions.ip_address',
+                'sessions.user_agent',
+                'sessions.last_activity',
+                'users.name as user_name',
+                'users.email as user_email',
+            ])
+            ->join('users', 'users.id', '=', 'sessions.user_id')
+            ->where('sessions.last_activity', '>=', $activeSince)
+            ->orderByDesc('sessions.last_activity')
+            ->paginate(25)
+            ->through(function (object $row) use ($currentSessionId): array {
+                $session = SessionFormatter::format($row, $row->id === $currentSessionId);
+                $session['user_name'] = $row->user_name;
+                $session['user_email'] = $row->user_email;
+
+                return $session;
+            });
+
+        return view('users.sessions', compact('sessions', 'sessionLifetime'));
     }
 
     public function export(Request $request, ExportService $export)

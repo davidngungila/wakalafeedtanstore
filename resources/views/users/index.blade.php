@@ -9,6 +9,7 @@
             <p class="sub">Cashiers run daily operations, supervisors monitor and approve, administrators manage the system.</p>
         </div>
         <div class="view-actions">
+            <a class="btn btn-ghost" href="{{ route('users.sessions') }}">View all active sessions</a>
             <button class="btn btn-primary" onclick="openUserModal()">+ Add user</button>
         </div>
         @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Users'])

@@ -3,11 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Setting;
+use App\Support\SessionFormatter;
 use App\Support\TwoFactor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -91,15 +91,7 @@ class AccountController extends Controller
 
         $currentSessionId = $request->session()->getId();
 
-        $parse = fn (object $row, bool $isCurrent): array => [
-            'id' => $row->id,
-            'ip' => $row->ip_address ?: 'Unknown',
-            'device' => $this->parseDevice($row->user_agent),
-            'browser' => $this->parseBrowser($row->user_agent),
-            'ua' => $row->user_agent,
-            'last_seen' => Carbon::createFromTimestamp($row->last_activity),
-            'is_current' => $isCurrent,
-        ];
+        $parse = fn (object $row, bool $isCurrent): array => SessionFormatter::format($row, $isCurrent);
 
         $currentRow = DB::table('sessions')->where('id', $currentSessionId)->first();
 
@@ -270,75 +262,5 @@ class AccountController extends Controller
         $this->recordAudit('Active session revoked', 'User', $user->id, ['session' => $sessionId]);
 
         return response()->json(['success' => true, 'message' => 'Session revoked successfully.']);
-    }
-
-    private function parseDevice(?string $userAgent): string
-    {
-        if (! $userAgent) {
-            return 'Unknown device';
-        }
-
-        if (preg_match('/Windows/', $userAgent)) {
-            return 'Windows';
-        }
-
-        if (preg_match('/Macintosh|Mac OS X/', $userAgent)) {
-            return 'macOS';
-        }
-
-        if (preg_match('/iPhone/', $userAgent)) {
-            return 'iPhone';
-        }
-
-        if (preg_match('/iPad/', $userAgent)) {
-            return 'iPad';
-        }
-
-        if (preg_match('/Android/', $userAgent)) {
-            return 'Android';
-        }
-
-        if (preg_match('/Linux/', $userAgent)) {
-            return 'Linux';
-        }
-
-        return 'Browser';
-    }
-
-    private function parseBrowser(?string $userAgent): string
-    {
-        if (! $userAgent) {
-            return 'Unknown browser';
-        }
-
-        if (preg_match('/Edg\//', $userAgent)) {
-            return 'Microsoft Edge';
-        }
-
-        if (preg_match('/OPR\//', $userAgent)) {
-            return 'Opera';
-        }
-
-        if (preg_match('/SamsungBrowser/', $userAgent)) {
-            return 'Samsung Internet';
-        }
-
-        if (preg_match('/CriOS\//', $userAgent)) {
-            return 'Chrome (iOS)';
-        }
-
-        if (preg_match('/Chrome\//', $userAgent)) {
-            return 'Chrome';
-        }
-
-        if (preg_match('/Firefox\/|FxiOS\//', $userAgent)) {
-            return 'Firefox';
-        }
-
-        if (preg_match('/Safari\//', $userAgent) && ! preg_match('/Android/', $userAgent)) {
-            return 'Safari';
-        }
-
-        return 'Browser';
     }
 }
