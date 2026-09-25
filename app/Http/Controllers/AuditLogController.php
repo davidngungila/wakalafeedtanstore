@@ -17,7 +17,7 @@ class AuditLogController extends Controller
             $query->where('action', 'like', '%'.$request->input('action').'%');
         }
 
-        $logs = $query->latest('created_at')->limit(200)->get();
+        $logs = $query->latest('created_at')->latest('id')->paginate(20)->withQueryString();
 
         $actions = AuditLog::query()
             ->distinct()

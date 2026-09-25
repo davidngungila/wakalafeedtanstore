@@ -40,8 +40,6 @@
                         <th>User</th>
                         <th>Action</th>
                         <th>Entity</th>
-                        <th>Details</th>
-                        <th>IP</th>
                     </tr>
                 </thead>
                 <tbody id="logsBody">
@@ -75,21 +73,19 @@
                                 <div class="cell-sub">{{ $log->entity_type ?? '—' }}</div>
                                 <div class="cell-title" style="font-size:12px;">#{{ $log->entity_id ?? '—' }}</div>
                             </td>
-                            <td>
-                                @forelse ($log->details ?? [] as $key => $value)
-                                    <span class="tag tag-grey" style="margin:1px 2px 1px 0;">{{ $key }}: {{ is_array($value) || is_object($value) ? json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) : $value }}</span>
-                                @empty
-                                    <span class="cell-sub">—</span>
-                                @endforelse
-                            </td>
-                            <td class="cell-sub">{{ $log->ip_address ?? '—' }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="empty-state"><h4>No audit logs</h4><p>Actions will appear here as they happen.</p></td></tr>
+                        <tr><td colspan="4" class="empty-state"><h4>No audit logs</h4><p>Actions will appear here as they happen.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+        @if ($logs->hasPages())
+            <div class="table-pager">
+                <span class="pager-info">Page {{ $logs->currentPage() }} of {{ $logs->lastPage() }}</span>
+                <div class="pager-pages">{{ $logs->links() }}</div>
+            </div>
+        @endif
     </div>
 @endsection
 
