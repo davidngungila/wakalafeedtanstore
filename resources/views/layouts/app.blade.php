@@ -425,10 +425,6 @@
 
         /* Settings */
         .settings-layout{display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:start;}
-        .settings-nav{display:flex;flex-direction:column;gap:3px;background:var(--white);border:1px solid var(--line);border-radius:var(--radius-md);padding:10px;box-shadow:var(--shadow-sm);}
-        .settings-nav a{display:flex;align-items:center;gap:10px;text-align:left;padding:11px 13px;border-radius:9px;font-size:13.8px;font-weight:600;color:var(--coffee-700);cursor:pointer;text-decoration:none;}
-        .settings-nav a.active{background:var(--sand-100);color:var(--terracotta-600);}
-        .settings-nav a svg{width:17px;height:17px;}
         .settings-panel{background:var(--white);border:1px solid var(--line);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding:26px;}
         .settings-panel h3{font-size:17px;margin-bottom:18px;}
         .field{margin-bottom:16px;}
@@ -697,9 +693,29 @@
                     </button>
                     <div class="sb-drop-menu">
                         @if (is_admin())
-                            <a href="{{ route('settings.index') }}" class="sb-drop-sub {{ $isSettingArea ? 'active' : '' }}">
+                            <a href="{{ route('settings.index') }}" class="sb-drop-sub {{ $routeName === 'settings.index' ? 'active' : '' }}">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect></svg>
-                                System Settings
+                                General
+                            </a>
+                            <a href="{{ route('settings.commissions') }}" class="sb-drop-sub {{ $routeName === 'settings.commissions' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M15 9h-3.5a1 1 0 0 0 0 2h1a1 1 0 0 1 0 2H9"></path><path d="M12 6v12"></path></svg>
+                                Commissions
+                            </a>
+                            <a href="{{ route('settings.security') }}" class="sb-drop-sub {{ $routeName === 'settings.security' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                                Security
+                            </a>
+                            <a href="{{ route('settings.notifications') }}" class="sb-drop-sub {{ $routeName === 'settings.notifications' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                                Notifications
+                            </a>
+                            <a href="{{ route('settings.cash-point') }}" class="sb-drop-sub {{ $routeName === 'settings.cash-point' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l1.5-2.5h17L22 7z"></path><path d="M3 7h18v13H3z"></path><path d="M9 13h6"></path></svg>
+                                Cash Point
+                            </a>
+                            <a href="{{ route('settings.email') }}" class="sb-drop-sub {{ in_array($routeName, ['settings.email', 'settings.email.test', 'settings.email.test.page'], true) ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                Email
                             </a>
                         @endif
                         <a href="{{ route('account.index') }}" class="sb-drop-sub {{ $isAccountArea ? 'active' : '' }}">
@@ -803,7 +819,7 @@
                             @if (is_admin())
                                 <a href="{{ route('settings.index') }}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect></svg>
-                                    System Settings
+                                    General Settings
                                 </a>
                             @endif
                             <div class="menu-sep"></div>

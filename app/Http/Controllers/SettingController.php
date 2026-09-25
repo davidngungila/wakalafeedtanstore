@@ -11,19 +11,58 @@ use Illuminate\View\View;
 
 class SettingController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
-        $pane = $request->input('pane', 'general');
-
-        $panes = ['general', 'commissions', 'security', 'notifications', 'cashpoint', 'email'];
-        if (! in_array($pane, $panes, true)) {
-            $pane = 'general';
+        if ($request->has('pane')) {
+            return redirect()->route($this->legacySectionRoute($request->input('pane')));
         }
 
+        return $this->settingsView('general');
+    }
+
+    public function commissions(): View
+    {
+        return $this->settingsView('commissions');
+    }
+
+    public function security(): View
+    {
+        return $this->settingsView('security');
+    }
+
+    public function notifications(): View
+    {
+        return $this->settingsView('notifications');
+    }
+
+    public function cashPoint(): View
+    {
+        return $this->settingsView('cash-point');
+    }
+
+    public function email(): View
+    {
+        return $this->settingsView('email');
+    }
+
+    private function settingsView(string $section): View
+    {
         $settings = Setting::all()->pluck('value', 'key');
         $agent = cash_point();
 
-        return view('settings.index', compact('pane', 'settings', 'agent'));
+        return view('settings.index', compact('section', 'settings', 'agent'));
+    }
+
+    private function legacySectionRoute(mixed $section): string
+    {
+        return match ($section) {
+            'commissions' => 'settings.commissions',
+            'security' => 'settings.security',
+            'notifications' => 'settings.notifications',
+            'cashpoint' => 'settings.cash-point',
+            'email' => 'settings.email',
+            default => 'settings.index',
+        };
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse

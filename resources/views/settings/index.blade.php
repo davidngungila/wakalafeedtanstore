@@ -4,16 +4,33 @@
 
 @section('content')
     @php
+        $section = $section ?? 'general';
         $gen = $settings['general'] ?? [];
         $comm = $settings['commissions'] ?? [];
         $sec = $settings['security'] ?? [];
         $notif = $settings['notifications'] ?? [];
         $email = $settings['email'] ?? [];
+        $pageTitles = [
+            'general' => 'General Settings',
+            'commissions' => 'Commission Settings',
+            'security' => 'Security Settings',
+            'notifications' => 'Notification Settings',
+            'cash-point' => 'Cash Point Settings',
+            'email' => 'Email Settings',
+        ];
+        $pageDescriptions = [
+            'general' => 'Manage your business profile and regional defaults.',
+            'commissions' => 'Manage default commission rates and transaction fees.',
+            'security' => 'Manage transaction limits, approvals, and session security.',
+            'notifications' => 'Choose how operational updates are delivered.',
+            'cash-point' => 'Manage the cash point identity and operating details.',
+            'email' => 'Configure SMTP, email authentication, and report delivery.',
+        ];
     @endphp
     <div class="view-head">
         <div>
-            <h2>System Settings</h2>
-            <p class="sub">Configure the business profile, commissions, security rules and notifications.</p>
+            <h2>{{ $pageTitles[$section] ?? 'General Settings' }}</h2>
+            <p class="sub">{{ $pageDescriptions[$section] ?? 'Manage your business profile and regional defaults.' }}</p>
         </div>
         <div class="view-actions">
             <button class="btn btn-ghost" onclick="window.location.reload()">Reset form</button>
@@ -21,35 +38,8 @@
     </div>
 
     <div class="settings-layout">
-        <nav class="settings-nav">
-            <a href="{{ route('settings.index') }}?pane=general" class="{{ $pane === 'general' ? 'active' : '' }}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg>
-                General
-            </a>
-            <a href="{{ route('settings.index') }}?pane=commissions" class="{{ $pane === 'commissions' ? 'active' : '' }}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M15 9h-3.5a1 1 0 0 0 0 2h1a1 1 0 0 1 0 2H9"></path><path d="M12 6v12"></path></svg>
-                Commissions
-            </a>
-            <a href="{{ route('settings.index') }}?pane=security" class="{{ $pane === 'security' ? 'active' : '' }}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                Security
-            </a>
-            <a href="{{ route('settings.index') }}?pane=notifications" class="{{ $pane === 'notifications' ? 'active' : '' }}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-                Notifications
-            </a>
-            <a href="{{ route('settings.index') }}?pane=cashpoint" class="{{ $pane === 'cashpoint' ? 'active' : '' }}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7l1.5-2.5h17L22 7z"></path><path d="M3 7h18v13H3z"></path><path d="M9 13h6"></path></svg>
-                Cash Point
-            </a>
-            <a href="{{ route('settings.index') }}?pane=email" class="{{ $pane === 'email' ? 'active' : '' }}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                Email
-            </a>
-        </nav>
-
-        <div class="settings-panel" id="settingsPanel">
-            @if ($pane === 'general')
+        <div class="settings-panel" id="settingsPanel" style="grid-column:1 / -1;">
+            @if ($section === 'general')
                 <h3>General</h3>
                 <form method="POST" action="{{ route('settings.store') }}" data-settings-form>
                     @csrf
@@ -69,7 +59,7 @@
                     </div>
                     <button type="submit" class="btn btn-primary">Save general settings</button>
                 </form>
-            @elseif ($pane === 'commissions')
+            @elseif ($section === 'commissions')
                 <h3>Commissions</h3>
                 <form method="POST" action="{{ route('settings.store') }}" data-settings-form>
                     @csrf
@@ -84,7 +74,7 @@
                     </div>
                     <button type="submit" class="btn btn-primary">Save commission settings</button>
                 </form>
-            @elseif ($pane === 'security')
+            @elseif ($section === 'security')
                 <h3>Security</h3>
                 <form method="POST" action="{{ route('settings.store') }}" data-settings-form>
                     @csrf
@@ -98,7 +88,7 @@
                     </div>
                     <button type="submit" class="btn btn-primary">Save security settings</button>
                 </form>
-            @elseif ($pane === 'cashpoint')
+            @elseif ($section === 'cash-point')
                 <h3>Cash Point</h3>
                 @php
                     $agentConfigured = $agent !== null
@@ -125,7 +115,7 @@
                     @include('cash_point._fields')
                     <button type="submit" class="btn btn-primary">Save cash point</button>
                 </form>
-            @elseif ($pane === 'email')
+            @elseif ($section === 'email')
                 <h3>Email — OTP & Reports</h3>
                 <p style="font-size:13px; color:var(--ink-soft); margin-bottom:16px;">Configure SMTP to send OTP codes and report emails. These settings override <code>.env</code> <code>MAIL_*</code> when saved.</p>
                 <form method="POST" action="{{ route('settings.store') }}" data-settings-form>
@@ -212,7 +202,7 @@
                         </div>
                     </div>
                 </div>
-            @else
+            @elseif ($section === 'notifications')
                 <h3>Notifications</h3>
                 <form method="POST" action="{{ route('settings.store') }}" data-settings-form>
                     @csrf
@@ -285,7 +275,7 @@
         document.querySelectorAll('[data-cashpoint-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                submitForm(form, { method: 'PUT', done: () => toast('Cash point saved successfully.', 'success') });
+                submitForm(form, { method: 'POST', done: () => toast('Cash point saved successfully.', 'success') });
             });
         });
 

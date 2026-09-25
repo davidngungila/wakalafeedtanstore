@@ -193,6 +193,11 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::delete('/devices/{device}', [DeviceController::class, 'destroy'])->name('devices.destroy');
 
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
+        Route::get('/settings/commissions', [SettingController::class, 'commissions'])->name('settings.commissions');
+        Route::get('/settings/security', [SettingController::class, 'security'])->name('settings.security');
+        Route::get('/settings/notifications', [SettingController::class, 'notifications'])->name('settings.notifications');
+        Route::get('/settings/cash-point', [SettingController::class, 'cashPoint'])->name('settings.cash-point');
+        Route::get('/settings/email', [SettingController::class, 'email'])->name('settings.email');
         Route::post('/settings', [SettingController::class, 'store'])->name('settings.store');
         Route::get('/settings/email/test', [SettingController::class, 'showTestEmail'])->name('settings.email.test.page');
         Route::post('/settings/email/test', [SettingController::class, 'sendTestEmail'])->name('settings.email.test');
