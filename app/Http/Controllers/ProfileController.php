@@ -13,7 +13,17 @@ use Illuminate\View\View;
 
 class ProfileController extends Controller
 {
+    public function show(Request $request): View
+    {
+        return $this->profileView($request, false);
+    }
+
     public function edit(Request $request): View
+    {
+        return $this->profileView($request, true);
+    }
+
+    private function profileView(Request $request, bool $editing): View
     {
         $user = auth()->user();
 
@@ -21,12 +31,12 @@ class ProfileController extends Controller
 
         $currentSessionId = $request->session()->getId();
         $currentSession = DB::table('sessions')->where('id', $currentSessionId)->first();
-        $currentIp = $currentSession?->ip_address;
 
         return view('profile.index', [
             'user' => $user,
             'activeSessions' => $activeSessions,
-            'currentIp' => $currentIp,
+            'currentIp' => $currentSession?->ip_address,
+            'editing' => $editing,
         ]);
     }
 

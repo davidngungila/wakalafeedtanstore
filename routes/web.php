@@ -99,7 +99,8 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::post('/reconciliation/{reconciliation}/corrections', [ReconciliationController::class, 'storeCorrection'])->name('reconciliation.corrections.store');
     Route::delete('/reconciliation/{reconciliation}/corrections/{correction}', [ReconciliationController::class, 'destroyCorrection'])->name('reconciliation.corrections.destroy');
 
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.index');
+    Route::get('/profile', [ProfileController::class, 'show'])->name('profile.index');
+    Route::get('/profile/edit', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 

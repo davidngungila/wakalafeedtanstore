@@ -42,7 +42,28 @@ class ProfileAccountTest extends TestCase
             ->assertSee('Test Agent')
             ->assertSee('test.agent@example.com')
             ->assertSee('Feedtan Central')
-            ->assertSee('Active');
+            ->assertSee('Active')
+            ->assertSee('Edit profile')
+            ->assertSee(route('profile.edit'))
+            ->assertDontSee('Save profile')
+            ->assertDontSee('Update password');
+    }
+
+    public function test_profile_edit_page_renders_profile_and_password_forms_before_two_factor_setup(): void
+    {
+        $user = $this->user([
+            'two_factor_enabled' => false,
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('profile.edit'))
+            ->assertOk()
+            ->assertSee('Edit Profile')
+            ->assertSee('Save profile')
+            ->assertSee('Update password')
+            ->assertSee("submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });", false);
     }
 
     public function test_account_page_renders_security_sections(): void
@@ -89,10 +110,13 @@ class ProfileAccountTest extends TestCase
 
     public function test_profile_update_uploads_avatar(): void
     {
+        Storage::fake('public');
+
         $user = $this->user();
 
         $this->actingAs($user)
-            ->put(route('profile.update'), [
+            ->post(route('profile.update'), [
+                '_method' => 'PUT',
                 'name' => $user->name,
                 'email' => $user->email,
                 'avatar' => UploadedFile::fake()->image('photo.png', 100, 100),

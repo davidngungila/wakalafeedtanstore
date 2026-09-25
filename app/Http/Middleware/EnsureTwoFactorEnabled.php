@@ -34,6 +34,7 @@ class EnsureTwoFactorEnabled
             'account.recovery-codes',
             'account.sessions.destroy',
             'profile.index',
+            'profile.edit',
             'profile.update',
             'profile.password',
             'avatar.show',

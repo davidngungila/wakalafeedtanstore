@@ -35,7 +35,7 @@
                     <span class="tag {{ $user->two_factor_enabled ? 'tag-green' : 'tag-grey' }}">{{ $user->two_factor_enabled ? '2FA enabled' : '2FA off' }}</span>
                 </div>
             </div>
-            <a class="btn btn-ghost" href="{{ route('profile.index') }}" style="text-decoration:none;">Edit profile</a>
+            <a class="btn btn-ghost" href="{{ route('profile.edit') }}" style="text-decoration:none;">Edit profile</a>
         </div>
     </div>
 

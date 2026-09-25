@@ -1,32 +1,52 @@
 @extends('layouts.app')
 
-@section('title', 'My Profile')
+@section('title', $editing ? 'Edit Profile' : 'My Profile')
 
 @section('content')
     <div class="view-head">
         <div>
-            <h2>My Profile</h2>
-            <p class="sub">Update your personal information and change your password.</p>
+            <h2>{{ $editing ? 'Edit Profile' : 'My Profile' }}</h2>
+            <p class="sub">{{ $editing ? 'Update your personal information and change your password.' : 'View your personal information and account activity.' }}</p>
         </div>
+        @if ($editing)
+            <a class="btn btn-ghost" href="{{ route('profile.index') }}" style="display:inline-flex;align-items:center;gap:8px;padding:9px 14px;text-decoration:none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:16px;height:16px;">
+                    <path d="m15 18-6-6 6-6"></path>
+                </svg>
+                Back to profile
+            </a>
+        @else
+            <a class="btn btn-ghost" href="{{ route('profile.edit') }}" aria-label="Edit profile" title="Edit profile" style="display:inline-flex;align-items:center;gap:8px;padding:9px 14px;text-decoration:none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:16px;height:16px;">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                </svg>
+                Edit profile
+            </a>
+        @endif
     </div>
 
     <div class="panel" style="margin-bottom:24px;">
         <div style="display:flex;align-items:center;gap:26px;padding:30px clamp(20px,4vw,36px);flex-wrap:wrap;">
             <div style="flex:none;">
-                <input type="file" name="avatar" id="avatarInput" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" form="profileForm">
-                <button type="button" id="avatarButton" class="avatar-ring" title="Change photo" style="border:none;background:none;cursor:pointer;padding:0;border-radius:50%;position:relative;">
-                    <span id="avatarPreview" style="width:96px;height:96px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(155deg,var(--terracotta-600),var(--gold-500));color:#fff;font-weight:700;font-size:30px;border:4px solid var(--sand-50);box-shadow:var(--shadow-md);">
-                        @if ($user->avatarUrl())
-                            <img src="{{ $user->avatarUrl() }}" alt="{{ $user->name }}" style="width:100%;height:100%;object-fit:cover;">
-                        @else
-                            {{ strtoupper(substr($user->name, 0, 2)) }}
-                        @endif
-                    </span>
+                @if ($editing)
+                    <input type="file" name="avatar" id="avatarInput" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" form="profileForm">
+                    <button type="button" id="avatarButton" class="avatar-ring" title="Change photo" style="border:none;background:none;cursor:pointer;padding:0;border-radius:50%;position:relative;">
+                @endif
+                <span id="avatarPreview" style="width:96px;height:96px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(155deg,var(--terracotta-600),var(--gold-500));color:#fff;font-weight:700;font-size:30px;border:4px solid var(--sand-50);box-shadow:var(--shadow-md);">
+                    @if ($user->avatarUrl())
+                        <img src="{{ $user->avatarUrl() }}" alt="{{ $user->name }}" style="width:100%;height:100%;object-fit:cover;">
+                    @else
+                        {{ strtoupper(substr($user->name, 0, 2)) }}
+                    @endif
+                </span>
+                @if ($editing)
                     <span class="avatar-hover">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:20px;height:20px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                         <span>Change</span>
                     </span>
                 </button>
+                @endif
             </div>
             <div style="flex:1;min-width:240px;">
                 <h3 style="font-size:21px;margin:0 0 4px;">{{ $user->name }}</h3>
@@ -52,6 +72,7 @@
         .avatar-ring:hover .avatar-hover{opacity:1;}
     </style>
 
+    @if ($editing)
     <div class="panel-grid">
         <div class="panel">
             <div class="panel-head">
@@ -93,6 +114,7 @@
             </div>
         </div>
     </div>
+    @endif
 
     <div class="panel">
         <div class="panel-head">
@@ -115,6 +137,7 @@
 @endsection
 
 @section('scripts')
+    @if ($editing)
     <script>
         const avatarInput = document.getElementById('avatarInput');
         const avatarPreview = document.getElementById('avatarPreview');
@@ -163,15 +186,16 @@
         document.querySelectorAll('[data-profile-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                submitForm(form, { method: 'PUT', done: () => setTimeout(() => location.reload(), 600) });
+                submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
             });
         });
 
         document.querySelectorAll('[data-password-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                submitForm(form, { method: 'PUT', done: () => { toast('Password changed successfully.', 'success'); resetForm(); } });
+                submitForm(form, { method: 'POST', done: () => { toast('Password changed successfully.', 'success'); resetForm(); } });
             });
         });
     </script>
+    @endif
 @endsection
