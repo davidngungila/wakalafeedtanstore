@@ -58,6 +58,21 @@ class SettingsPageTest extends TestCase
         $response->assertSee(route('settings.email'));
     }
 
+    public function test_layout_persists_sidebar_state_across_refreshes(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->get(route('settings.index'))
+            ->assertOk()
+            ->assertSee('data-sidebar-state-key="sidebar-state-'.$admin->id.'"', false)
+            ->assertSee('data-drop-key="finance"', false)
+            ->assertSee('data-drop-key="system"', false)
+            ->assertSee('localStorage.setItem', false)
+            ->assertSee('beforeunload', false)
+            ->assertSee('sidebarNav.scrollTop', false);
+    }
+
     public function test_legacy_settings_pane_links_redirect_to_dedicated_pages(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);

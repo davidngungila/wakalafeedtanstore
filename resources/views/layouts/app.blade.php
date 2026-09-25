@@ -584,7 +584,7 @@
     <div id="app">
         <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobileSidebar()"></div>
 
-        <aside class="sidebar" id="sidebar">
+        <aside class="sidebar" id="sidebar" data-sidebar-state-key="sidebar-state-{{ $currentUser->id }}">
             <div class="sb-brand">
                 <div class="sb-mark">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
@@ -640,7 +640,7 @@
                     </a>
                     @endif
                     @if (is_role('supervisor', 'admin'))
-                    <div class="sb-drop {{ $isFinanceArea ? 'open' : '' }}">
+                    <div class="sb-drop {{ $isFinanceArea ? 'open' : '' }}" data-drop-key="finance">
                         <button type="button" class="sb-drop-toggle" onclick="toggleSbDrop(this)" style="width:100%;padding:11px 12px;border-radius:10px;background:none;cursor:pointer;">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px;flex:none;display:inline;"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
                             <span>Finance</span>
@@ -685,7 +685,7 @@
                         <span>Audit Logs</span>
                     </a>
                 @endif
-                <div class="sb-drop {{ $isSettingArea || $isProfileArea || $isAccountArea ? 'open' : '' }}">
+                <div class="sb-drop {{ $isSettingArea || $isProfileArea || $isAccountArea ? 'open' : '' }}" data-drop-key="system">
                     <button type="button" class="sb-drop-toggle {{ $isSettingArea || $isProfileArea || $isAccountArea ? '' : '' }}" onclick="toggleSbDrop(this)" style="width:100%;padding:11px 12px;border-radius:10px;background:none;cursor:pointer;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px;flex:none;display:inline;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 0 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z"></path></svg>
                         <span>{{ is_admin() ? 'System' : 'Account' }}</span>
@@ -869,6 +869,76 @@
 
     <script>
         const CSRF_TOKEN = '{{ csrf_token() }}';
+        const sidebar = document.getElementById('sidebar');
+        const sidebarNav = sidebar ? sidebar.querySelector('.sb-nav') : null;
+        const sidebarStateKey = sidebar?.dataset.sidebarStateKey || 'wakala-sidebar-state';
+        let sidebarState = {
+            collapsed: false,
+            mobileOpen: false,
+            openDrop: '',
+            scrollTop: 0,
+        };
+
+        try {
+            const storedSidebarState = JSON.parse(localStorage.getItem(sidebarStateKey) || '{}');
+            if (storedSidebarState && typeof storedSidebarState === 'object' && !Array.isArray(storedSidebarState)) {
+                sidebarState = { ...sidebarState, ...storedSidebarState };
+            }
+        } catch (error) {
+        }
+
+        function persistSidebarState() {
+            if (!sidebar) {
+                return;
+            }
+
+            sidebarState.collapsed = sidebar.classList.contains('collapsed');
+            sidebarState.mobileOpen = sidebar.classList.contains('mobile-open');
+            sidebarState.openDrop = sidebar.querySelector('.sb-drop.open')?.dataset.dropKey || '';
+            sidebarState.scrollTop = sidebarNav?.scrollTop || 0;
+
+            try {
+                localStorage.setItem(sidebarStateKey, JSON.stringify(sidebarState));
+            } catch (error) {
+            }
+        }
+
+        if (sidebar) {
+            if (sidebarState.collapsed === true) {
+                sidebar.classList.add('collapsed');
+            }
+
+            if (sidebarState.mobileOpen === true && window.innerWidth <= 900) {
+                sidebar.classList.add('mobile-open');
+                document.getElementById('mobileOverlay')?.classList.add('show');
+            }
+
+            if (!sidebar.querySelector('.sb-drop.open') && sidebarState.openDrop) {
+                const storedDrop = Array.from(sidebar.querySelectorAll('[data-drop-key]'))
+                    .find(drop => drop.dataset.dropKey === sidebarState.openDrop);
+                storedDrop?.classList.add('open');
+            }
+
+            if (sidebarNav) {
+                const scrollTop = Number(sidebarState.scrollTop);
+                sidebarNav.scrollTop = Number.isFinite(scrollTop) ? scrollTop : 0;
+            }
+
+            let sidebarScrollFrame = null;
+            sidebarNav?.addEventListener('scroll', () => {
+                if (sidebarScrollFrame !== null) {
+                    return;
+                }
+
+                sidebarScrollFrame = window.requestAnimationFrame(() => {
+                    sidebarState.scrollTop = sidebarNav.scrollTop;
+                    persistSidebarState();
+                    sidebarScrollFrame = null;
+                });
+            });
+
+            window.addEventListener('beforeunload', persistSidebarState);
+        }
 
         function toggleSidebar(){
             if(window.innerWidth <= 900){
@@ -877,16 +947,19 @@
             } else {
                 document.getElementById('sidebar').classList.toggle('collapsed');
             }
+            persistSidebarState();
         }
         function closeMobileSidebar(){
             document.getElementById('sidebar').classList.remove('mobile-open');
             document.getElementById('mobileOverlay').classList.remove('show');
+            persistSidebarState();
         }
         function toggleSbDrop(el){
             const drop = el.closest('.sb-drop');
             const wasOpen = drop.classList.contains('open');
             document.querySelectorAll('.sb-drop').forEach(d => d.classList.remove('open'));
             if(!wasOpen) drop.classList.add('open');
+            persistSidebarState();
         }
 
         function toast(msg, type='default'){
