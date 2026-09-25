@@ -77,7 +77,7 @@
                             </td>
                             <td>
                                 @forelse ($log->details ?? [] as $key => $value)
-                                    <span class="tag tag-grey" style="margin:1px 2px 1px 0;">{{ $key }}: {{ is_array($value) ? implode(',', $value) : ($value instanceof \Illuminate\Support\Collection ? $value->implode(',') : $value) }}</span>
+                                    <span class="tag tag-grey" style="margin:1px 2px 1px 0;">{{ $key }}: {{ is_array($value) || is_object($value) ? json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) : $value }}</span>
                                 @empty
                                     <span class="cell-sub">—</span>
                                 @endforelse
@@ -105,8 +105,12 @@
         bindRowClick('#logsBody tr[data-action]', tr => {
             let details = tr.dataset.details || '{}';
             try { details = JSON.parse(details); } catch (err) { details = {}; }
-            const detailEntries = Object.keys(details).map(k =>
-                [k, Array.isArray(details[k]) ? details[k].join(', ') : String(details[k])]);
+            const detailEntries = Object.keys(details).map(k => [
+                k,
+                details[k] !== null && typeof details[k] === 'object'
+                    ? JSON.stringify(details[k])
+                    : String(details[k]),
+            ]);
             return [
                 ['When', tr.dataset.when],
                 ['User', tr.dataset.user + (tr.dataset.useremail ? ' (' + tr.dataset.useremail + ')' : '')],

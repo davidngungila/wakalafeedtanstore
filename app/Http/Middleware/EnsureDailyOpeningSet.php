@@ -44,6 +44,8 @@ class EnsureDailyOpeningSet
             'account.password',
             'account.two-factor.confirm',
             'account.two-factor.disable',
+            'account.two-factor.method',
+            'account.two-factor.enable-email',
             'account.recovery-codes',
             'account.sessions.destroy',
             'avatar.show',

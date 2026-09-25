@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -33,6 +34,10 @@ class AccountController extends Controller
         }
 
         $user->forceFill(['two_factor_method' => $validated['method']])->save();
+
+        if ($validated['method'] !== 'email') {
+            Cache::forget('otp_email_'.$user->id);
+        }
 
         $this->recordAudit('Two-factor method updated', 'User', $user->id, ['method' => $validated['method']]);
 
@@ -65,6 +70,7 @@ class AccountController extends Controller
             'two_factor_recovery_codes' => array_map(fn (string $code): string => TwoFactor::hashRecoveryCode($code), $recoveryCodes),
         ])->save();
 
+        Cache::forget('otp_email_'.$user->id);
         $request->session()->forget('two_factor_pending_secret');
 
         $this->recordAudit('Two-factor enabled via Email OTP', 'User', $user->id);
@@ -165,6 +171,7 @@ class AccountController extends Controller
         $user->forceFill([
             'two_factor_secret' => Crypt::encryptString($secret),
             'two_factor_enabled' => true,
+            'two_factor_method' => 'app',
             'two_factor_recovery_codes' => array_map(
                 fn (string $code): string => TwoFactor::hashRecoveryCode($code),
                 $recoveryCodes,
@@ -203,6 +210,8 @@ class AccountController extends Controller
             'two_factor_enabled' => false,
             'two_factor_recovery_codes' => null,
         ])->save();
+
+        Cache::forget('otp_email_'.$user->id);
 
         $request->session()->forget('two_factor_pending_secret');
 

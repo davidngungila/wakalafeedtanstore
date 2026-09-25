@@ -21,6 +21,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SmsController;
 use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,6 +36,11 @@ Route::get('/avatars/{file}', [AvatarController::class, 'show'])
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
     Route::post('/login', [AuthController::class, 'login']);
+
+    Route::get('/two-factor', [TwoFactorController::class, 'show'])->name('two-factor.show');
+    Route::post('/two-factor', [TwoFactorController::class, 'verify'])->name('two-factor.verify');
+    Route::post('/two-factor/resend', [TwoFactorController::class, 'resend'])->name('two-factor.resend');
+    Route::post('/two-factor/cancel', [TwoFactorController::class, 'cancel'])->name('two-factor.cancel');
 });
 
 Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
