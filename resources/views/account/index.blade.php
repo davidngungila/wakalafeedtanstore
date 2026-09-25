@@ -77,7 +77,7 @@
         <div class="panel-head">
             <h3>Two-factor authentication</h3>
             @if ($user->two_factor_enabled)
-                <span class="tag tag-green">Enabled — {{ $user->two_factor_method === 'email' ? 'Email OTP' : 'Authenticator App' }}</span>
+                <span class="tag tag-green">Enabled — {{ $user->two_factor_method === 'sms' ? 'SMS OTP' : 'Authenticator App' }}</span>
             @else
                 <span class="tag tag-gold">Off</span>
             @endif
@@ -85,7 +85,7 @@
         <div class="panel-body">
             @if ($user->two_factor_enabled)
                 <p style="margin:0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.7;">
-                    Two-factor authentication is on via <strong>{{ $user->two_factor_method === 'email' ? 'Email OTP' : 'Authenticator App' }}</strong>. Every sign-in now requires a code from {{ $user->two_factor_method === 'email' ? 'your email (6-digit OTP, valid 5 min)' : 'your authenticator app' }}.
+                    Two-factor authentication is on via <strong>{{ $user->two_factor_method === 'sms' ? 'SMS OTP' : 'Authenticator App' }}</strong>. Every sign-in now requires a code from {{ $user->two_factor_method === 'sms' ? 'your mobile number (6-digit OTP, valid 5 min)' : 'your authenticator app' }}.
                     Keep your recovery codes somewhere safe in case you lose access.
                 </p>
                 <div style="display:flex;gap:10px;flex-wrap:wrap; align-items:center;">
@@ -95,7 +95,7 @@
                 </div>
             @else
                 <p style="margin:0 0 16px;color:var(--ink-soft);font-size:14px;line-height:1.7;">
-                    Add an extra layer of security. Choose how you want to receive your verification code — via <strong>Email OTP</strong> or <strong>Authenticator App</strong>. Once enabled, every sign-in will also require a six-digit code.
+                    Add an extra layer of security. Choose how you want to receive your verification code — via <strong>SMS OTP</strong> or <strong>Authenticator App</strong>. Once enabled, every sign-in will also require a six-digit code.
                 </p>
                 <button type="button" class="btn btn-primary" onclick="openModal('chooseTwoFactorModal')">Set up two-factor — Choose method</button>
             @endif
@@ -105,14 +105,14 @@
     <div class="panel">
         <div class="panel-head">
             <h3>Verification method</h3>
-            <span class="tag {{ $user->two_factor_method ? 'tag-green' : 'tag-grey' }}">{{ $user->two_factor_method ? ($user->two_factor_method === 'email' ? 'Email OTP' : 'App') : 'Not set' }}</span>
+            <span class="tag {{ $user->two_factor_method ? 'tag-green' : 'tag-grey' }}">{{ $user->two_factor_method ? ($user->two_factor_method === 'sms' ? 'SMS OTP' : 'App') : 'Not set' }}</span>
         </div>
         <div class="panel-body">
-            <p style="margin:0 0 14px; color:var(--ink-soft); font-size:13px; line-height:1.6;">Choose which method you want to use for sign-in verification. You can use <strong>one</strong> of these based on your selected modal — Email OTP (codes sent to <strong>{{ $user->email }}</strong>) or Authenticator App (TOTP). This is the modal you will see at login.</p>
+            <p style="margin:0 0 14px; color:var(--ink-soft); font-size:13px; line-height:1.6;">Choose which method you want to use for sign-in verification. You can use <strong>one</strong> of these based on your selected modal — SMS OTP (codes sent to <strong>{{ $user->phone ?? '—' }}</strong>) or Authenticator App (TOTP). Update your number in <a href="{{ route('profile.edit') }}">Edit profile</a> before enabling SMS OTP.</p>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-                <button type="button" onclick="setTwoFactorMethod('email')" class="btn {{ $user->two_factor_method === 'email' ? 'btn-primary' : 'btn-ghost' }}" style="{{ $user->two_factor_method === 'email' ? '' : 'border:1.5px solid var(--line);' }}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                    Email OTP
+                <button type="button" onclick="setTwoFactorMethod('sms')" class="btn {{ $user->two_factor_method === 'sms' ? 'btn-primary' : 'btn-ghost' }}" style="{{ $user->two_factor_method === 'sms' ? '' : 'border:1.5px solid var(--line);' }}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 20l1-4.2a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-9 8.4 8.4 0 0 1 9 8.5Z"></path><path d="M8 10h.01M12 10h.01M16 10h.01"></path></svg>
+                    SMS OTP
                 </button>
                 <button type="button" onclick="setTwoFactorMethod('app')" class="btn {{ $user->two_factor_method === 'app' ? 'btn-primary' : 'btn-ghost' }}" style="{{ $user->two_factor_method === 'app' ? '' : 'border:1.5px solid var(--line);' }}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path></svg>
@@ -120,7 +120,7 @@
                 </button>
             </div>
             <div style="font-size:12px; color:var(--ink-soft); background:var(--sand-50); border:1px solid var(--line); border-radius:8px; padding:10px 12px;">
-                Current: <strong>{{ $user->two_factor_method ? ($user->two_factor_method === 'email' ? 'Email OTP — codes sent to '.$user->email : 'Authenticator App — TOTP') : 'Not set — defaults to App when you enable 2FA' }}</strong><br>
+                Current: <strong>{{ $user->two_factor_method ? ($user->two_factor_method === 'sms' ? 'SMS OTP — codes sent to '.($user->phone ?? '—') : 'Authenticator App — TOTP') : 'Not set — defaults to App when you enable 2FA' }}</strong><br>
                 At login, you will see the modal for your selected method. You can switch anytime — works for <code>https://wakala.feedtanstore.com/account</code>.
             </div>
         </div>
@@ -218,9 +218,9 @@
             </div>
             <div class="modal-body" style="display:flex; flex-direction:column; gap:12px;">
                 <p style="margin:0; color:var(--ink-soft); font-size:13px; line-height:1.6;">How do you want to receive your code at login? You can use <strong>one</strong> of these — your selected modal will be used.</p>
-                <button type="button" onclick="chooseMethodAndProceed('email')" class="btn btn-primary" style="justify-content:center;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                    Email OTP — send to {{ $user->email }}
+                <button type="button" onclick="chooseMethodAndProceed('sms')" class="btn btn-primary" style="justify-content:center;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 20l1-4.2a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-9 8.4 8.4 0 0 1 9 8.5Z"></path><path d="M8 10h.01M12 10h.01M16 10h.01"></path></svg>
+                    SMS OTP — send to {{ $user->phone ?? '—' }}
                 </button>
                 <button type="button" onclick="chooseMethodAndProceed('app')" class="btn btn-ghost" style="justify-content:center; border:1.5px solid var(--line);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
@@ -333,12 +333,12 @@
                     if (method === 'app') {
                         setTimeout(() => openModal('enableTwoFactorModal'), 400);
                     } else {
-                        // For email OTP, just enable 2FA with email method — no QR needed, activate directly
-                        fetch('{{ route('account.two-factor.enable-email') }}', {
+                        // For SMS OTP, just enable 2FA with the SMS method — no QR needed, activate directly
+                        fetch('{{ route('account.two-factor.enable-sms') }}', {
                             method: 'POST',
                             headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
                         }).then(r => r.json()).then(d => {
-                            toast(d.message || 'Email OTP enabled', d.success ? 'success' : 'error');
+                            toast(d.message || 'SMS OTP enabled', d.success ? 'success' : 'error');
                             if (d.success) setTimeout(() => location.reload(), 800);
                         });
                     }

@@ -28,7 +28,7 @@
             'notifications' => 'Choose how operational updates are delivered.',
             'cash-point' => 'Manage the cash point identity and operating details.',
             'email' => 'Configure SMTP, email authentication, and report delivery.',
-            'sms' => 'Configure outbound SMS credentials and verify provider connectivity.',
+            'sms' => 'Configure outbound SMS credentials and verify provider connectivity. These credentials are also used for SMS login codes.',
         ];
     @endphp
     <div class="view-head">
@@ -153,20 +153,6 @@
                         <div class="field"><label>From Name</label><input type="text" name="email[mail_from_name]" value="{{ $email['mail_from_name'] ?? '' }}" placeholder="Wakala Feedtan Store"></div>
                     </div>
                     <div style="height:1px; background:var(--line); margin:18px 0;"></div>
-                    <div class="toggle-row">
-                        <div class="toggle-text"><strong>OTP via Email</strong><span>Send OTP codes by email for 2FA and verification.</span></div>
-                        <select name="email[otp_via_email]" style="padding:8px 10px; border:1.5px solid var(--line); border-radius:9px; font-weight:600; background:var(--white);">
-                            <option value="1" {{ ($email['otp_via_email'] ?? '1') == 1 ? 'selected' : '' }}>On</option>
-                            <option value="0" {{ ($email['otp_via_email'] ?? '1') == 0 ? 'selected' : '' }}>Off</option>
-                        </select>
-                    </div>
-                    <div class="toggle-row">
-                        <div class="toggle-text"><strong>OTP Enabled</strong><span>Master switch for OTP generation.</span></div>
-                        <select name="email[otp_enabled]" style="padding:8px 10px; border:1.5px solid var(--line); border-radius:9px; font-weight:600; background:var(--white);">
-                            <option value="1" {{ ($email['otp_enabled'] ?? '1') == 1 ? 'selected' : '' }}>On</option>
-                            <option value="0" {{ ($email['otp_enabled'] ?? '1') == 0 ? 'selected' : '' }}>Off</option>
-                        </select>
-                    </div>
                     <div class="toggle-row">
                         <div class="toggle-text"><strong>Reports via Email</strong><span>Send daily/weekly/monthly reports by email.</span></div>
                         <select name="email[reports_via_email]" style="padding:8px 10px; border:1.5px solid var(--line); border-radius:9px; font-weight:600; background:var(--white);">

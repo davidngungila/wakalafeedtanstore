@@ -2,17 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\OtpMail;
-use App\Models\Setting;
 use App\Models\User;
+use App\Services\SmsSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -21,7 +23,7 @@ class AuthController extends Controller
         return view('auth.login');
     }
 
-    public function login(Request $request): JsonResponse|RedirectResponse
+    public function login(Request $request, SmsSender $sender): JsonResponse|RedirectResponse
     {
         $credentials = $request->validate([
             'email' => ['required', 'email'],
@@ -48,23 +50,36 @@ class AuthController extends Controller
             return $this->loginFailed($request, 'Two-factor authentication is misconfigured. Contact support.');
         }
 
+        if (($user->two_factor_method ?? 'app') === 'sms') {
+            if (! $sender->isConfigured()) {
+                return $this->loginFailed($request, 'SMS login codes are unavailable. Ask an administrator to configure the SMS provider.');
+            }
+
+            try {
+                $phone = $sender->normalizeRecipient((string) $user->phone);
+            } catch (InvalidArgumentException) {
+                return $this->loginFailed($request, 'SMS login codes are unavailable. Ask an administrator to update your mobile number.');
+            }
+
+            $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+            try {
+                $sender->sendLoginCode($phone, $code);
+                Cache::put('otp_sms_'.$user->id, $code, 300);
+            } catch (RuntimeException $exception) {
+                Log::warning('SMS login code failed', ['error' => $exception->getMessage(), 'user_id' => $user->id]);
+
+                return $this->loginFailed($request, 'SMS login codes are unavailable. Ask an administrator to configure the SMS provider.');
+            } catch (Throwable $exception) {
+                Log::warning('SMS login code failed', ['error' => $exception->getMessage(), 'user_id' => $user->id]);
+
+                return $this->loginFailed($request, 'Could not send the SMS login code. Please try again.');
+            }
+        }
+
         $request->session()->put('two_factor_user_id', $user->id);
         $request->session()->put('two_factor_user_email', $user->email);
         $request->session()->regenerate();
-
-        try {
-            $emailSettings = Setting::where('key', 'email')->value('value');
-            $emailOtpEnabled = is_array($emailSettings) && ($emailSettings['otp_via_email'] ?? '0') == '1' && ($emailSettings['otp_enabled'] ?? '0') == '1';
-            $usesEmailOtp = ($user->two_factor_method ?? 'app') === 'email';
-
-            if ($emailOtpEnabled && $usesEmailOtp) {
-                $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-                Mail::send(new OtpMail($code, $user->email, 5));
-                Cache::put('otp_email_'.$user->id, $code, 300);
-            }
-        } catch (\Throwable $e) {
-            \Log::warning('OTP email failed', ['error' => $e->getMessage(), 'user_id' => $user->id]);
-        }
 
         $this->recordAudit('Two-factor challenge started', 'User', $user->id);
 

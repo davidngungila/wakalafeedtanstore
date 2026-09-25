@@ -2,9 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\OtpMail;
-use App\Models\Setting;
 use App\Models\User;
+use App\Services\SmsSender;
 use App\Support\TwoFactor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -13,8 +12,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
+use InvalidArgumentException;
+use RuntimeException;
 use Throwable;
 
 class TwoFactorController extends Controller
@@ -28,8 +28,8 @@ class TwoFactorController extends Controller
         }
 
         return view('auth.two-factor', [
-            'email' => $user->email,
-            'method' => $user->two_factor_method === 'email' ? 'email' : 'app',
+            'phone' => $user->phone,
+            'method' => $this->otpMethod($user),
         ]);
     }
 
@@ -48,9 +48,9 @@ class TwoFactorController extends Controller
         $code = $request->string('code')->trim()->toString();
         $verified = false;
 
-        if (($user->two_factor_method ?? 'app') === 'email') {
-            $emailOtp = Cache::get('otp_email_'.$user->id);
-            $verified = is_string($emailOtp) && hash_equals($emailOtp, $code);
+        if ($this->otpMethod($user) === 'sms') {
+            $smsOtp = Cache::get('otp_sms_'.$user->id);
+            $verified = is_string($smsOtp) && hash_equals($smsOtp, $code);
         } else {
             try {
                 $verified = TwoFactor::verifyCode(Crypt::decryptString($user->two_factor_secret), $code);
@@ -81,8 +81,8 @@ class TwoFactorController extends Controller
             ])->save();
         }
 
-        if (($user->two_factor_method ?? 'app') === 'email') {
-            Cache::forget('otp_email_'.$user->id);
+        if ($this->otpMethod($user) === 'sms') {
+            Cache::forget('otp_sms_'.$user->id);
         }
 
         $request->session()->forget(['two_factor_user_id', 'two_factor_user_email']);
@@ -92,7 +92,7 @@ class TwoFactorController extends Controller
         return $this->completeLogin($request, $recovered);
     }
 
-    public function resend(Request $request): JsonResponse|RedirectResponse
+    public function resend(Request $request, SmsSender $sender): JsonResponse|RedirectResponse
     {
         $user = $this->challengedUser($request);
 
@@ -100,33 +100,47 @@ class TwoFactorController extends Controller
             return $this->expiredChallenge($request);
         }
 
-        if (($user->two_factor_method ?? 'app') !== 'email') {
+        if ($this->otpMethod($user) !== 'sms') {
             return $request->expectsJson()
-                ? response()->json(['success' => false, 'message' => 'Email OTP is not selected.'], 422)
-                : back()->withErrors(['code' => 'Email OTP is not selected.']);
+                ? response()->json(['success' => false, 'message' => 'SMS OTP is not selected.'], 422)
+                : back()->withErrors(['code' => 'SMS OTP is not selected.']);
         }
 
-        $emailSettings = Setting::where('key', 'email')->value('value');
-        $emailOtpEnabled = is_array($emailSettings) && ($emailSettings['otp_via_email'] ?? '0') == '1' && ($emailSettings['otp_enabled'] ?? '0') == '1';
-
-        if (! $emailOtpEnabled) {
+        if (! $sender->isConfigured()) {
             return $request->expectsJson()
-                ? response()->json(['success' => false, 'message' => 'Email OTP is currently unavailable.'], 422)
-                : back()->withErrors(['code' => 'Email OTP is currently unavailable.']);
+                ? response()->json(['success' => false, 'message' => 'SMS OTP is currently unavailable.'], 422)
+                : back()->withErrors(['code' => 'SMS OTP is currently unavailable.']);
+        }
+
+        try {
+            $phone = $sender->normalizeRecipient((string) $user->phone);
+        } catch (InvalidArgumentException) {
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => 'SMS OTP is currently unavailable.'], 422)
+                : back()->withErrors(['code' => 'SMS OTP is currently unavailable.']);
         }
 
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
         try {
-            Mail::send(new OtpMail($code, $user->email, 5));
-            Cache::put('otp_email_'.$user->id, $code, 300);
-            $message = 'A new code was sent to '.$user->email.'.';
+            $sender->sendLoginCode($phone, $code);
+            Cache::put('otp_sms_'.$user->id, $code, 300);
+            $message = 'A new code was sent to '.$phone.'.';
 
             return $request->expectsJson()
                 ? response()->json(['success' => true, 'message' => $message])
                 : back()->with('status', $message);
+        } catch (RuntimeException $exception) {
+            Log::warning('SMS OTP resend failed', [
+                'error' => $exception->getMessage(),
+                'user_id' => $user->id,
+            ]);
+
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => 'SMS OTP is currently unavailable.'], 422)
+                : back()->withErrors(['code' => 'SMS OTP is currently unavailable.']);
         } catch (Throwable $exception) {
-            Log::warning('OTP resend failed', [
+            Log::warning('SMS OTP resend failed', [
                 'error' => $exception->getMessage(),
                 'user_id' => $user->id,
             ]);
@@ -143,6 +157,11 @@ class TwoFactorController extends Controller
         $request->session()->forget(['two_factor_user_id', 'two_factor_user_email']);
 
         return redirect()->route('login');
+    }
+
+    private function otpMethod(User $user): string
+    {
+        return $user->two_factor_method === 'sms' ? 'sms' : 'app';
     }
 
     private function challengedUser(Request $request): ?User

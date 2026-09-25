@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Setting;
+use App\Models\User;
+use App\Services\SmsSender;
 use App\Support\SessionFormatter;
 use App\Support\TwoFactor;
 use Illuminate\Http\JsonResponse;
@@ -13,38 +14,38 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
+use InvalidArgumentException;
 
 class AccountController extends Controller
 {
-    public function updateTwoFactorMethod(Request $request): JsonResponse
+    public function updateTwoFactorMethod(Request $request, SmsSender $sender): JsonResponse
     {
         $validated = $request->validate([
-            'method' => ['required', 'in:app,email'],
+            'method' => ['required', 'in:app,sms'],
         ]);
 
         $user = auth()->user();
 
-        // Email OTP requires email settings enabled
-        if ($validated['method'] === 'email') {
-            $emailSettings = Setting::where('key', 'email')->value('value');
-            $otpViaEmail = is_array($emailSettings) && ($emailSettings['otp_via_email'] ?? '0') == '1' && ($emailSettings['otp_enabled'] ?? '0') == '1';
-            if (! $otpViaEmail) {
-                return response()->json(['success' => false, 'message' => 'Email OTP is not enabled in system settings.'], 422);
+        if ($validated['method'] === 'sms') {
+            $phone = $this->smsPhone($user, $sender);
+
+            if ($phone === null) {
+                return response()->json(['success' => false, 'message' => 'SMS OTP needs a valid mobile number and a configured SMS provider.'], 422);
             }
         }
 
         $user->forceFill(['two_factor_method' => $validated['method']])->save();
 
-        if ($validated['method'] !== 'email') {
-            Cache::forget('otp_email_'.$user->id);
+        if ($validated['method'] !== 'sms') {
+            Cache::forget('otp_sms_'.$user->id);
         }
 
         $this->recordAudit('Two-factor method updated', 'User', $user->id, ['method' => $validated['method']]);
 
-        return response()->json(['success' => true, 'message' => 'Verification method set to '.($validated['method'] === 'email' ? 'Email OTP' : 'Authenticator App').'.']);
+        return response()->json(['success' => true, 'message' => 'Verification method set to '.($validated['method'] === 'sms' ? 'SMS OTP' : 'Authenticator App').'.']);
     }
 
-    public function enableEmailTwoFactor(Request $request): JsonResponse
+    public function enableSmsTwoFactor(Request $request, SmsSender $sender): JsonResponse
     {
         $user = auth()->user();
 
@@ -52,13 +53,13 @@ class AccountController extends Controller
             return response()->json(['success' => false, 'message' => 'Two-factor is already enabled. Disable first to switch method.'], 422);
         }
 
-        $emailSettings = Setting::where('key', 'email')->value('value');
-        $otpViaEmail = is_array($emailSettings) && ($emailSettings['otp_via_email'] ?? '0') == '1' && ($emailSettings['otp_enabled'] ?? '0') == '1';
-        if (! $otpViaEmail) {
-            return response()->json(['success' => false, 'message' => 'Email OTP is not enabled in system settings.'], 422);
+        $phone = $this->smsPhone($user, $sender);
+
+        if ($phone === null) {
+            return response()->json(['success' => false, 'message' => 'SMS OTP needs a valid mobile number and a configured SMS provider.'], 422);
         }
 
-        // For Email OTP we don't need TOTP secret — use a random secret but mark method as email
+        // For SMS OTP we don't need TOTP secret — use a random secret but mark method as SMS.
         $secret = TwoFactor::generateSecret();
 
         $recoveryCodes = TwoFactor::generateRecoveryCodes();
@@ -66,16 +67,29 @@ class AccountController extends Controller
         $user->forceFill([
             'two_factor_secret' => Crypt::encryptString($secret),
             'two_factor_enabled' => true,
-            'two_factor_method' => 'email',
+            'two_factor_method' => 'sms',
             'two_factor_recovery_codes' => array_map(fn (string $code): string => TwoFactor::hashRecoveryCode($code), $recoveryCodes),
         ])->save();
 
-        Cache::forget('otp_email_'.$user->id);
+        Cache::forget('otp_sms_'.$user->id);
         $request->session()->forget('two_factor_pending_secret');
 
-        $this->recordAudit('Two-factor enabled via Email OTP', 'User', $user->id);
+        $this->recordAudit('Two-factor enabled via SMS OTP', 'User', $user->id);
 
-        return response()->json(['success' => true, 'message' => 'Email OTP enabled. Codes will be sent to '.$user->email.' at login.', 'recovery_codes' => $recoveryCodes]);
+        return response()->json(['success' => true, 'message' => 'SMS OTP enabled. Codes will be sent to '.$phone.' at login.', 'recovery_codes' => $recoveryCodes]);
+    }
+
+    private function smsPhone(User $user, SmsSender $sender): ?string
+    {
+        if (! $sender->isConfigured()) {
+            return null;
+        }
+
+        try {
+            return $sender->normalizeRecipient((string) $user->phone);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
     }
 
     public function index(Request $request): View
@@ -203,7 +217,7 @@ class AccountController extends Controller
             'two_factor_recovery_codes' => null,
         ])->save();
 
-        Cache::forget('otp_email_'.$user->id);
+        Cache::forget('otp_sms_'.$user->id);
 
         $request->session()->forget('two_factor_pending_secret');
 

@@ -90,8 +90,8 @@
         </div>
         <h1>Two-factor verification</h1>
         <p class="sub">
-            @if ($method === 'email')
-                Enter the 6-digit code sent to <b>{{ $email }}</b>. It expires in 5 minutes.
+            @if ($method === 'sms')
+                Enter the 6-digit code sent to <b>{{ $phone }}</b>. It expires in 5 minutes.
             @else
                 Enter the 6-digit code from your authenticator app.
             @endif
@@ -104,7 +104,7 @@
         <form id="otpForm" method="POST" action="{{ route('two-factor.verify') }}" data-method="{{ $method }}">
             @csrf
             <div class="field">
-                <label for="code">{{ $method === 'email' ? 'Email code' : 'Authentication code' }}</label>
+                <label for="code">{{ $method === 'sms' ? 'SMS code' : 'Authentication code' }}</label>
                 <input type="text" id="code" name="code" inputmode="numeric" maxlength="6" placeholder="••••••" autofocus autocomplete="one-time-code">
             </div>
             <button type="submit" class="btn" id="verifyBtn">Verify &amp; sign in</button>
@@ -112,7 +112,7 @@
 
         <div class="alt" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
             <a href="#" id="recoveryToggle">Use a recovery code instead</a>
-            @if ($method === 'email')
+            @if ($method === 'sms')
                 <button type="button" id="resendOtpBtn" style="background:none; border:none; color:var(--acacia-600); font-weight:700; cursor:pointer; font-size:13px;">Resend code</button>
             @endif
         </div>
@@ -143,8 +143,8 @@
                 input.inputMode = '';
                 input.value = '';
             } else {
-                this.textContent = method === 'email' ? 'Use an email code instead' : 'Use an authenticator code instead';
-                label.textContent = method === 'email' ? 'Email code' : 'Authentication code';
+                this.textContent = method === 'sms' ? 'Use an SMS code instead' : 'Use an authenticator code instead';
+                label.textContent = method === 'sms' ? 'SMS code' : 'Authentication code';
                 input.placeholder = '••••••';
                 input.maxLength = 6;
                 input.inputMode = 'numeric';
@@ -169,7 +169,7 @@
             btn.textContent = 'Verifying…';
         });
 
-        @if ($method === 'email')
+        @if ($method === 'sms')
         document.getElementById('resendOtpBtn').addEventListener('click', async () => {
             const btn2 = document.getElementById('resendOtpBtn');
             const status = document.getElementById('resendStatus');

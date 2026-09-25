@@ -30,7 +30,7 @@ class EnsureTwoFactorEnabled
             'account.two-factor.confirm',
             'account.two-factor.disable',
             'account.two-factor.method',
-            'account.two-factor.enable-email',
+            'account.two-factor.enable-sms',
             'account.recovery-codes',
             'account.sessions.destroy',
             'profile.index',

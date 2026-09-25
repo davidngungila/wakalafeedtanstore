@@ -31,7 +31,7 @@ class AppServiceProvider extends ServiceProvider
 
         Transaction::observe(TransactionObserver::class);
 
-        // Apply email settings from DB to mail config so OTP & reports use stored SMTP
+        // Apply email settings from DB to mail config so reports use stored SMTP.
         try {
             $email = Setting::where('key', 'email')->value('value');
             if (is_array($email) && $email) {

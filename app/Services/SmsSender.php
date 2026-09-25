@@ -72,6 +72,27 @@ class SmsSender
             ->throw();
     }
 
+    public function isConfigured(): bool
+    {
+        try {
+            $this->settings();
+        } catch (RuntimeException) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function sendLoginCode(string $phone, string $code): Response
+    {
+        return $this->sendSingle(
+            $phone,
+            "Your Wakala Feedtan Store login code is {$code}. It expires in 5 minutes.",
+            0,
+            'login-'.Str::lower(Str::random(12)),
+        );
+    }
+
     public function normalizeRecipient(string $phone): string
     {
         $phone = preg_replace('/[\s().-]+/', '', trim($phone)) ?? trim($phone);

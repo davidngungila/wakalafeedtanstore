@@ -103,8 +103,6 @@ class SettingController extends Controller
             'email.mail_password' => ['nullable', 'string', 'max:255'],
             'email.mail_from_address' => ['nullable', 'email', 'max:120'],
             'email.mail_from_name' => ['nullable', 'string', 'max:120'],
-            'email.otp_enabled' => ['nullable', 'in:0,1'],
-            'email.otp_via_email' => ['nullable', 'in:0,1'],
             'email.reports_via_email' => ['nullable', 'in:0,1'],
             'email.reports_recipients' => ['nullable', 'string', 'max:500'],
             'sms' => ['nullable', 'array'],

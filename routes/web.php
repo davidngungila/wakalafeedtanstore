@@ -41,7 +41,9 @@ Route::middleware('guest')->group(function () {
 
     Route::get('/two-factor', [TwoFactorController::class, 'show'])->name('two-factor.show');
     Route::post('/two-factor', [TwoFactorController::class, 'verify'])->name('two-factor.verify');
-    Route::post('/two-factor/resend', [TwoFactorController::class, 'resend'])->name('two-factor.resend');
+    Route::post('/two-factor/resend', [TwoFactorController::class, 'resend'])
+        ->middleware('throttle:10,1')
+        ->name('two-factor.resend');
     Route::post('/two-factor/cancel', [TwoFactorController::class, 'cancel'])->name('two-factor.cancel');
 });
 
@@ -62,7 +64,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::post('/account/two-factor/confirm', [AccountController::class, 'confirmTwoFactor'])->name('account.two-factor.confirm');
     Route::post('/account/two-factor/disable', [AccountController::class, 'disableTwoFactor'])->name('account.two-factor.disable');
     Route::post('/account/two-factor/method', [AccountController::class, 'updateTwoFactorMethod'])->name('account.two-factor.method');
-    Route::post('/account/two-factor/enable-email', [AccountController::class, 'enableEmailTwoFactor'])->name('account.two-factor.enable-email');
+    Route::post('/account/two-factor/enable-sms', [AccountController::class, 'enableSmsTwoFactor'])->name('account.two-factor.enable-sms');
     Route::post('/account/recovery-codes', [AccountController::class, 'refreshRecoveryCodes'])->name('account.recovery-codes');
     Route::delete('/account/sessions/{session}', [AccountController::class, 'revokeSession'])->name('account.sessions.destroy');
 
