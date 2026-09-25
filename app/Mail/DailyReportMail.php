@@ -48,7 +48,7 @@ class DailyReportMail extends Mailable
             ->get();
 
         $deposits = (float) $completed->whereIn('type', ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet'])->sum('amount');
-        $withdrawals = (float) $completed->whereIn('type', ['withdrawal', 'wallet_to_bank'])->sum('amount');
+        $withdrawals = (float) $completed->whereIn('type', ['withdrawal', 'wallet_to_bank', 'cash_to_float'])->sum('amount');
 
         $volume = (float) ($opening?->total_volume ?? $completed->sum('amount'));
         $commission = (float) ($opening?->total_commission ?? $completed->sum('commission'));

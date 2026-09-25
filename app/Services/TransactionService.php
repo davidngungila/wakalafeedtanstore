@@ -40,6 +40,10 @@ class TransactionService
         $commission = $commissionOverride !== null && $commissionOverride >= 0 ? round($commissionOverride, 2) : $computedCommission;
         $fee = $this->feeFor($data['type'], (float) $data['amount']);
 
+        if ($data['type'] === 'cash_to_float' && $commission + $fee >= (float) $data['amount']) {
+            throw new \InvalidArgumentException('The transfer amount must be greater than the commission and fee.');
+        }
+
         $balance = NetworkBalance::firstOrCreate(
             ['agent_id' => $agent->id, 'network_id' => $data['network_id']],
             ['opening_balance' => 0, 'balance' => 0]
@@ -62,12 +66,13 @@ class TransactionService
             match ($data['type']) {
                 'deposit' => $adjustFloat(-(float) $data['amount']),
                 'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $adjustFloat((float) $data['amount']),
+                'cash_to_float' => $adjustFloat((float) $data['amount'] - $commission),
                 default => $adjustFloat(-(float) $data['amount']),
             };
 
             $cashDelta = 0;
 
-            if (in_array($data['type'], ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime'], true)) {
+            if (in_array($data['type'], ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'cash_to_float'], true)) {
                 $direction = in_array($data['type'], ['deposit', 'airtime'], true) ? 1 : -1;
                 $cashDelta = $direction * (float) $data['amount'];
                 $agent->cash_balance = ((float) $agent->cash_balance) + $cashDelta;
@@ -97,7 +102,7 @@ class TransactionService
             }
             $txn = Transaction::create($payload);
 
-            if ($dailyOpening !== null) {
+            if ($dailyOpening !== null && $data['type'] !== 'cash_to_float') {
                 $dailyOpening->addTransactionVolume((float) $txn->amount, (float) $txn->commission);
             }
 

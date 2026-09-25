@@ -23,6 +23,8 @@ class TransactionJournalService
 
     private const CODE_FEE = '4100';
 
+    private const CODE_NETWORK_CHARGES = '5300';
+
     private const FLOAT_MAP = [
         'VODACOM' => '1210',
         'AIRTEL' => '1220',
@@ -33,6 +35,8 @@ class TransactionJournalService
     private const DEPOSIT_LIKE = ['deposit', 'float_deposit', 'float_topup', 'airtime'];
 
     private const WITHDRAWAL_LIKE = ['withdrawal', 'wallet_to_bank'];
+
+    private const CASH_TO_FLOAT = ['cash_to_float'];
 
     private const FLOAT_OUT_ONLY = ['send_money', 'bill_payment', 'data'];
 
@@ -70,6 +74,7 @@ class TransactionJournalService
             $cashAccount = $this->ensureAccount(self::CODE_CASH, 'Cash on Hand', Account::TYPE_ASSET);
             $commissionAccount = $this->ensureAccount(self::CODE_COMMISSION, 'Commission Income', Account::TYPE_INCOME);
             $feeAccount = $this->ensureAccount(self::CODE_FEE, 'Fee Income', Account::TYPE_INCOME);
+            $networkChargeAccount = $this->ensureAccount(self::CODE_NETWORK_CHARGES, 'Network Charges', Account::TYPE_EXPENSE);
             $liabilityAccount = $this->ensureAccount(self::CODE_LIABILITY, 'Customer Float Liability', Account::TYPE_LIABILITY);
             $floatAccount = $this->resolveFloatAccount($transaction->network);
 
@@ -106,6 +111,18 @@ class TransactionJournalService
 
                 if ($commission > 0) {
                     $lines[] = $this->line($commissionAccount->id, 0, $commission, 'Commission — '.$transaction->reference);
+                }
+
+                if ($fee > 0) {
+                    $lines[] = $this->line($feeAccount->id, 0, $fee, 'Fee — '.$transaction->reference);
+                }
+            } elseif (in_array($type, self::CASH_TO_FLOAT, true)) {
+                $floatNet = $amount - $net;
+                $lines[] = $this->line($floatAccount->id, $floatNet, 0, 'Cash moved to float — '.$transaction->reference);
+                $lines[] = $this->line($cashAccount->id, 0, $amount, 'Cash paid to float — '.$transaction->reference);
+
+                if ($commission > 0) {
+                    $lines[] = $this->line($networkChargeAccount->id, $commission, 0, 'Commission charged — '.$transaction->reference);
                 }
 
                 if ($fee > 0) {

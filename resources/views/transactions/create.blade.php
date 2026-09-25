@@ -69,6 +69,7 @@
                             <option value="wallet_to_bank" {{ old('type') === 'wallet_to_bank' ? 'selected' : '' }}>Wallet to Bank</option>
                             <option value="float_deposit" {{ old('type') === 'float_deposit' ? 'selected' : '' }}>Float Deposit</option>
                             <option value="float_topup" {{ old('type') === 'float_topup' ? 'selected' : '' }}>Float Top-up</option>
+                            <option value="cash_to_float" {{ old('type') === 'cash_to_float' ? 'selected' : '' }}>Cash to Float</option>
                         </select>
                     </div>
                 </div>
@@ -182,6 +183,7 @@
                     if (sel) {
                         let mapped = type;
                         if (['float_topup','float_deposit'].includes(type)) mapped = 'float_topup';
+                        if (type === 'cash_to_float') mapped = 'cash_to_float';
                         if (sel.querySelector('option[value="'+mapped+'"]')) sel.value = mapped;
                     }
                 }
@@ -335,6 +337,7 @@
                     if (sel) {
                         let mapped = type;
                         if (['float_topup','float_deposit'].includes(type)) mapped = 'float_topup';
+                        if (type === 'cash_to_float') mapped = 'cash_to_float';
                         if (sel.querySelector('option[value="'+mapped+'"]')) sel.value = mapped;
                     }
                 }

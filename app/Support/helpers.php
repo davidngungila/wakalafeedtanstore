@@ -32,6 +32,7 @@ if (! function_exists('txn_type_label')) {
             'float_withdrawal' => 'Float Withdrawal',
             'cash_in' => 'Cash In',
             'cash_out' => 'Cash Out',
+            'cash_to_float' => 'Cash to Float',
             'float_topup' => 'Float Top-up',
             'float_pull' => 'Float Pull',
             default => ucwords(str_replace('_', ' ', $type)),

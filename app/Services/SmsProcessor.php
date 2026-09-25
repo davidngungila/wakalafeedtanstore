@@ -330,7 +330,7 @@ class SmsProcessor
      */
     private function recordFloatDual(Agent $agent, Network $network, array $parsed, ?int $performedBy, string $notesPrefix, bool $isFloatSms): void
     {
-        if (! $isFloatSms) {
+        if ($parsed['type'] === 'cash_to_float' || ! $isFloatSms) {
             return;
         }
 

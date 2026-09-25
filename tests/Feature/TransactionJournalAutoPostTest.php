@@ -9,6 +9,7 @@ use App\Models\JournalEntryLine;
 use App\Models\Network;
 use App\Models\Transaction;
 use App\Services\TransactionJournalService;
+use App\Services\TransactionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -191,6 +192,30 @@ class TransactionJournalAutoPostTest extends TestCase
 
         // Cash must be untouched: no Cash on Hand line at all for bank_to_wallet
         $this->assertNull($entry->lines->firstWhere('account.code', '1000'), 'bank_to_wallet must not touch cash');
+    }
+
+    public function test_cash_to_float_posts_net_float_and_cash_credit(): void
+    {
+        $halopesa = Network::where('code', 'HALOPESA')->firstOrFail();
+        $amount = 55_000.0;
+        $commission = 307.0;
+        $transaction = app(TransactionService::class)->process([
+            'network_id' => $halopesa->id,
+            'type' => 'cash_to_float',
+            'customer_name' => 'UNION FINANCIAL BUREAUX CO.',
+            'customer_phone' => 'UNKNOWN',
+            'amount' => $amount,
+        ], $this->agent, $this->agent->id, 'Cash to float test', 'TXN-C2F-0001', $commission);
+
+        $entry = JournalEntry::where('reference', $transaction->reference)->firstOrFail();
+        $float = $entry->lines->firstWhere('account.code', '1230');
+        $cash = $entry->lines->firstWhere('account.code', '1000');
+        $commissionLine = $entry->lines->firstWhere('account.code', '5300');
+
+        $this->assertEqualsWithDelta($amount - $commission, (float) $float->debit, 0.01);
+        $this->assertEqualsWithDelta($amount, (float) $cash->credit, 0.01);
+        $this->assertEqualsWithDelta($commission, (float) $commissionLine->debit, 0.01);
+        $this->assertEqualsWithDelta($entry->totalDebits(), $entry->totalCredits(), 0.01);
     }
 
     private function processDeposit(Network $network, float $amount, float $commission, float $fee, string $reference): Transaction

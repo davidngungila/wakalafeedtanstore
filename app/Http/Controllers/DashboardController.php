@@ -320,12 +320,12 @@ class DashboardController extends Controller
         }
 
         $inTypes = ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet', 'airtime', 'send_money'];
-        $outTypes = ['withdrawal', 'wallet_to_bank'];
+        $outTypes = ['withdrawal', 'wallet_to_bank', 'cash_to_float'];
 
         $todayRow = Transaction::whereDate('created_at', $today)
             ->where('status', 'completed')
             ->selectRaw('COALESCE(SUM(CASE WHEN type IN (?, ?, ?, ?, ?, ?) THEN amount ELSE 0 END),0) as inflows', $inTypes)
-            ->selectRaw('COALESCE(SUM(CASE WHEN type IN (?, ?) THEN amount ELSE 0 END),0) as outflows', $outTypes)
+            ->selectRaw('COALESCE(SUM(CASE WHEN type IN (?, ?, ?) THEN amount ELSE 0 END),0) as outflows', $outTypes)
             ->first();
 
         $inflows = (float) ($todayRow->inflows ?? 0);

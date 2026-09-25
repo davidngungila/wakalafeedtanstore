@@ -11,6 +11,7 @@
         <div class="view-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
             <a href="{{ route('float.days') }}" class="btn btn-ghost">← All Days (index)</a>
             <a href="{{ route('float.index', ['date' => $selectedDateEncrypted]) }}" class="btn btn-ghost">View in Float Filter</a>
+            <a href="{{ route('float.create', ['date' => $selectedDateEncrypted, 'type' => 'cash_to_float']) }}" class="btn btn-primary">Cash → Float</a>
             <a href="{{ route('float.opening.edit', ['date' => $selectedDateEncrypted]) }}" class="btn btn-primary">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 1 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 Edit Opening
@@ -140,24 +141,25 @@
 
     <div class="panel">
         <div class="panel-head">
-            <h3>Customer Transactions — Only {{ $selectedDate }}</h3>
+            <h3>Transactions — Only {{ $selectedDate }}</h3>
             <a href="{{ route('transactions.index', ['date' => $selectedDateEncrypted]) }}" class="btn btn-ghost btn-sm">View all for this day</a>
         </div>
         <div class="table-scroll">
             <table>
-                <thead><tr><th>Time</th><th>Reference</th><th>Type</th><th>Network</th><th>Amount</th><th>Status</th></tr></thead>
+                <thead><tr><th>Time</th><th>Reference</th><th>Type</th><th>Network</th><th>Amount</th><th>Commission</th><th>Status</th></tr></thead>
                 <tbody>
                     @forelse($dayTransactions as $t)
                     <tr>
                         <td>{{ $t->created_at->format('H:i:s') }}</td>
                         <td>{{ $t->reference }}</td>
-                        <td>{{ $t->type }}</td>
+                        <td>{{ txn_type_label($t->type) }}</td>
                         <td>{{ $t->network?->name }}</td>
                         <td>@money($t->amount)</td>
+                        <td>@money($t->commission)</td>
                         <td><span class="tag tag-green">{{ $t->status }}</span></td>
                     </tr>
                     @empty
-                    <tr><td colspan="6" class="empty-state">No customer transactions for {{ $selectedDate }}.</td></tr>
+                    <tr><td colspan="7" class="empty-state">No transactions for {{ $selectedDate }}.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -170,18 +172,19 @@
         </div>
         <div class="table-scroll">
             <table>
-                <thead><tr><th>Reference</th><th>Type</th><th>Network</th><th>Amount</th><th>Status</th></tr></thead>
+                <thead><tr><th>Reference</th><th>Type</th><th>Network</th><th>Amount</th><th>Commission</th><th>Status</th></tr></thead>
                 <tbody>
                     @forelse($floatTransactions as $ft)
                     <tr>
                         <td>{{ $ft->reference }}<br><span class="cell-sub">{{ $ft->created_at->format('H:i') }}</span></td>
-                        <td><span class="tag {{ $ft->type === 'float_topup' || $ft->type === 'cash_in' ? 'tag-green' : 'tag-terracotta' }}">{{ $ft->type }}</span></td>
+                        <td><span class="tag {{ in_array($ft->type, ['float_topup', 'cash_in', 'cash_to_float'], true) ? 'tag-green' : 'tag-terracotta' }}">{{ txn_type_label($ft->type) }}</span></td>
                         <td>{{ $ft->network?->name }}</td>
                         <td>@money($ft->amount)</td>
+                        <td>@money($ft->commission)</td>
                         <td><span class="tag tag-green">Completed</span></td>
                     </tr>
                     @empty
-                    <tr><td colspan="5" class="empty-state">No float movements for {{ $selectedDate }}.</td></tr>
+                        <tr><td colspan="6" class="empty-state">No float movements for {{ $selectedDate }}.</td></tr>
                     @endforelse
                 </tbody>
             </table>

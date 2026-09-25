@@ -210,6 +210,7 @@
                         <th>Type</th>
                         <th>Network</th>
                         <th>Amount</th>
+                        <th>Commission</th>
                         <th>Operator</th>
                         <th>Status</th>
                         @if($isAdmin)<th></th>@endif
@@ -223,6 +224,7 @@
                             data-network="{{ $ft->network?->name }}"
                             data-color="{{ $ft->network?->color }}"
                             data-amount="{{ $ft->amount }}"
+                            data-commission="{{ $ft->commission }}"
                             data-notes="{{ $ft->notes }}"
                             data-operator="{{ $ft->operator?->name }}">
                             <td>
@@ -230,8 +232,8 @@
                                 <div class="cell-sub">{{ $ft->created_at->format('d M Y · H:i') }}</div>
                             </td>
                             <td>
-                                <span class="tag {{ $ft->type === 'float_topup' || $ft->type === 'cash_in' ? 'tag-green' : 'tag-terracotta' }}">
-                                    {{ $ft->type === 'cash_in' ? 'Cash in' : ($ft->type === 'cash_out' ? 'Cash out' : ($ft->type === 'float_topup' ? 'Float top-up' : 'Float pull')) }}
+                                <span class="tag {{ in_array($ft->type, ['float_topup', 'cash_in', 'cash_to_float'], true) ? 'tag-green' : 'tag-terracotta' }}">
+                                    {{ txn_type_label($ft->type) }}
                                 </span>
                             </td>
                             <td>
@@ -239,6 +241,7 @@
                                 {{ $ft->network?->name }}
                             </td>
                             <td class="cell-title">@money($ft->amount)</td>
+                            <td>@money($ft->commission)</td>
                             <td>{{ $ft->operator?->name ?? '—' }}</td>
                             <td><span class="tag tag-green">Completed</span></td>
                             @if($isAdmin)
@@ -250,7 +253,7 @@
                             @endif
                         </tr>
                     @empty
-                        <tr><td colspan="{{ $isAdmin ? 7 : 6 }}" class="empty-state">No float transactions yet.</td></tr>
+                        <tr><td colspan="{{ $isAdmin ? 8 : 7 }}" class="empty-state">No float transactions yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -301,7 +304,7 @@
 
         const FLOAT_TYPE_LABEL = {
             float_topup: 'Float top-up', float_pull: 'Float pull',
-            cash_in: 'Cash in', cash_out: 'Cash out',
+            cash_in: 'Cash in', cash_out: 'Cash out', cash_to_float: 'Cash to Float',
         };
 
         bindRowClick('#floatActRows tr[data-ref]', tr => {
@@ -311,6 +314,7 @@
                 ['Type', FLOAT_TYPE_LABEL[tr.dataset.type] || tr.dataset.type],
                 ['Network', tr.dataset.network ? { __html: `<span class="net-dot" style="background:${tr.dataset.color || '#999'};"></span> ${tr.dataset.network}` } : '—'],
                 ['Amount', floatFmt(parseFloat(tr.dataset.amount) || 0)],
+                ['Commission', floatFmt(parseFloat(tr.dataset.commission) || 0)],
                 ['Operator', tr.dataset.operator || '—'],
                 ['Notes', tr.dataset.notes || '—'],
                 ['Status', { __html: '<span class="tag tag-green">Completed</span>' }],

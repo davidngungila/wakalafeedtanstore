@@ -97,6 +97,7 @@
                             <option value="wallet_to_bank" {{ old('type', $transaction->type) === 'wallet_to_bank' ? 'selected' : '' }}>Wallet to Bank</option>
                             <option value="float_deposit" {{ old('type', $transaction->type) === 'float_deposit' ? 'selected' : '' }}>Float Deposit</option>
                             <option value="float_topup" {{ old('type', $transaction->type) === 'float_topup' ? 'selected' : '' }}>Float Top-up</option>
+                            <option value="cash_to_float" {{ old('type', $transaction->type) === 'cash_to_float' ? 'selected' : '' }}>Cash to Float</option>
                         </select>
                         @error('type')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>
@@ -304,8 +305,8 @@
             const agentCash = {{ (float) ($agent ? $agent->cash_balance : 0) }};
             const agentName = @json($agent ? $agent->name : 'Agent');
             const opening = @json($openingData);
-            function floatDelta(type, amount){ amount=Number(amount)||0; if(['deposit','float_deposit','float_topup'].includes(type)) return -amount; if(['withdrawal','bank_to_wallet'].includes(type)) return amount; return -amount; }
-            function cashDelta(type, amount){ amount=Number(amount)||0; if(!['deposit','withdrawal','float_deposit','float_topup','wallet_to_bank','airtime'].includes(type)) return 0; let dir = ['deposit','float_deposit','float_topup','airtime'].includes(type) ? 1 : -1; if(type==='wallet_to_bank') dir=-1; return dir*amount; }
+            function floatDelta(type, amount, commission=0){ amount=Number(amount)||0; commission=Number(commission)||0; if(type==='cash_to_float') return amount-commission; if(['deposit','float_deposit','float_topup'].includes(type)) return -amount; if(['withdrawal','bank_to_wallet'].includes(type)) return amount; return -amount; }
+            function cashDelta(type, amount){ amount=Number(amount)||0; if(!['deposit','withdrawal','float_deposit','float_topup','wallet_to_bank','airtime','cash_to_float'].includes(type)) return 0; let dir = ['deposit','float_deposit','float_topup','airtime'].includes(type) ? 1 : -1; return dir*amount; }
             function feeFor(type, amount){ amount=Number(amount)||0; if(type==='withdrawal') return Math.min(5000, Math.max(200, Math.round(amount*0.002*100)/100)); if(type==='bill_payment') return Math.round(amount*0.003*100)/100; if(['bank_to_wallet','wallet_to_bank'].includes(type)) return Math.round(amount*0.001*100)/100; return 0; }
             function money(n){ return 'TZS ' + Number(n).toLocaleString('en-US',{maximumFractionDigits:2}); }
             function arrow(delta){ if(delta>0) return '<span style="color:var(--success);">▲ +' + money(delta) + '</span>'; if(delta<0) return '<span style="color:var(--danger);">▼ ' + money(delta) + '</span>'; return '<span style="color:var(--ink-soft);">—</span>'; }

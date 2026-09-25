@@ -291,10 +291,10 @@ class ReportController extends Controller
             $open = (float) (Transaction::where('created_at', '<', $today->startOfDay())->whereNotNull('running_cash_balance')->orderByDesc('created_at')->value('running_cash_balance') ?? $cashAvailable);
         }
         $inTypes = ['deposit', 'float_deposit', 'float_topup', 'bank_to_wallet', 'airtime'];
-        $outTypes = ['withdrawal', 'wallet_to_bank'];
+        $outTypes = ['withdrawal', 'wallet_to_bank', 'cash_to_float'];
         $todayRow = Transaction::whereDate('created_at', $today)->where('status', 'completed')
             ->selectRaw('COALESCE(SUM(CASE WHEN type IN (?, ?, ?, ?, ?) THEN amount ELSE 0 END),0) as inflows', $inTypes)
-            ->selectRaw('COALESCE(SUM(CASE WHEN type IN (?, ?) THEN amount ELSE 0 END),0) as outflows', $outTypes)->first();
+            ->selectRaw('COALESCE(SUM(CASE WHEN type IN (?, ?, ?) THEN amount ELSE 0 END),0) as outflows', $outTypes)->first();
         $inflows = (float) ($todayRow->inflows ?? 0);
         $outflows = (float) ($todayRow->outflows ?? 0);
         $labels = ['Opening cash', 'Inflows (+)', 'Outflows (−)', 'Closing cash'];

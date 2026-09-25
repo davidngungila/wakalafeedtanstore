@@ -150,7 +150,7 @@ class ReconciliationController extends Controller
                 $q->whereDate('created_at', $viewDate)
                     ->orWhereDate('reversed_at', $viewDate);
             })
-            ->whereNotIn('type', ['float_topup', 'float_deposit'])
+            ->whereNotIn('type', ['float_topup', 'float_deposit', 'cash_to_float'])
             ->latest()
             ->limit(100)
             ->get();
@@ -699,9 +699,11 @@ class ReconciliationController extends Controller
             ->map(fn ($group): float => (float) $group->sum('amount'));
 
         $floatTopupsByNetwork = $transactions
-            ->whereIn('type', ['float_topup', 'float_deposit'])
+            ->whereIn('type', ['float_topup', 'float_deposit', 'cash_to_float'])
             ->groupBy('network_id')
-            ->map(fn ($group): float => (float) $group->sum('amount'));
+            ->map(fn ($group): float => (float) $group->sum(fn (Transaction $transaction): float => $transaction->type === 'cash_to_float'
+                ? (float) $transaction->amount - (float) $transaction->commission
+                : (float) $transaction->amount));
 
         $bankToWalletByNetwork = $transactions
             ->where('type', 'bank_to_wallet')
@@ -709,12 +711,14 @@ class ReconciliationController extends Controller
             ->map(fn ($group): float => (float) $group->sum('amount'));
 
         // FloatTransaction top-ups for that date (e.g. 3×1M on 2026-09-21) — float is bank-replenished, must be added to expected
-        $floatTxTopupsByNetwork = FloatTransaction::where('agent_id', $agent->id)
+        $floatTransactions = FloatTransaction::where('agent_id', $agent->id)
             ->whereDate('created_at', $date)
-            ->whereIn('type', ['float_topup', 'cash_in'])
-            ->get()
+            ->get();
+        $floatTxTopupsByNetwork = $floatTransactions
+            ->whereIn('type', ['float_topup', 'cash_in', 'cash_to_float'])
             ->groupBy('network_id')
-            ->map(fn ($group): float => (float) $group->sum('amount'));
+            ->map(fn ($group): float => (float) $group->sum(fn (FloatTransaction $floatTransaction): float => $floatTransaction->floatDelta()));
+        $floatCashDelta = (float) $floatTransactions->sum(fn (FloatTransaction $floatTransaction): float => $floatTransaction->cashDelta());
 
         $balances = $agent->balances()->get()->keyBy('network_id');
         $prevDateForFloat = Carbon::parse($date)->subDay()->toDateString();
@@ -741,23 +745,15 @@ class ReconciliationController extends Controller
                 if ($opening == 0.0 && $prevCounted !== null) {
                     $opening = $prevCounted;
                 } elseif ($opening == 0.0 && $prevCounted === null) {
-                    // No previous counted and no opening for this network on this date — default 0, not live -356,500 when no data belongs to him
                     $opening = 0.0;
                 }
             } else {
-                // No opening for this date — use previous day reconciled Counted; if none and no data, default 0 (not live -356,500)
                 if ($prevCounted !== null) {
                     $opening = $prevCounted;
                 } else {
-                    // Only use live balance if this network actually has activity on this date (deposits/withdrawals/top-ups), otherwise 0
-                    $hasActivity = (abs($deposits) > 0.005 || abs($withdrawals) > 0.005 || abs($floatTopups) > 0.005 || abs($bankIns) > 0.005);
-                    if ($hasActivity) {
-                        $opening = (float) ($balance?->opening_balance ?? 0);
-                        if ($opening == 0.0) {
-                            $opening = (float) ($balance?->balance ?? 0);
-                        }
-                    } else {
-                        $opening = 0.0;
+                    $opening = (float) ($balance?->opening_balance ?? 0);
+                    if ($opening == 0.0) {
+                        $opening = (float) ($balance?->balance ?? 0);
                     }
                 }
             }
@@ -798,6 +794,11 @@ class ReconciliationController extends Controller
                 $cashOut += abs($delta);
             }
         }
+        if ($floatCashDelta > 0) {
+            $cashIn += $floatCashDelta;
+        } elseif ($floatCashDelta < 0) {
+            $cashOut += abs($floatCashDelta);
+        }
         $cashDeposits = $cashIn;
         $cashWithdrawals = $cashOut;
 
@@ -815,7 +816,7 @@ class ReconciliationController extends Controller
 
     private function cashDelta(string $type, float $amount): float
     {
-        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'send_money', 'float_deposit'], true)) {
+        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'send_money', 'float_deposit', 'cash_to_float'], true)) {
             return 0;
         }
 
@@ -824,11 +825,12 @@ class ReconciliationController extends Controller
         return $direction * $amount;
     }
 
-    private function floatDelta(string $type, float $amount): float
+    private function floatDelta(string $type, float $amount, float $commission = 0.0): float
     {
         return match ($type) {
             'deposit', 'airtime', 'send_money' => -$amount,
             'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $amount,
+            'cash_to_float' => $amount - $commission,
             default => -$amount,
         };
     }

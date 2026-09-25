@@ -92,7 +92,7 @@
                                     <strong>Float movements for {{ $viewDate->format('d M Y') }} ({{ $dayFloatTransactions->count() }}):</strong>
                                     <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
                                         @foreach($dayFloatTransactions as $ft)
-                                            <span class="tag {{ $ft->type === 'float_topup' || $ft->type === 'cash_in' ? 'tag-green' : 'tag-terracotta' }}">{{ $ft->created_at->format('H:i') }} {{ $ft->network?->name }} {{ $ft->type }} @money($ft->amount) {{ $ft->notes ? '· '.$ft->notes : '' }}</span>
+                                                <span class="tag {{ in_array($ft->type, ['float_topup', 'cash_in', 'cash_to_float'], true) ? 'tag-green' : 'tag-terracotta' }}">{{ $ft->created_at->format('H:i') }} {{ $ft->network?->name }} {{ txn_type_label($ft->type) }} @money($ft->amount) {{ $ft->notes ? '· '.$ft->notes : '' }}</span>
                                         @endforeach
                                     </div>
                                 </div>
@@ -114,8 +114,9 @@
                     <div class="field">
                         <label>Type</label>
                         <select name="type" required>
-                            <option value="float_topup" {{ old('type') === 'float_topup' ? 'selected' : '' }}>Float top-up (float in)</option>
-                            <option value="float_pull" {{ old('type') === 'float_pull' ? 'selected' : '' }}>Float pull (float out)</option>
+                            <option value="float_topup" {{ old('type', $selectedType) === 'float_topup' ? 'selected' : '' }}>Float top-up (float in)</option>
+                            <option value="float_pull" {{ old('type', $selectedType) === 'float_pull' ? 'selected' : '' }}>Float pull (float out)</option>
+                            <option value="cash_to_float" {{ old('type', $selectedType) === 'cash_to_float' ? 'selected' : '' }}>Cash to Float</option>
                             <option value="cash_in" {{ old('type') === 'cash_in' ? 'selected' : '' }}>Cash deposited to network</option>
                             <option value="cash_out" {{ old('type') === 'cash_out' ? 'selected' : '' }}>Cash withdrawn from network</option>
                         </select>
@@ -124,6 +125,15 @@
                 <div class="field">
                     <label>Amount (TZS)</label>
                     <input type="number" name="amount" value="{{ old('amount') }}" min="1" step="any" placeholder="e.g. 500000" required>
+                </div>
+                <div class="field" data-cash-to-float-fields>
+                    <label>Commission / top-up fee (TZS)</label>
+                    <input type="number" name="commission" value="{{ old('commission', 0) }}" min="0" step="0.01" placeholder="0">
+                    <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Float receives the entered amount minus this commission.</p>
+                </div>
+                <div class="field" data-float-net-preview style="display:none;">
+                    <label>Net float added (TZS)</label>
+                    <output id="floatNetPreview" style="display:block; padding:10px 12px; background:var(--acacia-50); border:1px solid var(--line); border-radius:8px; font-weight:700;">TZS 0</output>
                 </div>
                 <div class="field">
                     <label>Notes</label>
@@ -149,6 +159,28 @@
                 submitForm(form, { method: 'POST', done: () => setTimeout(() => window.location.href = '{{ route('float.index') }}', 600) });
             });
         });
+
+        const floatTypeSelect = document.querySelector('[name=type]');
+        const commissionInput = document.querySelector('[name=commission]');
+        const amountInput = document.querySelector('[name=amount]');
+        const cashToFloatFields = document.querySelector('[data-cash-to-float-fields]');
+        const floatNetPreview = document.querySelector('[data-float-net-preview]');
+        const floatNetPreviewValue = document.getElementById('floatNetPreview');
+
+        const updateCashToFloatPreview = () => {
+            const isCashToFloat = floatTypeSelect?.value === 'cash_to_float';
+            if (cashToFloatFields) cashToFloatFields.style.display = isCashToFloat ? 'block' : 'none';
+            if (floatNetPreview) floatNetPreview.style.display = isCashToFloat ? 'block' : 'none';
+            if (!isCashToFloat) return;
+            const amount = parseFloat(amountInput?.value || '0') || 0;
+            const commission = parseFloat(commissionInput?.value || '0') || 0;
+            if (floatNetPreviewValue) floatNetPreviewValue.textContent = 'TZS ' + Math.max(0, amount - commission).toLocaleString('en-US', { maximumFractionDigits: 2 });
+        };
+
+        floatTypeSelect?.addEventListener('change', updateCashToFloatPreview);
+        amountInput?.addEventListener('input', updateCashToFloatPreview);
+        commissionInput?.addEventListener('input', updateCashToFloatPreview);
+        updateCashToFloatPreview();
 
         const txnSelect = document.getElementById('floatTxnSelect');
         if (txnSelect) {
@@ -180,6 +212,7 @@
                     'float_deposit': 'float_topup',
                     'float_topup': 'float_topup',
                     'bank_to_wallet': 'float_topup',
+                    'cash_to_float': 'cash_to_float',
                     'wallet_to_bank': 'float_pull',
                     'send_money': 'float_pull',
                     'bill_payment': 'float_pull',
@@ -215,7 +248,8 @@
             floatDateInput.addEventListener('change', () => {
                 const newDate = floatDateInput.value;
                 if (newDate) {
-                    window.location.href = '{{ route('float.create') }}?date=' + encodeURIComponent(newDate);
+                    const currentType = document.querySelector('select[name=type]')?.value || 'float_topup';
+                    window.location.href = '{{ route('float.create') }}?date=' + encodeURIComponent(newDate) + '&type=' + encodeURIComponent(currentType);
                 }
             });
         }

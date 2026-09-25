@@ -306,7 +306,7 @@
         const TYPE_LABEL = {
             deposit: 'Customer Deposit', withdrawal: 'Customer Withdrawal', send_money: 'Send Money',
             bill_payment: 'Bill Payment', airtime: 'Airtime', data: 'Data Bundle',
-            bank_to_wallet: 'Bank to Wallet', wallet_to_bank: 'Wallet to Bank',
+            bank_to_wallet: 'Bank to Wallet', wallet_to_bank: 'Wallet to Bank', cash_to_float: 'Cash to Float',
         };
 
         function fmt(n) { return 'TZS ' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }

@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'type',
     'amount',
     'fee',
+    'commission',
     'status',
     'performed_by',
     'notes',
@@ -25,6 +26,7 @@ class FloatTransaction extends Model
         return [
             'amount' => 'decimal:2',
             'fee' => 'decimal:2',
+            'commission' => 'decimal:2',
         ];
     }
 
@@ -50,5 +52,28 @@ class FloatTransaction extends Model
     public function operator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'performed_by');
+    }
+
+    public function floatDelta(): float
+    {
+        $amount = (float) $this->amount;
+
+        return match ($this->type) {
+            'cash_in', 'float_topup' => $amount,
+            'cash_out', 'float_pull' => -$amount,
+            'cash_to_float' => $amount - (float) $this->commission,
+            default => 0.0,
+        };
+    }
+
+    public function cashDelta(): float
+    {
+        $amount = (float) $this->amount;
+
+        return match ($this->type) {
+            'cash_in' => $amount,
+            'cash_out', 'float_pull', 'cash_to_float' => -$amount,
+            default => 0.0,
+        };
     }
 }

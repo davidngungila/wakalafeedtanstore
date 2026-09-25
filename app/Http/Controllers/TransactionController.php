@@ -35,7 +35,7 @@ class TransactionController extends Controller
     public function index(Request $request): View
     {
         $query = Transaction::with(['network', 'agent', 'operator', 'dailyOpening'])
-            ->whereNotIn('type', ['float_topup', 'float_deposit']);
+            ->whereNotIn('type', ['float_topup', 'float_deposit', 'cash_to_float']);
 
         if ($request->filled('status') && $request->input('status') !== 'all') {
             $query->where('status', $request->input('status'));
@@ -251,7 +251,7 @@ class TransactionController extends Controller
     {
         $validated = $request->validate([
             'network_id' => ['required', 'exists:networks,id'],
-            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup'],
+            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup,cash_to_float'],
             'customer_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['required', 'string', 'max:30'],
             'amount' => ['required', 'numeric', 'min:1'],
@@ -357,17 +357,19 @@ class TransactionController extends Controller
             $targetOpening = DailyOpening::forAgentAndDate($agent->id, $targetDate)->first();
             if ($targetOpening) {
                 // If process already linked to today's opening, revert that link
-                if ($todayOpening && $transaction->daily_opening_id == $todayOpening->id) {
-                    $todayOpening->total_volume = max(0, (float) $todayOpening->total_volume - (float) $transaction->amount);
-                    $todayOpening->total_commission = max(0, (float) $todayOpening->total_commission - (float) $transaction->commission);
-                    $todayOpening->total_transactions = max(0, (int) $todayOpening->total_transactions - 1);
-                    $todayOpening->save();
+                if ($validated['type'] !== 'cash_to_float') {
+                    if ($todayOpening && $transaction->daily_opening_id == $todayOpening->id) {
+                        $todayOpening->total_volume = max(0, (float) $todayOpening->total_volume - (float) $transaction->amount);
+                        $todayOpening->total_commission = max(0, (float) $todayOpening->total_commission - (float) $transaction->commission);
+                        $todayOpening->total_transactions = max(0, (int) $todayOpening->total_transactions - 1);
+                        $todayOpening->save();
+                    }
+                    $targetOpening->total_volume = (float) $targetOpening->total_volume + (float) $transaction->amount;
+                    $targetOpening->total_commission = (float) $targetOpening->total_commission + (float) $transaction->commission;
+                    $targetOpening->total_transactions = (int) $targetOpening->total_transactions + 1;
+                    $targetOpening->save();
                 }
                 $transaction->daily_opening_id = $targetOpening->id;
-                $targetOpening->total_volume = (float) $targetOpening->total_volume + (float) $transaction->amount;
-                $targetOpening->total_commission = (float) $targetOpening->total_commission + (float) $transaction->commission;
-                $targetOpening->total_transactions = (int) $targetOpening->total_transactions + 1;
-                $targetOpening->save();
                 $transaction->update(['daily_opening_id' => $targetOpening->id]);
             } else {
                 $transaction->update(['daily_opening_id' => null]);
@@ -677,7 +679,7 @@ class TransactionController extends Controller
     {
         $validated = $request->validate([
             'network_id' => ['required', 'exists:networks,id'],
-            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup'],
+            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup,cash_to_float'],
             'customer_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['required', 'string', 'max:30'],
             'amount' => ['required', 'numeric', 'min:1'],
@@ -750,7 +752,7 @@ class TransactionController extends Controller
                 $isStatusToCompleted = is_admin() && $isStatusChange && $requestedStatus === 'completed' && $wasReversed;
                 // Admin status change to reversed via dropdown — revert financial effects like reverse()
                 if ($isStatusToReversed) {
-                    $oldDeltaFloat = $this->floatDelta($oldType, $oldAmount);
+                    $oldDeltaFloat = $this->floatDelta($oldType, $oldAmount, $oldCommission);
                     $oldBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $oldNetworkId)->lockForUpdate()->first();
                     if ($oldBalance) {
                         $oldBalance->balance = (float) $oldBalance->balance - $oldDeltaFloat;
@@ -777,7 +779,7 @@ class TransactionController extends Controller
                 // Revert old financial effects if needed (amount/type/network or date day moved)
                 if ($needsFinancialAdjustment) {
                     // Revert old financial effects from the assigned area
-                    $oldDeltaFloat = $this->floatDelta($oldType, $oldAmount);
+                    $oldDeltaFloat = $this->floatDelta($oldType, $oldAmount, $oldCommission);
                     $oldBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $oldNetworkId)->lockForUpdate()->first();
                     if ($oldBalance) {
                         $oldBalance->balance = (float) $oldBalance->balance - $oldDeltaFloat;
@@ -815,7 +817,7 @@ class TransactionController extends Controller
 
                 if ($needsFinancialAdjustment) {
                     // Apply new financial effects to the (same) assigned area — respects network and date change
-                    $newDeltaFloat = $this->floatDelta($newType, $newAmount);
+                    $newDeltaFloat = $this->floatDelta($newType, $newAmount, $newCommission);
                     $newBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $newNetworkId)->lockForUpdate()->first();
                     if (! $newBalance) {
                         $newBalance = NetworkBalance::create([
@@ -878,7 +880,7 @@ class TransactionController extends Controller
                     }
                 } elseif ($needsReversedReapply) {
                     // Admin editing a reversed transaction: already reverted, now re-apply as completed with new values
-                    $newDeltaFloat = $this->floatDelta($newType, $newAmount);
+                    $newDeltaFloat = $this->floatDelta($newType, $newAmount, $newCommission);
                     $newBalance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $newNetworkId)->lockForUpdate()->first();
                     if (! $newBalance) {
                         $newBalance = NetworkBalance::create(['agent_id' => $oldAgentId, 'network_id' => $newNetworkId, 'opening_balance' => 0, 'balance' => 0]);
@@ -1120,7 +1122,7 @@ class TransactionController extends Controller
         try {
             DB::transaction(function () use ($transaction, $oldAmount, $oldCommission, $oldType, $oldNetworkId, $oldAgentId, $oldDailyOpeningId, $oldReference): void {
                 // Revert financial effects from the assigned area
-                $deltaFloat = $this->floatDelta($oldType, $oldAmount);
+                $deltaFloat = $this->floatDelta($oldType, $oldAmount, $oldCommission);
                 $balance = NetworkBalance::where('agent_id', $oldAgentId)->where('network_id', $oldNetworkId)->lockForUpdate()->first();
                 if ($balance) {
                     $balance->balance = (float) $balance->balance - $deltaFloat;
@@ -1283,13 +1285,14 @@ class TransactionController extends Controller
                 $delta = match ($transaction->type) {
                     'deposit' => $amount,
                     'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => -$amount,
+                    'cash_to_float' => -($amount - (float) ($transaction->commission ?? 0)),
                     default => $amount,
                 };
                 $balance->balance += $delta;
                 $balance->save();
             }
 
-            if (in_array($transaction->type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime'], true)) {
+            if (in_array($transaction->type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'cash_to_float'], true)) {
                 $direction = in_array($transaction->type, ['deposit', 'airtime'], true) ? -1 : 1;
                 $agent = $transaction->agent;
                 $agent->cash_balance = ((float) $agent->cash_balance) + $direction * $amount;
@@ -1377,22 +1380,23 @@ class TransactionController extends Controller
     {
         return [
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
-            'types' => ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank', 'float_deposit', 'float_topup'],
+            'types' => ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank', 'float_deposit', 'float_topup', 'cash_to_float'],
         ];
     }
 
-    private function floatDelta(string $type, float $amount): float
+    private function floatDelta(string $type, float $amount, float $commission = 0.0): float
     {
         return match ($type) {
             'deposit', 'airtime', 'send_money' => -$amount,
             'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $amount,
+            'cash_to_float' => $amount - $commission,
             default => -$amount,
         };
     }
 
     private function cashDelta(string $type, float $amount): float
     {
-        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'send_money'], true)) {
+        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'send_money', 'cash_to_float'], true)) {
             return 0;
         }
 

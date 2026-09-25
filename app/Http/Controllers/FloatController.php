@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class FloatController extends Controller
@@ -115,6 +116,7 @@ class FloatController extends Controller
                     $netTxFloat += match ($t->type) {
                         'deposit' => -(float) $t->amount,
                         'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => (float) $t->amount,
+                        'cash_to_float' => (float) $t->amount - (float) $t->commission,
                         default => -(float) $t->amount,
                     };
                 }
@@ -122,11 +124,7 @@ class FloatController extends Controller
                 $ftsForNet = FloatTransaction::where('agent_id', $cashPoint->id)->where('network_id', $net->id)->whereDate('created_at', $viewDate)->get();
                 $netFloatTx = 0.0;
                 foreach ($ftsForNet as $ft) {
-                    $netFloatTx += match ($ft->type) {
-                        'cash_in', 'float_topup' => (float) $ft->amount,
-                        'cash_out', 'float_pull' => -(float) $ft->amount,
-                        default => 0.0,
-                    };
+                    $netFloatTx += $ft->floatDelta();
                 }
                 $currentForDate = $openingVal + $netTxFloat + $netFloatTx;
                 $balancesForDate->push((object) [
@@ -169,10 +167,11 @@ class FloatController extends Controller
             // Also include FloatTransaction cash_in/cash_out that affect cash (additional cash added via float)
             $dayFloatCash = FloatTransaction::where('agent_id', $cashPoint->id)->whereDate('created_at', $viewDate)->get();
             foreach ($dayFloatCash as $ft) {
-                if (in_array($ft->type, ['cash_in'], true)) {
-                    $cashIn += (float) $ft->amount;
-                } elseif (in_array($ft->type, ['cash_out', 'float_pull'], true)) {
-                    $cashOut += (float) $ft->amount;
+                $d = $ft->cashDelta();
+                if ($d > 0) {
+                    $cashIn += $d;
+                } elseif ($d < 0) {
+                    $cashOut += abs($d);
                 }
             }
             $summary['totalCash'] = $resolvedCashOpening + $cashIn - $cashOut;
@@ -304,17 +303,14 @@ class FloatController extends Controller
                 $netTxFloat += match ($t->type) {
                     'deposit' => -(float) $t->amount,
                     'withdrawal','bank_to_wallet','float_topup','float_deposit' => (float) $t->amount,
+                    'cash_to_float' => (float) $t->amount - (float) $t->commission,
                     default => -(float) $t->amount,
                 };
             }
             $ftsForNet = FloatTransaction::where('agent_id', $cashPoint->id)->where('network_id', $net->id)->whereDate('created_at', $viewDate)->get();
             $netFloatTx = 0;
             foreach ($ftsForNet as $ft) {
-                $netFloatTx += match ($ft->type) {
-                    'cash_in','float_topup' => (float) $ft->amount,
-                    'cash_out','float_pull' => -(float) $ft->amount,
-                    default => 0,
-                };
+                $netFloatTx += $ft->floatDelta();
             }
             $balancesForDate->push((object) [
                 'network' => $net,
@@ -394,6 +390,7 @@ class FloatController extends Controller
                 'type' => ucfirst(str_replace('_', ' ', $f->type)),
                 'amount' => money($f->amount),
                 'fee' => money($f->fee),
+                'commission' => money($f->commission),
                 'operator' => $f->operator?->name ?? '—',
                 'status' => ucfirst($f->status),
                 'notes' => $f->notes ?? '—',
@@ -419,6 +416,7 @@ class FloatController extends Controller
             ['key' => 'type', 'label' => 'Type'],
             ['key' => 'amount', 'label' => 'Amount'],
             ['key' => 'fee', 'label' => 'Fee'],
+            ['key' => 'commission', 'label' => 'Commission'],
             ['key' => 'operator', 'label' => 'Operator'],
             ['key' => 'status', 'label' => 'Status'],
             ['key' => 'notes', 'label' => 'Notes'],
@@ -434,10 +432,13 @@ class FloatController extends Controller
         }
 
         $isAdmin = is_admin();
+        $allowedTypes = ['cash_in', 'cash_out', 'float_topup', 'float_pull', 'cash_to_float'];
+        $requestedType = $request->input('type');
+        $selectedType = in_array($requestedType, $allowedTypes, true) ? $requestedType : 'float_topup';
         $rawDate = $request->input('date');
         $decrypted = $this->decryptDateParam($rawDate);
         if ($isAdmin && $rawDate !== null && $decrypted === null && $this->isPlainDate($rawDate)) {
-            return redirect()->route('float.create', ['date' => $this->encryptDateParam($rawDate)]);
+            return redirect()->route('float.create', ['date' => $this->encryptDateParam($rawDate), 'type' => $selectedType]);
         }
         $selectedDate = $isAdmin ? ($decrypted ?? $rawDate ?? today()->toDateString()) : today()->toDateString();
         try {
@@ -448,6 +449,10 @@ class FloatController extends Controller
         }
 
         $todayOpening = DailyOpening::forAgentAndDate($cashPoint->id, $viewDate)->first();
+
+        if (! $isAdmin) {
+            $selectedType = 'float_topup';
+        }
 
         if (! $isAdmin) {
             if (! $todayOpening) {
@@ -481,15 +486,16 @@ class FloatController extends Controller
                 ->get();
         }
 
-        return view('float.create', compact('networks', 'allNetworks', 'currentBalances', 'selectedDate', 'viewDate', 'isAdmin', 'todayOpening', 'dayTransactions', 'dayFloatTransactions'));
+        return view('float.create', compact('networks', 'allNetworks', 'currentBalances', 'selectedDate', 'viewDate', 'isAdmin', 'todayOpening', 'dayTransactions', 'dayFloatTransactions', 'selectedType'));
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
             'network_id' => ['required', 'exists:networks,id'],
-            'type' => ['required', 'in:cash_in,cash_out,float_topup,float_pull'],
+            'type' => ['required', 'in:cash_in,cash_out,float_topup,float_pull,cash_to_float'],
             'amount' => ['required', 'numeric', 'min:1'],
+            'commission' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:255'],
             'float_date' => ['nullable', 'date'],
             'transaction_id' => ['nullable', 'exists:transactions,id'],
@@ -528,6 +534,34 @@ class FloatController extends Controller
             }
         }
 
+        $amount = (float) $validated['amount'];
+        $commission = $validated['type'] === 'cash_to_float'
+            ? round((float) ($validated['commission'] ?? 0), 2)
+            : 0.0;
+        $isLiveDate = $targetDate->isSameDay(today());
+
+        if ($validated['type'] === 'cash_to_float' && $targetDate->isFuture()) {
+            throw ValidationException::withMessages([
+                'float_date' => 'The transfer date cannot be in the future.',
+            ]);
+        }
+
+        if ($validated['type'] === 'cash_to_float' && $commission >= $amount) {
+            throw ValidationException::withMessages([
+                'amount' => 'The transfer amount must be greater than the commission.',
+            ]);
+        }
+
+        if ($validated['type'] === 'cash_to_float' && $isLiveDate && (float) $agent->cash_balance < $amount) {
+            $message = 'The transfer amount cannot be greater than the cash at till.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withInput()->withErrors(['amount' => $message]);
+        }
+
         $todayOpening = null;
         if (is_cashier()) {
             $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())->first();
@@ -561,24 +595,31 @@ class FloatController extends Controller
 
         $reference = 'FLT-'.now()->format('ymd').'-'.str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
 
-        DB::transaction(function () use ($agent, $balance, $validated, $reference, $targetDate, $todayOpening) {
-            $amount = (float) $validated['amount'];
+        DB::transaction(function () use ($agent, $balance, $validated, $reference, $targetDate, $todayOpening, $amount, $commission, $isLiveDate) {
+            if ($validated['type'] === 'cash_to_float') {
+                if ($isLiveDate) {
+                    $balance->balance += $amount - $commission;
+                    $agent->cash_balance = (float) $agent->cash_balance - $amount;
+                }
+            } else {
+                match ($validated['type']) {
+                    'cash_in' => $balance->balance += $amount,
+                    'cash_out' => $balance->balance -= $amount,
+                    'float_topup' => $balance->balance += $amount,
+                    'float_pull' => $balance->balance -= $amount,
+                };
 
-            match ($validated['type']) {
-                'cash_in' => $balance->balance += $amount,
-                'cash_out' => $balance->balance -= $amount,
-                'float_topup' => $balance->balance += $amount,
-                'float_pull' => $balance->balance -= $amount,
-            };
-
-            if (in_array($validated['type'], ['cash_out', 'float_pull'], true)) {
-                $agent->cash_balance = (float) $agent->cash_balance - $amount;
-            } elseif ($validated['type'] === 'cash_in') {
-                $agent->cash_balance = (float) $agent->cash_balance + $amount;
+                if (in_array($validated['type'], ['cash_out', 'float_pull'], true)) {
+                    $agent->cash_balance = (float) $agent->cash_balance - $amount;
+                } elseif ($validated['type'] === 'cash_in') {
+                    $agent->cash_balance = (float) $agent->cash_balance + $amount;
+                }
             }
 
-            $balance->save();
-            $agent->save();
+            if ($validated['type'] !== 'cash_to_float' || $isLiveDate) {
+                $balance->save();
+                $agent->save();
+            }
 
             // For admin with past date, set created_at to that date for correct reporting
             $now = $targetDate->isSameDay(today()) ? now() : $targetDate->copy()->setTime(now()->hour, now()->minute, now()->second);
@@ -590,6 +631,7 @@ class FloatController extends Controller
                 'type' => $validated['type'],
                 'amount' => $amount,
                 'fee' => $validated['type'] === 'float_topup' ? 1500 : 0,
+                'commission' => $commission,
                 'status' => 'completed',
                 'performed_by' => auth()->id(),
                 'notes' => $validated['notes'] ?? null,
@@ -625,14 +667,25 @@ class FloatController extends Controller
             'reference' => $reference,
             'type' => $validated['type'],
             'amount' => $validated['amount'],
+            'commission' => $commission,
             'date' => $targetDate->toDateString(),
         ]);
 
         if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => 'Float transaction completed successfully.']);
+            return response()->json([
+                'success' => true,
+                'message' => $validated['type'] === 'cash_to_float'
+                    ? 'Cash transferred to float successfully.'
+                    : 'Float transaction completed successfully.',
+                'amount' => $amount,
+                'commission' => $commission,
+                'float_added' => $validated['type'] === 'cash_to_float' ? $amount - $commission : null,
+            ]);
         }
 
-        return back()->with('status', 'Float transaction for '.$targetDate->toDateString().' completed successfully.');
+        return back()->with('status', $validated['type'] === 'cash_to_float'
+            ? 'Cash transferred to float: '.money($amount - $commission).' float added after '.money($commission).' commission.'
+            : 'Float transaction for '.$targetDate->toDateString().' completed successfully.');
     }
 
     /**
@@ -690,9 +743,19 @@ class FloatController extends Controller
         }
 
         // Float top-ups for this date — must be added to Total Float (Auto) (opening + top-ups)
-        $floatTopupsForDate = (float) FloatTransaction::where('agent_id', $agent->id)->whereDate('created_at', $viewDate)->whereIn('type', ['float_topup', 'cash_in'])->sum('amount');
-        $floatTopupsForDate += (float) Transaction::where('agent_id', $agent->id)->whereDate('created_at', $viewDate)->whereIn('type', ['float_topup', 'float_deposit', 'bank_to_wallet'])->sum('amount');
-        $topupBreakdown = FloatTransaction::where('agent_id', $agent->id)->whereDate('created_at', $viewDate)->whereIn('type', ['float_topup', 'cash_in'])->with('network')->get()->groupBy('network_id')->map(fn ($g) => ['network' => $g->first()->network?->name ?? '—', 'total' => (float) $g->sum('amount')]);
+        $floatTransactionsForDate = FloatTransaction::where('agent_id', $agent->id)
+            ->whereDate('created_at', $viewDate)
+            ->whereIn('type', ['float_topup', 'cash_in', 'cash_to_float'])
+            ->get();
+        $floatTopupsForDate = (float) $floatTransactionsForDate->sum(fn (FloatTransaction $floatTransaction): float => $floatTransaction->floatDelta());
+        $floatTopupTransactions = Transaction::where('agent_id', $agent->id)
+            ->whereDate('created_at', $viewDate)
+            ->whereIn('type', ['float_topup', 'float_deposit', 'bank_to_wallet', 'cash_to_float'])
+            ->get();
+        $floatTopupsForDate += (float) $floatTopupTransactions->sum(fn (Transaction $transaction): float => $transaction->type === 'cash_to_float'
+            ? (float) $transaction->amount - (float) $transaction->commission
+            : (float) $transaction->amount);
+        $topupBreakdown = $floatTransactionsForDate->whereIn('type', ['float_topup', 'cash_in', 'cash_to_float'])->groupBy('network_id')->map(fn ($group) => ['network' => $group->first()->network?->name ?? '—', 'total' => (float) $group->sum(fn (FloatTransaction $floatTransaction): float => $floatTransaction->floatDelta())]);
 
         return view('float.edit-opening', compact('agent', 'networks', 'currentBalances', 'opening', 'viewDate', 'dateStr', 'previousReconciliation', 'previousClosingCash', 'suggestedCash', 'prevDate', 'floatTopupsForDate', 'topupBreakdown', 'prevFloatCountedMap'));
     }
@@ -800,29 +863,22 @@ class FloatController extends Controller
         }
 
         $dateStr = $dailyOpening->opening_date instanceof Carbon ? $dailyOpening->opening_date->format('Y-m-d') : (string) $dailyOpening->opening_date;
+        $isLiveDate = $dateStr === today()->toDateString();
 
         // Optional: also delete dated FloatTransactions and Transactions for that day if requested
         $deleteRelated = $request->boolean('with_transactions');
 
-        DB::transaction(function () use ($dailyOpening, $agent, $dateStr, $deleteRelated) {
+        DB::transaction(function () use ($dailyOpening, $agent, $dateStr, $deleteRelated, $isLiveDate) {
             if ($deleteRelated) {
                 $fts = FloatTransaction::where('agent_id', $agent->id)->whereDate('created_at', $dateStr)->get();
                 foreach ($fts as $ft) {
-                    $bal = NetworkBalance::where('agent_id', $agent->id)->where('network_id', $ft->network_id)->first();
-                    if ($bal) {
-                        match ($ft->type) {
-                            'cash_in' => $bal->balance -= (float) $ft->amount,
-                            'cash_out' => $bal->balance += (float) $ft->amount,
-                            'float_topup' => $bal->balance -= (float) $ft->amount,
-                            'float_pull' => $bal->balance += (float) $ft->amount,
-                            default => null,
-                        };
-                        $bal->save();
-                    }
-                    if (in_array($ft->type, ['cash_out', 'float_pull'], true)) {
-                        $agent->cash_balance = (float) $agent->cash_balance + (float) $ft->amount;
-                    } elseif ($ft->type === 'cash_in') {
-                        $agent->cash_balance = (float) $agent->cash_balance - (float) $ft->amount;
+                    if ($isLiveDate) {
+                        $bal = NetworkBalance::where('agent_id', $agent->id)->where('network_id', $ft->network_id)->first();
+                        if ($bal) {
+                            $bal->balance = (float) $bal->balance - $ft->floatDelta();
+                            $bal->save();
+                        }
+                        $agent->cash_balance = (float) $agent->cash_balance - $ft->cashDelta();
                     }
                     $ft->delete();
                 }
@@ -907,28 +963,21 @@ class FloatController extends Controller
         $networkId = (int) $floatTransaction->network_id;
         $agentId = (int) $floatTransaction->agent_id;
         $reference = $floatTransaction->reference;
+        $isLiveDate = $floatTransaction->created_at?->isSameDay(today()) ?? true;
 
-        DB::transaction(function () use ($floatTransaction, $amount, $type, $networkId, $agentId) {
-            $balance = NetworkBalance::where('agent_id', $agentId)->where('network_id', $networkId)->first();
-            if ($balance) {
-                match ($type) {
-                    'cash_in' => $balance->balance -= $amount,
-                    'cash_out' => $balance->balance += $amount,
-                    'float_topup' => $balance->balance -= $amount,
-                    'float_pull' => $balance->balance += $amount,
-                    default => null,
-                };
-                $balance->save();
-            }
-
-            $agent = Agent::find($agentId);
-            if ($agent) {
-                if (in_array($type, ['cash_out', 'float_pull'], true)) {
-                    $agent->cash_balance = (float) $agent->cash_balance + $amount;
-                } elseif ($type === 'cash_in') {
-                    $agent->cash_balance = (float) $agent->cash_balance - $amount;
+        DB::transaction(function () use ($floatTransaction, $networkId, $agentId, $isLiveDate) {
+            if ($isLiveDate) {
+                $balance = NetworkBalance::where('agent_id', $agentId)->where('network_id', $networkId)->first();
+                if ($balance) {
+                    $balance->balance = (float) $balance->balance - $floatTransaction->floatDelta();
+                    $balance->save();
                 }
-                $agent->save();
+
+                $agent = Agent::find($agentId);
+                if ($agent) {
+                    $agent->cash_balance = (float) $agent->cash_balance - $floatTransaction->cashDelta();
+                    $agent->save();
+                }
             }
 
             $floatTransaction->delete();
@@ -945,7 +994,7 @@ class FloatController extends Controller
 
     private function cashDelta(string $type, float $amount): float
     {
-        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime'], true)) {
+        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'cash_to_float'], true)) {
             return 0;
         }
 
@@ -983,10 +1032,11 @@ class FloatController extends Controller
             }
             $fts = FloatTransaction::where('agent_id', $agent->id)->whereDate('created_at', $date)->get();
             foreach ($fts as $ft) {
-                if ($ft->type === 'cash_in') {
-                    $in += (float) $ft->amount;
-                } elseif (in_array($ft->type, ['cash_out', 'float_pull'], true)) {
-                    $out += (float) $ft->amount;
+                $d = $ft->cashDelta();
+                if ($d > 0) {
+                    $in += $d;
+                } elseif ($d < 0) {
+                    $out += abs($d);
                 }
             }
 
@@ -1014,16 +1064,13 @@ class FloatController extends Controller
                     $netFloat += match ($t->type) {
                         'deposit' => -(float) $t->amount,
                         'withdrawal','bank_to_wallet','float_topup','float_deposit' => (float) $t->amount,
+                        'cash_to_float' => (float) $t->amount - (float) $t->commission,
                         default => -(float) $t->amount,
                     };
                 }
                 $fts = FloatTransaction::where('agent_id', $agent->id)->where('network_id', $net->id)->whereDate('created_at', $date)->get();
                 foreach ($fts as $ft) {
-                    $netFloat += match ($ft->type) {
-                        'cash_in','float_topup' => (float) $ft->amount,
-                        'cash_out','float_pull' => -(float) $ft->amount,
-                        default => 0,
-                    };
+                    $netFloat += $ft->floatDelta();
                 }
                 $total += $open + $netFloat;
             }
@@ -1048,16 +1095,13 @@ class FloatController extends Controller
                 $net += match ($t->type) {
                     'deposit' => -(float) $t->amount,
                     'withdrawal','bank_to_wallet','float_topup','float_deposit' => (float) $t->amount,
+                    'cash_to_float' => (float) $t->amount - (float) $t->commission,
                     default => -(float) $t->amount,
                 };
             }
             $fts = FloatTransaction::where('agent_id', $agent->id)->where('network_id', $networkId)->whereDate('created_at', $date)->get();
             foreach ($fts as $ft) {
-                $net += match ($ft->type) {
-                    'cash_in','float_topup' => (float) $ft->amount,
-                    'cash_out','float_pull' => -(float) $ft->amount,
-                    default => 0,
-                };
+                $net += $ft->floatDelta();
             }
 
             return $open + $net;

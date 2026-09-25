@@ -121,10 +121,16 @@ class DailyOpeningController extends Controller
             ->first();
 
         $cashInTypes = ['deposit', 'airtime'];
-        $cashOutTypes = ['withdrawal', 'wallet_to_bank'];
+        $cashOutTypes = ['withdrawal', 'wallet_to_bank', 'cash_to_float'];
 
         $todayDeposits = (float) $todayTransactions->whereIn('type', $cashInTypes)->sum('amount');
         $todayWithdrawals = (float) $todayTransactions->whereIn('type', $cashOutTypes)->sum('amount');
+        $floatCashDelta = (float) $todayFloatTransactions->sum(fn (FloatTransaction $floatTransaction): float => $floatTransaction->cashDelta());
+        if ($floatCashDelta > 0) {
+            $todayDeposits += $floatCashDelta;
+        } elseif ($floatCashDelta < 0) {
+            $todayWithdrawals += abs($floatCashDelta);
+        }
         $todayFees = (float) $todayTransactions->sum('fee');
 
         $todayVolume = (float) $todayTransactions->sum('amount');

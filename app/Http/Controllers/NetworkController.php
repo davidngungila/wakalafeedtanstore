@@ -47,7 +47,7 @@ class NetworkController extends Controller
             ->orderBy('transaction_type')
             ->get();
 
-        $types = ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet'];
+        $types = ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'cash_to_float'];
 
         $exportColumns = $this->exportColumns();
         $exportRoute = route('networks.export');
@@ -167,7 +167,7 @@ class NetworkController extends Controller
                 ->get();
         }
 
-        $types = ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank'];
+        $types = ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank', 'cash_to_float'];
 
         return view('networks.show', [
             'network' => $network,
