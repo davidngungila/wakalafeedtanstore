@@ -15,6 +15,25 @@
 
     <div class="settings-layout">
         <div class="settings-panel" style="grid-column:1 / -1;">
+            <div style="margin-bottom:20px; padding:18px; background:var(--sand-50); border:1px solid var(--line); border-radius:10px;">
+                <h3>Select an existing customer</h3>
+                <p style="font-size:13px; color:var(--ink-soft); margin:4px 0 16px;">Search transaction customers by name or phone number. The selected customer can set the single-SMS recipient or be added to the bulk recipients.</p>
+                <div class="form-row">
+                    <div class="field">
+                        <label for="smsCustomerSearch">Search customers</label>
+                        <input id="smsCustomerSearch" type="search" data-sms-customer-search data-customers-url="{{ route('settings.sms.customers') }}" maxlength="120" placeholder="Customer name or phone number" autocomplete="off">
+                    </div>
+                    <div class="field">
+                        <label for="smsCustomerResults">Matching customers</label>
+                        <select id="smsCustomerResults" data-sms-customer-results size="5"></select>
+                    </div>
+                </div>
+                <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:12px;">
+                    <button type="button" class="btn btn-ghost" data-sms-use-single disabled>Use for single SMS</button>
+                    <button type="button" class="btn btn-ghost" data-sms-add-bulk disabled>Add to bulk recipients</button>
+                </div>
+            </div>
+
             <div style="padding:18px; background:var(--sand-50); border:1px solid var(--line); border-radius:10px;">
                 <h3>Send a single test SMS</h3>
                 <p style="font-size:13px; color:var(--ink-soft); margin:4px 0 16px;">Uses the saved sender ID and token. Test sends may be charged by the provider.</p>
@@ -50,5 +69,89 @@
                 submitForm(form, { method: 'POST', done: () => form.reset() });
             });
         });
+
+        (function() {
+            const search = document.querySelector('[data-sms-customer-search]');
+            const results = document.querySelector('[data-sms-customer-results]');
+            const useSingle = document.querySelector('[data-sms-use-single]');
+            const addBulk = document.querySelector('[data-sms-add-bulk]');
+            if (!search || !results || !useSingle || !addBulk) return;
+
+            const singlePhone = document.querySelector('form[action="{{ route('settings.sms.send') }}"] input[name="to"]');
+            const bulkRecipients = document.querySelector('form[action="{{ route('settings.sms.send-bulk') }}"] textarea[name="recipients"]');
+            const url = search.dataset.customersUrl;
+            let requestId = 0;
+            let debounce = null;
+
+            const updateButtons = () => {
+                const selected = results.value !== '';
+                useSingle.disabled = !selected || !singlePhone;
+                addBulk.disabled = !selected || !bulkRecipients;
+            };
+
+            const renderCustomers = (customers) => {
+                results.innerHTML = '';
+
+                if (!customers.length) {
+                    const empty = document.createElement('option');
+                    empty.disabled = true;
+                    empty.textContent = 'No matching customers';
+                    results.append(empty);
+                }
+
+                customers.forEach(customer => {
+                    const option = document.createElement('option');
+                    option.value = customer.phone;
+                    option.textContent = customer.name + ' — ' + customer.phone;
+                    results.append(option);
+                });
+
+                updateButtons();
+            };
+
+            const loadCustomers = async (query, currentRequest) => {
+                try {
+                    const response = await fetch(url + '?q=' + encodeURIComponent(query), {
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (currentRequest === requestId) {
+                        renderCustomers(response.ok && Array.isArray(data.customers) ? data.customers : []);
+                    }
+                } catch {
+                    if (currentRequest === requestId) renderCustomers([]);
+                }
+            };
+
+            search.addEventListener('input', () => {
+                clearTimeout(debounce);
+                const query = search.value.trim();
+                debounce = setTimeout(() => loadCustomers(query, ++requestId), 200);
+            });
+
+            results.addEventListener('change', updateButtons);
+
+            useSingle.addEventListener('click', () => {
+                if (results.value && singlePhone) {
+                    singlePhone.value = results.value;
+                    singlePhone.focus();
+                    toast('Customer number added to the single SMS form.', 'success');
+                }
+            });
+
+            addBulk.addEventListener('click', () => {
+                if (results.value && bulkRecipients) {
+                    const existing = bulkRecipients.value.split(/[\s,;]+/).filter(recipient => recipient !== '');
+                    if (!existing.includes(results.value)) {
+                        existing.push(results.value);
+                        bulkRecipients.value = existing.join(', ');
+                    }
+                    bulkRecipients.focus();
+                    toast('Customer number added to the bulk recipients.', 'success');
+                }
+            });
+
+            loadCustomers('', ++requestId);
+        })();
     </script>
 @endsection

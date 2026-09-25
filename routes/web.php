@@ -21,6 +21,7 @@ use App\Http\Controllers\ReconciliationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SmsController;
+use App\Http\Controllers\SmsCustomerController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\UserController;
@@ -202,6 +203,9 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::get('/settings/email', [SettingController::class, 'email'])->name('settings.email');
         Route::get('/settings/sms', [SettingController::class, 'sms'])->name('settings.sms');
         Route::get('/settings/sms/send', [OutboundSmsController::class, 'sendPage'])->name('settings.sms.send.page');
+        Route::get('/settings/sms/customers', [SmsCustomerController::class, 'index'])
+            ->middleware('throttle:30,1')
+            ->name('settings.sms.customers');
         Route::get('/settings/sms/connection', [OutboundSmsController::class, 'connection'])
             ->middleware('throttle:10,1')
             ->name('settings.sms.connection');

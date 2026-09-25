@@ -48,6 +48,20 @@ class SettingsPageTest extends TestCase
             ->assertDontSee('Send a single test SMS', false);
     }
 
+    public function test_sms_sender_page_offers_existing_transaction_customers(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->get(route('settings.sms.send.page'))
+            ->assertSee('Select an existing customer')
+            ->assertSee('Search customers')
+            ->assertSee('Matching customers')
+            ->assertSee(route('settings.sms.customers'), false)
+            ->assertSee('data-sms-customer-search', false)
+            ->assertSee('data-sms-customer-results', false);
+    }
+
     public function test_cash_point_settings_form_uses_post_method_spoofing(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
@@ -73,7 +87,7 @@ class SettingsPageTest extends TestCase
         $response->assertSee(route('settings.cash-point'));
         $response->assertSee(route('settings.email'));
         $response->assertSee(route('settings.sms'));
-        $response->assertSee(route('settings.sms.send.page'));
+        $response->assertDontSee(route('settings.sms.send.page'), false);
     }
 
     public function test_layout_persists_sidebar_state_across_refreshes(): void

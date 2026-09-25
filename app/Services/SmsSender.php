@@ -25,7 +25,7 @@ class SmsSender
 
         return $this->post((string) config('sms.outbound.single_endpoint', '/api/sms/v2/text/single'), [
             'from' => $settings['sender_id'],
-            'to' => $this->normalizePhone($to),
+            'to' => $this->normalizeRecipient($to),
             'text' => $text,
             'flash' => $flash,
             'reference' => $this->reference($reference),
@@ -53,7 +53,7 @@ class SmsSender
             }
 
             $payloadMessages[] = [
-                'to' => $this->normalizePhone($message['to']),
+                'to' => $this->normalizeRecipient($message['to']),
                 'text' => $text,
             ];
         }
@@ -70,6 +70,21 @@ class SmsSender
         return $this->client($this->settings())
             ->get((string) config('sms.outbound.balance_endpoint', '/api/v2/balance'))
             ->throw();
+    }
+
+    public function normalizeRecipient(string $phone): string
+    {
+        $phone = preg_replace('/[\s().-]+/', '', trim($phone)) ?? trim($phone);
+        $phone = ltrim($phone, '+');
+        if (str_starts_with($phone, '0')) {
+            $phone = '255'.substr($phone, 1);
+        }
+
+        if (preg_match('/^[1-9][0-9]{7,14}$/', $phone) !== 1) {
+            throw new InvalidArgumentException('SMS recipient must be a valid phone number.');
+        }
+
+        return $phone;
     }
 
     private function post(string $endpoint, array $payload, array $settings): Response
@@ -113,21 +128,6 @@ class SmsSender
         }
 
         return $token;
-    }
-
-    private function normalizePhone(string $phone): string
-    {
-        $phone = preg_replace('/[\s().-]+/', '', trim($phone)) ?? trim($phone);
-        $phone = ltrim($phone, '+');
-        if (str_starts_with($phone, '0')) {
-            $phone = '255'.substr($phone, 1);
-        }
-
-        if (preg_match('/^[1-9][0-9]{7,14}$/', $phone) !== 1) {
-            throw new InvalidArgumentException('SMS recipient must be a valid phone number.');
-        }
-
-        return $phone;
     }
 
     private function reference(?string $reference): string
