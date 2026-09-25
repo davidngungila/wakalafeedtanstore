@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\SmsSender;
+use App\Support\TwoFactorMethods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -50,7 +51,11 @@ class AuthController extends Controller
             return $this->loginFailed($request, 'Two-factor authentication is misconfigured. Contact support.');
         }
 
-        if (($user->two_factor_method ?? 'app') === 'sms') {
+        if (($user->two_factor_method ?? null) === 'sms') {
+            if ($user->phone_verified_at === null) {
+                return $this->loginFailed($request, 'SMS login codes are unavailable. Verify your mobile number before signing in with SMS.');
+            }
+
             if (! $sender->isConfigured()) {
                 return $this->loginFailed($request, 'SMS login codes are unavailable. Ask an administrator to configure the SMS provider.');
             }
@@ -61,19 +66,31 @@ class AuthController extends Controller
                 return $this->loginFailed($request, 'SMS login codes are unavailable. Ask an administrator to update your mobile number.');
             }
 
-            $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            $failure = $this->sendSmsChallenge($request, $sender, $user, $phone);
 
-            try {
-                $sender->sendLoginCode($phone, $code);
-                Cache::put('otp_sms_'.$user->id, $code, 300);
-            } catch (RuntimeException $exception) {
-                Log::warning('SMS login code failed', ['error' => $exception->getMessage(), 'user_id' => $user->id]);
+            if ($failure !== null) {
+                return $failure;
+            }
+        } else {
+            $methods = TwoFactorMethods::available($user, $sender);
+            $defaultMethod = TwoFactorMethods::default($methods, $user->two_factor_method);
 
-                return $this->loginFailed($request, 'SMS login codes are unavailable. Ask an administrator to configure the SMS provider.');
-            } catch (Throwable $exception) {
-                Log::warning('SMS login code failed', ['error' => $exception->getMessage(), 'user_id' => $user->id]);
+            if ($defaultMethod === null) {
+                return $this->loginFailed($request, 'Two-factor authentication is misconfigured. Contact support.');
+            }
 
-                return $this->loginFailed($request, 'Could not send the SMS login code. Please try again.');
+            if ($defaultMethod === 'sms') {
+                $phone = TwoFactorMethods::verifiedPhone($user, $sender);
+
+                if ($phone === null) {
+                    return $this->loginFailed($request, 'Two-factor authentication is misconfigured. Contact support.');
+                }
+
+                $failure = $this->sendSmsChallenge($request, $sender, $user, $phone);
+
+                if ($failure !== null) {
+                    return $failure;
+                }
             }
         }
 
@@ -105,6 +122,26 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('login');
+    }
+
+    private function sendSmsChallenge(Request $request, SmsSender $sender, User $user, string $phone): JsonResponse|RedirectResponse|null
+    {
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        try {
+            $sender->sendLoginCode($phone, $code);
+            Cache::put('otp_sms_'.$user->id, $code, 300);
+        } catch (RuntimeException $exception) {
+            Log::warning('SMS login code failed', ['error' => $exception->getMessage(), 'user_id' => $user->id]);
+
+            return $this->loginFailed($request, 'SMS login codes are unavailable. Ask an administrator to configure the SMS provider.');
+        } catch (Throwable $exception) {
+            Log::warning('SMS login code failed', ['error' => $exception->getMessage(), 'user_id' => $user->id]);
+
+            return $this->loginFailed($request, 'Could not send the SMS login code. Please try again.');
+        }
+
+        return null;
     }
 
     private function loginFailed(Request $request, string $message): JsonResponse|RedirectResponse

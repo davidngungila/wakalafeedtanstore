@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Services\SmsSender;
 use App\Support\TwoFactor;
+use App\Support\TwoFactorMethods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,13 +14,12 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
-use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 
 class TwoFactorController extends Controller
 {
-    public function show(Request $request): JsonResponse|View|RedirectResponse
+    public function show(Request $request, SmsSender $sender): JsonResponse|View|RedirectResponse
     {
         $user = $this->challengedUser($request);
 
@@ -27,28 +27,48 @@ class TwoFactorController extends Controller
             return $this->expiredChallenge($request);
         }
 
+        $methods = TwoFactorMethods::available($user, $sender);
+        $method = TwoFactorMethods::default($methods, $user->two_factor_method);
+
+        if ($method === null) {
+            return $this->misconfiguredChallenge($request);
+        }
+
         return view('auth.two-factor', [
             'phone' => $user->phone,
-            'method' => $this->otpMethod($user),
+            'methods' => $methods,
+            'method' => $method,
         ]);
     }
 
-    public function verify(Request $request): JsonResponse|RedirectResponse
+    public function verify(Request $request, SmsSender $sender): JsonResponse|RedirectResponse
     {
         $request->validate([
             'code' => ['required', 'string', 'max:32'],
+            'method' => ['nullable', 'in:app,sms'],
         ]);
 
         $user = $this->challengedUser($request);
 
         if (! $user) {
             return $this->expiredChallenge($request);
+        }
+
+        $methods = TwoFactorMethods::available($user, $sender);
+        $method = $request->input('method');
+
+        if (! in_array($method, $methods, true)) {
+            $method = TwoFactorMethods::default($methods, $user->two_factor_method);
+        }
+
+        if ($method === null) {
+            return $this->misconfiguredChallenge($request);
         }
 
         $code = $request->string('code')->trim()->toString();
         $verified = false;
 
-        if ($this->otpMethod($user) === 'sms') {
+        if ($method === 'sms') {
             $smsOtp = Cache::get('otp_sms_'.$user->id);
             $verified = is_string($smsOtp) && hash_equals($smsOtp, $code);
         } else {
@@ -81,7 +101,7 @@ class TwoFactorController extends Controller
             ])->save();
         }
 
-        if ($this->otpMethod($user) === 'sms') {
+        if ($method === 'sms') {
             Cache::forget('otp_sms_'.$user->id);
         }
 
@@ -100,21 +120,15 @@ class TwoFactorController extends Controller
             return $this->expiredChallenge($request);
         }
 
-        if ($this->otpMethod($user) !== 'sms') {
-            return $request->expectsJson()
-                ? response()->json(['success' => false, 'message' => 'SMS OTP is not selected.'], 422)
-                : back()->withErrors(['code' => 'SMS OTP is not selected.']);
-        }
-
-        if (! $sender->isConfigured()) {
+        if (! in_array('sms', TwoFactorMethods::available($user, $sender), true)) {
             return $request->expectsJson()
                 ? response()->json(['success' => false, 'message' => 'SMS OTP is currently unavailable.'], 422)
                 : back()->withErrors(['code' => 'SMS OTP is currently unavailable.']);
         }
 
-        try {
-            $phone = $sender->normalizeRecipient((string) $user->phone);
-        } catch (InvalidArgumentException) {
+        $phone = TwoFactorMethods::verifiedPhone($user, $sender);
+
+        if ($phone === null) {
             return $request->expectsJson()
                 ? response()->json(['success' => false, 'message' => 'SMS OTP is currently unavailable.'], 422)
                 : back()->withErrors(['code' => 'SMS OTP is currently unavailable.']);
@@ -159,9 +173,19 @@ class TwoFactorController extends Controller
         return redirect()->route('login');
     }
 
-    private function otpMethod(User $user): string
+    private function misconfiguredChallenge(Request $request): JsonResponse|RedirectResponse
     {
-        return $user->two_factor_method === 'sms' ? 'sms' : 'app';
+        $request->session()->forget(['two_factor_user_id', 'two_factor_user_email']);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Two-factor authentication is misconfigured. Contact support.',
+            ], 422);
+        }
+
+        return redirect()->route('login')
+            ->withErrors(['email' => 'Two-factor authentication is misconfigured. Contact support.']);
     }
 
     private function challengedUser(Request $request): ?User

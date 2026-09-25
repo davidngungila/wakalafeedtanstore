@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\SmsSender;
 use App\Support\SessionFormatter;
 use App\Support\TwoFactor;
+use App\Support\TwoFactorMethods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,7 +15,6 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
-use InvalidArgumentException;
 
 class AccountController extends Controller
 {
@@ -30,8 +30,12 @@ class AccountController extends Controller
             $phone = $this->smsPhone($user, $sender);
 
             if ($phone === null) {
-                return response()->json(['success' => false, 'message' => 'SMS OTP needs a valid mobile number and a configured SMS provider.'], 422);
+                return response()->json(['success' => false, 'message' => 'Verify your mobile number before using SMS OTP. A configured SMS provider is also required.'], 422);
             }
+        }
+
+        if ($validated['method'] === 'app' && ! $user->two_factor_app_enabled) {
+            return response()->json(['success' => false, 'message' => 'Set up the authenticator app before selecting it as the default method.'], 422);
         }
 
         $user->forceFill(['two_factor_method' => $validated['method']])->save();
@@ -48,48 +52,44 @@ class AccountController extends Controller
     public function enableSmsTwoFactor(Request $request, SmsSender $sender): JsonResponse
     {
         $user = auth()->user();
-
-        if ($user->two_factor_enabled) {
-            return response()->json(['success' => false, 'message' => 'Two-factor is already enabled. Disable first to switch method.'], 422);
-        }
-
         $phone = $this->smsPhone($user, $sender);
 
         if ($phone === null) {
-            return response()->json(['success' => false, 'message' => 'SMS OTP needs a valid mobile number and a configured SMS provider.'], 422);
+            return response()->json(['success' => false, 'message' => 'Verify your mobile number before using SMS OTP. A configured SMS provider is also required.'], 422);
         }
 
-        // For SMS OTP we don't need TOTP secret — use a random secret but mark method as SMS.
-        $secret = TwoFactor::generateSecret();
+        if (! $user->two_factor_enabled) {
+            // For SMS OTP we don't need TOTP secret — use a random secret but mark method as SMS.
+            $secret = TwoFactor::generateSecret();
+            $recoveryCodes = TwoFactor::generateRecoveryCodes();
 
-        $recoveryCodes = TwoFactor::generateRecoveryCodes();
+            $user->forceFill([
+                'two_factor_secret' => Crypt::encryptString($secret),
+                'two_factor_enabled' => true,
+                'two_factor_method' => 'sms',
+                'two_factor_app_enabled' => false,
+                'two_factor_recovery_codes' => array_map(fn (string $code): string => TwoFactor::hashRecoveryCode($code), $recoveryCodes),
+            ])->save();
 
-        $user->forceFill([
-            'two_factor_secret' => Crypt::encryptString($secret),
-            'two_factor_enabled' => true,
-            'two_factor_method' => 'sms',
-            'two_factor_recovery_codes' => array_map(fn (string $code): string => TwoFactor::hashRecoveryCode($code), $recoveryCodes),
-        ])->save();
+            Cache::forget('otp_sms_'.$user->id);
+            $request->session()->forget('two_factor_pending_secret');
 
+            $this->recordAudit('Two-factor enabled via SMS OTP', 'User', $user->id);
+
+            return response()->json(['success' => true, 'message' => 'SMS OTP enabled. Codes will be sent to '.$phone.' at login.', 'recovery_codes' => $recoveryCodes]);
+        }
+
+        $user->forceFill(['two_factor_method' => 'sms'])->save();
         Cache::forget('otp_sms_'.$user->id);
-        $request->session()->forget('two_factor_pending_secret');
 
-        $this->recordAudit('Two-factor enabled via SMS OTP', 'User', $user->id);
+        $this->recordAudit('SMS OTP added as the default two-factor method', 'User', $user->id);
 
-        return response()->json(['success' => true, 'message' => 'SMS OTP enabled. Codes will be sent to '.$phone.' at login.', 'recovery_codes' => $recoveryCodes]);
+        return response()->json(['success' => true, 'message' => 'SMS OTP enabled. Codes will be sent to '.$phone.' at login.']);
     }
 
     private function smsPhone(User $user, SmsSender $sender): ?string
     {
-        if (! $sender->isConfigured()) {
-            return null;
-        }
-
-        try {
-            return $sender->normalizeRecipient((string) $user->phone);
-        } catch (InvalidArgumentException) {
-            return null;
-        }
+        return TwoFactorMethods::verifiedPhone($user, $sender);
     }
 
     public function index(Request $request): View
@@ -98,7 +98,7 @@ class AccountController extends Controller
 
         $pendingSecret = $request->session()->get('two_factor_pending_secret');
 
-        if (! $user->two_factor_enabled && ! $pendingSecret) {
+        if ((! $user->two_factor_enabled || ! $user->two_factor_app_enabled) && ! $pendingSecret) {
             $pendingSecret = TwoFactor::generateSecret();
             $request->session()->put('two_factor_pending_secret', $pendingSecret);
         }
@@ -154,7 +154,7 @@ class AccountController extends Controller
     {
         $user = auth()->user();
 
-        if ($user->two_factor_enabled) {
+        if ($user->two_factor_enabled && $user->two_factor_app_enabled) {
             return response()->json(['success' => false, 'message' => 'Two-factor authentication is already enabled.'], 422);
         }
 
@@ -172,27 +172,40 @@ class AccountController extends Controller
             return response()->json(['success' => false, 'message' => 'The code is invalid.'], 422);
         }
 
-        $recoveryCodes = TwoFactor::generateRecoveryCodes();
-
-        $user->forceFill([
+        $attributes = [
             'two_factor_secret' => Crypt::encryptString($secret),
             'two_factor_enabled' => true,
-            'two_factor_method' => 'app',
-            'two_factor_recovery_codes' => array_map(
+            'two_factor_app_enabled' => true,
+            'two_factor_method' => $user->two_factor_method ?? 'app',
+        ];
+
+        if (! $user->two_factor_enabled || empty($user->two_factor_recovery_codes)) {
+            $recoveryCodes = TwoFactor::generateRecoveryCodes();
+            $attributes['two_factor_recovery_codes'] = array_map(
                 fn (string $code): string => TwoFactor::hashRecoveryCode($code),
                 $recoveryCodes,
-            ),
-        ])->save();
+            );
+        }
 
+        $user->forceFill($attributes)->save();
         $request->session()->forget('two_factor_pending_secret');
 
-        $this->recordAudit('Two-factor authentication enabled', 'User', $user->id);
+        $this->recordAudit(
+            $user->wasChanged('two_factor_enabled') ? 'Two-factor authentication enabled' : 'Authenticator app added to two-factor authentication',
+            'User',
+            $user->id
+        );
 
-        return response()->json([
+        $response = [
             'success' => true,
-            'message' => 'Two-factor authentication is now enabled.',
-            'recovery_codes' => $recoveryCodes,
-        ]);
+            'message' => 'Authenticator app verification is now available.',
+        ];
+
+        if (isset($recoveryCodes)) {
+            $response['recovery_codes'] = $recoveryCodes;
+        }
+
+        return response()->json($response);
     }
 
     public function disableTwoFactor(Request $request): JsonResponse
@@ -214,6 +227,7 @@ class AccountController extends Controller
         $user->forceFill([
             'two_factor_secret' => null,
             'two_factor_enabled' => false,
+            'two_factor_app_enabled' => false,
             'two_factor_recovery_codes' => null,
         ])->save();
 

@@ -90,7 +90,9 @@
         </div>
         <h1>Two-factor verification</h1>
         <p class="sub">
-            @if ($method === 'sms')
+            @if (count($methods) > 1)
+                SMS verification is selected by default. You may use your authenticator app instead.
+            @elseif ($method === 'sms')
                 Enter the 6-digit code sent to <b>{{ $phone }}</b>. It expires in 5 minutes.
             @else
                 Enter the 6-digit code from your authenticator app.
@@ -101,10 +103,21 @@
             <div class="error">{{ $errors->first() }}</div>
         @endif
 
+        @if (count($methods) > 1)
+            <div role="group" aria-label="Verification method" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px;">
+                @foreach ($methods as $availableMethod)
+                    <button type="button" data-otp-method="{{ $availableMethod }}" aria-pressed="{{ $availableMethod === $method ? 'true' : 'false' }}" style="padding:10px 12px; border-radius:10px; font-weight:700; font-size:13px; cursor:pointer; border:1.5px solid {{ $availableMethod === $method ? 'var(--terracotta-600)' : 'var(--line)' }}; background:{{ $availableMethod === $method ? 'var(--terracotta-600)' : 'var(--white)' }}; color:{{ $availableMethod === $method ? '#fff' : 'var(--coffee-700)' }};">
+                        {{ $availableMethod === 'sms' ? 'SMS code' : 'Authenticator app' }}
+                    </button>
+                @endforeach
+            </div>
+        @endif
+
         <form id="otpForm" method="POST" action="{{ route('two-factor.verify') }}" data-method="{{ $method }}">
             @csrf
+            <input type="hidden" name="method" id="otpMethod" value="{{ $method }}">
             <div class="field">
-                <label for="code">{{ $method === 'sms' ? 'SMS code' : 'Authentication code' }}</label>
+                <label for="code" id="codeLabel">{{ $method === 'sms' ? 'SMS code' : 'Authentication code' }}</label>
                 <input type="text" id="code" name="code" inputmode="numeric" maxlength="6" placeholder="••••••" autofocus autocomplete="one-time-code">
             </div>
             <button type="submit" class="btn" id="verifyBtn">Verify &amp; sign in</button>
@@ -112,8 +125,8 @@
 
         <div class="alt" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
             <a href="#" id="recoveryToggle">Use a recovery code instead</a>
-            @if ($method === 'sms')
-                <button type="button" id="resendOtpBtn" style="background:none; border:none; color:var(--acacia-600); font-weight:700; cursor:pointer; font-size:13px;">Resend code</button>
+            @if (in_array('sms', $methods, true))
+                <button type="button" id="resendOtpBtn" style="background:none; border:none; color:var(--acacia-600); font-weight:700; cursor:pointer; font-size:13px; display:{{ $method === 'sms' ? '' : 'none' }};">Resend code</button>
             @endif
         </div>
         <div id="resendStatus" style="display:none; margin-top:10px; padding:8px; border-radius:8px; font-size:12px; text-align:center;"></div>
@@ -126,25 +139,60 @@
 
     <script>
         const plain = document.querySelector('#otpForm');
-        const method = plain.dataset.method;
-        const label = document.querySelector('#otpForm label');
+        const methodInput = document.querySelector('#otpMethod');
+        const label = document.querySelector('#codeLabel');
         const input = document.querySelector('#code');
         const btn = document.querySelector('#verifyBtn');
         const toggle = document.querySelector('#recoveryToggle');
+        const resendButton = document.querySelector('#resendOtpBtn');
+        const methodButtons = document.querySelectorAll('[data-otp-method]');
+
+        const currentMethod = () => methodInput.value || plain.dataset.method;
+
+        const paintMethodButtons = () => {
+            methodButtons.forEach(button => {
+                const selected = button.dataset.otpMethod === currentMethod();
+                button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                button.style.borderColor = selected ? 'var(--terracotta-600)' : 'var(--line)';
+                button.style.background = selected ? 'var(--terracotta-600)' : 'var(--white)';
+                button.style.color = selected ? '#fff' : 'var(--coffee-700)';
+            });
+        };
+
+        const applyMethod = (next) => {
+            methodInput.value = next;
+            plain.dataset.method = next;
+            label.textContent = next === 'sms' ? 'SMS code' : 'Authentication code';
+            toggle.textContent = next === 'sms' ? 'Use a recovery code instead' : 'Use a recovery code instead';
+            if (resendButton) resendButton.style.display = next === 'sms' ? '' : 'none';
+            paintMethodButtons();
+        };
+
+        methodButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                input.value = '';
+                input.maxLength = 6;
+                input.inputMode = 'numeric';
+                input.placeholder = '••••••';
+                applyMethod(button.dataset.otpMethod);
+                input.focus();
+            });
+        });
 
         toggle.addEventListener('click', function (e) {
             e.preventDefault();
             const isRecovery = this.textContent.includes('recovery code');
             if (isRecovery) {
-                this.textContent = 'Use an authenticator code instead';
+                this.textContent = 'Use a verification code instead';
                 label.textContent = 'Recovery code';
                 input.placeholder = 'XXXX-XXXX-XXXX-XXXX';
                 input.maxLength = 20;
                 input.inputMode = '';
                 input.value = '';
             } else {
-                this.textContent = method === 'sms' ? 'Use an SMS code instead' : 'Use an authenticator code instead';
-                label.textContent = method === 'sms' ? 'SMS code' : 'Authentication code';
+                this.textContent = 'Use a recovery code instead';
+                label.textContent = currentMethod() === 'sms' ? 'SMS code' : 'Authentication code';
+                applyMethod(currentMethod());
                 input.placeholder = '••••••';
                 input.maxLength = 6;
                 input.inputMode = 'numeric';
@@ -169,8 +217,8 @@
             btn.textContent = 'Verifying…';
         });
 
-        @if ($method === 'sms')
-        document.getElementById('resendOtpBtn').addEventListener('click', async () => {
+        @if (in_array('sms', $methods, true))
+        document.getElementById('resendOtpBtn')?.addEventListener('click', async () => {
             const btn2 = document.getElementById('resendOtpBtn');
             const status = document.getElementById('resendStatus');
             btn2.disabled = true;

@@ -128,6 +128,37 @@
 
     <div class="panel">
         <div class="panel-head">
+            <h3>Mobile number verification</h3>
+            @if (! $user->phone)
+                <span class="tag tag-gold">No number</span>
+            @elseif ($user->phone_verified_at)
+                <span class="tag tag-green">Verified</span>
+            @else
+                <span class="tag tag-gold">Unverified</span>
+            @endif
+        </div>
+        <div class="panel-body">
+            @if (! $user->phone)
+                <p style="margin:0;color:var(--ink-soft);font-size:13px;line-height:1.6;">Add a mobile number in <a href="{{ route('profile.edit') }}">Edit profile</a> before requesting a verification code.</p>
+            @elseif ($user->phone_verified_at)
+                <p style="margin:0;color:var(--ink-soft);font-size:13px;line-height:1.6;">{{ $user->phone }} was verified on {{ $user->phone_verified_at->format('d M Y H:i') }}. Changing the number will require verification again.</p>
+            @else
+                <p style="margin:0 0 14px;color:var(--ink-soft);font-size:13px;line-height:1.6;">A code will be sent to <strong>{{ $user->phone }}</strong>. Verify the number before selecting SMS OTP as a sign-in method.</p>
+                <form method="POST" action="{{ route('account.phone.verification.store') }}" data-phone-verification-form style="margin-bottom:16px;">
+                    @csrf
+                    <button type="submit" class="btn btn-ghost">Send verification code</button>
+                </form>
+                <form method="POST" action="{{ route('account.phone.verify') }}" data-phone-verify-form>
+                    @csrf
+                    <div class="field"><label>Verification code</label><input type="text" name="code" inputmode="numeric" maxlength="6" placeholder="6-digit code" required autocomplete="one-time-code"></div>
+                    <button type="submit" class="btn btn-primary">Verify mobile number</button>
+                </form>
+            @endif
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
             <h3>Active sessions</h3>
             <span class="link">{{ $sessions->count() }} other {{ $sessions->count() === 1 ? 'device' : 'devices' }}</span>
         </div>
@@ -427,6 +458,20 @@
                         setTimeout(() => showRecoveryCodes(data.recovery_codes), 150);
                     }
                 } });
+            });
+        });
+
+        document.querySelectorAll('[data-phone-verification-form]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitForm(form, { method: 'POST' });
+            });
+        });
+
+        document.querySelectorAll('[data-phone-verify-form]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitForm(form, { method: 'POST', done: () => setTimeout(() => location.reload(), 600) });
             });
         });
 

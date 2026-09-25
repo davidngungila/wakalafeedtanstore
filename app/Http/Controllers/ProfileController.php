@@ -67,6 +67,10 @@ class ProfileController extends Controller
 
         $user->update($validated);
 
+        if ($user->wasChanged('phone')) {
+            $user->forceFill(['phone_verified_at' => null])->save();
+        }
+
         $this->recordAudit('Profile updated', 'User', $user->id);
 
         if ($request->expectsJson()) {

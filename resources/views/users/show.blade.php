@@ -25,6 +25,7 @@
                     <div class="detail-item"><div class="dk">Full name</div><div class="dv">{{ $user->name }}</div></div>
                     <div class="detail-item"><div class="dk">Email</div><div class="dv">{{ $user->email }}</div></div>
                     <div class="detail-item"><div class="dk">Phone</div><div class="dv">{{ $user->phone ?? '—' }}</div></div>
+                    <div class="detail-item"><div class="dk">Phone verification</div><div class="dv">{{ $user->phone_verified_at ? 'Verified '.$user->phone_verified_at->format('d M Y H:i') : 'Unverified' }}</div></div>
                     <div class="detail-item"><div class="dk">Role</div><div class="dv">{{ ucfirst($user->role) }}</div></div>
                     <div class="detail-item"><div class="dk">Cash Point</div><div class="dv">{{ $user->agent?->name ?? '—' }} @if($user->agent) ({{ $user->agent->code }}) @endif</div></div>
                     <div class="detail-item"><div class="dk">Status</div><div class="dv">{{ $user->is_active ? 'Active' : 'Disabled' }}</div></div>
@@ -41,7 +42,7 @@
                     <div class="detail-item"><div class="dk">Member since</div><div class="dv">{{ $user->created_at->format('d M Y H:i') }}</div></div>
                     <div class="detail-item"><div class="dk">Last login</div><div class="dv">{{ $user->last_login_at?->format('d M Y H:i') ?? 'Never' }}</div></div>
                     <div class="detail-item"><div class="dk">Updated at</div><div class="dv">{{ $user->updated_at->format('d M Y H:i') }}</div></div>
-                    <div class="detail-item"><div class="dk">Two-factor</div><div class="dv">{{ $user->two_factor_enabled ? 'Enabled' : 'Disabled' }}</div></div>
+                    <div class="detail-item"><div class="dk">Two-factor</div><div class="dv">{{ $methodLabels !== [] ? implode(' + ', $methodLabels) : 'Disabled' }}</div></div>
                 </div>
             </div>
         </div>

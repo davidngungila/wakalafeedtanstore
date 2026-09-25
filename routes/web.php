@@ -16,6 +16,7 @@ use App\Http\Controllers\GeneralLedgerController;
 use App\Http\Controllers\JournalEntryController;
 use App\Http\Controllers\NetworkController;
 use App\Http\Controllers\OutboundSmsController;
+use App\Http\Controllers\PhoneVerificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReconciliationController;
 use App\Http\Controllers\ReportController;
@@ -65,6 +66,12 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::post('/account/two-factor/disable', [AccountController::class, 'disableTwoFactor'])->name('account.two-factor.disable');
     Route::post('/account/two-factor/method', [AccountController::class, 'updateTwoFactorMethod'])->name('account.two-factor.method');
     Route::post('/account/two-factor/enable-sms', [AccountController::class, 'enableSmsTwoFactor'])->name('account.two-factor.enable-sms');
+    Route::post('/account/phone/verification', [PhoneVerificationController::class, 'store'])
+        ->middleware('throttle:5,1')
+        ->name('account.phone.verification.store');
+    Route::post('/account/phone/verify', [PhoneVerificationController::class, 'verify'])
+        ->middleware('throttle:10,1')
+        ->name('account.phone.verify');
     Route::post('/account/recovery-codes', [AccountController::class, 'refreshRecoveryCodes'])->name('account.recovery-codes');
     Route::delete('/account/sessions/{session}', [AccountController::class, 'revokeSession'])->name('account.sessions.destroy');
 

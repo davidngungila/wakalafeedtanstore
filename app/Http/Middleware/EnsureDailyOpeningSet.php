@@ -47,6 +47,8 @@ class EnsureDailyOpeningSet
             'account.two-factor.disable',
             'account.two-factor.method',
             'account.two-factor.enable-sms',
+            'account.phone.verification.store',
+            'account.phone.verify',
             'account.recovery-codes',
             'account.sessions.destroy',
             'avatar.show',

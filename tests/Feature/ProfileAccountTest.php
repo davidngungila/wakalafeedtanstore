@@ -108,6 +108,22 @@ class ProfileAccountTest extends TestCase
         ]);
     }
 
+    public function test_profile_phone_change_resets_its_verification(): void
+    {
+        $user = $this->user();
+        $user->forceFill(['phone_verified_at' => now()])->save();
+
+        $this->actingAs($user)
+            ->put(route('profile.update'), [
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => '0712345679',
+            ], ['Accept' => 'application/json'])
+            ->assertJson(['success' => true]);
+
+        $this->assertNull($user->fresh()->phone_verified_at);
+    }
+
     public function test_profile_update_uploads_avatar(): void
     {
         Storage::fake('public');

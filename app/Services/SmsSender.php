@@ -93,6 +93,16 @@ class SmsSender
         );
     }
 
+    public function sendVerificationCode(string $phone, string $code): Response
+    {
+        return $this->sendSingle(
+            $phone,
+            "Your Wakala Feedtan Store verification code is {$code}. It expires in 5 minutes.",
+            0,
+            'verify-'.Str::lower(Str::random(12)),
+        );
+    }
+
     public function normalizeRecipient(string $phone): string
     {
         $phone = preg_replace('/[\s().-]+/', '', trim($phone)) ?? trim($phone);

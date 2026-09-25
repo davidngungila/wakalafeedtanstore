@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Agent;
 use App\Models\User;
 use App\Services\ExportService;
+use App\Services\SmsSender;
 use App\Support\SessionFormatter;
+use App\Support\TwoFactorMethods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +17,7 @@ use Illuminate\View\View;
 
 class UserController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request, SmsSender $sender): View
     {
         $query = User::with('agent');
 
@@ -26,11 +28,12 @@ class UserController extends Controller
         $users = $query->orderByDesc('is_active')->orderBy('created_at')->get();
 
         $agents = Agent::where('status', 'active')->orderBy('name')->get(['id', 'name', 'code']);
+        $methodLabels = $users->mapWithKeys(fn (User $user): array => [$user->getKey() => self::twoFactorLabels($user, $sender)])->all();
 
         $exportColumns = $this->exportColumns();
         $exportRoute = route('users.export');
 
-        return view('users.index', compact('users', 'agents', 'exportColumns', 'exportRoute') + ['activeRole' => $request->input('role', 'all')]);
+        return view('users.index', compact('users', 'agents', 'exportColumns', 'exportRoute', 'methodLabels') + ['activeRole' => $request->input('role', 'all')]);
     }
 
     public function sessions(Request $request): View
@@ -64,7 +67,7 @@ class UserController extends Controller
         return view('users.sessions', compact('sessions', 'sessionLifetime'));
     }
 
-    public function export(Request $request, ExportService $export)
+    public function export(Request $request, ExportService $export, SmsSender $sender)
     {
         $query = User::with('agent');
 
@@ -76,15 +79,21 @@ class UserController extends Controller
         $columns = $export->resolveColumns($available, $request->input('columns'));
         $format = in_array($request->input('format', 'pdf'), ['pdf', 'excel'], true) ? $request->input('format') : 'pdf';
 
-        $rows = $query->orderBy('created_at')->get()->map(fn (User $u) => [
-            'name' => $u->name,
-            'email' => $u->email,
-            'phone' => $u->phone ?? '—',
-            'role' => ucfirst($u->role),
-            'agent' => $u->agent?->name ?? '—',
-            'status' => $u->is_active ? 'Active' : 'Inactive',
-            'joined' => $u->created_at->format('d M Y'),
-        ])->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
+        $rows = $query->orderBy('created_at')->get()->map(function (User $u) use ($sender): array {
+            $labels = self::twoFactorLabels($u, $sender);
+
+            return [
+                'name' => $u->name,
+                'email' => $u->email,
+                'phone' => $u->phone ?? '—',
+                'phone_verified' => $u->phone_verified_at?->format('d M Y') ?? 'No',
+                'two_factor' => $labels !== [] ? implode(' + ', $labels) : 'Off',
+                'role' => ucfirst($u->role),
+                'agent' => $u->agent?->name ?? '—',
+                'status' => $u->is_active ? 'Active' : 'Inactive',
+                'joined' => $u->created_at->format('d M Y'),
+            ];
+        })->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
 
         $title = 'Users Report';
         $subtitle = 'Generated '.now()->format('d M Y H:i').' — '.$rows->count().' records';
@@ -96,12 +105,28 @@ class UserController extends Controller
         return $export->pdf($title, $subtitle, $columns, $rows);
     }
 
+    /**
+     * @return array<int, string>
+     */
+    private static function twoFactorLabels(User $user, SmsSender $sender): array
+    {
+        $methods = TwoFactorMethods::available($user, $sender);
+        $default = TwoFactorMethods::default($methods, $user->two_factor_method);
+
+        return array_map(
+            static fn (string $method): string => ($method === 'sms' ? 'SMS' : 'App').($method === $default ? ' · default' : ''),
+            $methods
+        );
+    }
+
     private function exportColumns(): array
     {
         return [
             ['key' => 'name', 'label' => 'Name'],
             ['key' => 'email', 'label' => 'Email'],
             ['key' => 'phone', 'label' => 'Phone'],
+            ['key' => 'phone_verified', 'label' => 'Phone verified'],
+            ['key' => 'two_factor', 'label' => 'Two-factor'],
             ['key' => 'role', 'label' => 'Role'],
             ['key' => 'agent', 'label' => 'Agent'],
             ['key' => 'status', 'label' => 'Status'],
@@ -161,6 +186,10 @@ class UserController extends Controller
 
         $user->update($validated);
 
+        if ($user->wasChanged('phone')) {
+            $user->forceFill(['phone_verified_at' => null])->save();
+        }
+
         $this->recordAudit('User account updated', 'User', $user->id, ['email' => $user->email]);
 
         if ($request->expectsJson()) {
@@ -170,11 +199,12 @@ class UserController extends Controller
         return back()->with('status', 'User account updated successfully.');
     }
 
-    public function show(User $user): View
+    public function show(User $user, SmsSender $sender): View
     {
         $user->load('agent');
+        $methodLabels = self::twoFactorLabels($user, $sender);
 
-        return view('users.show', compact('user'));
+        return view('users.show', compact('user', 'methodLabels'));
     }
 
     public function edit(User $user): View

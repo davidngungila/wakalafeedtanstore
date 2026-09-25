@@ -42,6 +42,7 @@
                         <th>Role</th>
                         <th>Cash point</th>
                         <th>Phone</th>
+                        <th>Two-factor</th>
                         <th>Status</th>
                         <th>Last login</th>
                         <th></th>
@@ -68,7 +69,19 @@
                                 <div class="cell-title">{{ $user->agent?->name ?? '—' }}</div>
                                 <div class="cell-sub">{{ $user->agent?->code ?? '' }}</div>
                             </td>
-                            <td>{{ $user->phone ?? '—' }}</td>
+                            <td>
+                                <div class="cell-title">{{ $user->phone ?? '—' }}</div>
+                                <div class="cell-sub">{{ $user->phone_verified_at ? 'Verified '.$user->phone_verified_at->format('d M Y') : 'Unverified' }}</div>
+                            </td>
+                            <td>
+                                @if (($methodLabels[$user->id] ?? []) === [])
+                                    <span class="cell-sub">Off</span>
+                                @else
+                                    @foreach (($methodLabels[$user->id] ?? []) as $label)
+                                        <span class="tag {{ str_contains($label, 'default') ? 'tag-green' : 'tag-grey' }}" style="margin:1px 2px 1px 0;">{{ $label }}</span>
+                                    @endforeach
+                                @endif
+                            </td>
                             <td><span class="tag {{ $user->is_active ? 'tag-green' : 'tag-grey' }}">{{ $user->is_active ? 'Active' : 'Disabled' }}</span></td>
                             <td class="cell-sub">{{ $user->last_login_at?->format('d M Y H:i') ?? 'Never' }}</td>
                             <td>
@@ -86,7 +99,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="empty-state"><h4>No users found</h4><p>Add your first team member.</p></td></tr>
+                        <tr><td colspan="8" class="empty-state"><h4>No users found</h4><p>Add your first team member.</p></td></tr>
                     @endforelse
                 </tbody>
             </table>
