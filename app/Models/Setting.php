@@ -5,13 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
-#[Fillable(['key', 'value'])]
+#[Fillable(['key', 'value', 'sms_authorization_token'])]
 class Setting extends Model
 {
+    protected $hidden = [
+        'sms_authorization_token',
+    ];
+
     protected function casts(): array
     {
         return [
             'value' => 'array',
+            'sms_authorization_token' => 'encrypted',
         ];
     }
 

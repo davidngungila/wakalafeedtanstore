@@ -15,6 +15,7 @@ use App\Http\Controllers\FloatController;
 use App\Http\Controllers\GeneralLedgerController;
 use App\Http\Controllers\JournalEntryController;
 use App\Http\Controllers\NetworkController;
+use App\Http\Controllers\OutboundSmsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReconciliationController;
 use App\Http\Controllers\ReportController;
@@ -199,7 +200,14 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
         Route::get('/settings/notifications', [SettingController::class, 'notifications'])->name('settings.notifications');
         Route::get('/settings/cash-point', [SettingController::class, 'cashPoint'])->name('settings.cash-point');
         Route::get('/settings/email', [SettingController::class, 'email'])->name('settings.email');
+        Route::get('/settings/sms', [SettingController::class, 'sms'])->name('settings.sms');
         Route::post('/settings', [SettingController::class, 'store'])->name('settings.store');
+        Route::post('/settings/sms/send', [OutboundSmsController::class, 'single'])
+            ->middleware('throttle:10,1')
+            ->name('settings.sms.send');
+        Route::post('/settings/sms/send-bulk', [OutboundSmsController::class, 'bulk'])
+            ->middleware('throttle:10,1')
+            ->name('settings.sms.send-bulk');
         Route::get('/settings/email/test', [SettingController::class, 'showTestEmail'])->name('settings.email.test.page');
         Route::post('/settings/email/test', [SettingController::class, 'sendTestEmail'])->name('settings.email.test');
     });

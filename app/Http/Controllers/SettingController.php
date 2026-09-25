@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class SettingController extends Controller
@@ -45,12 +46,19 @@ class SettingController extends Controller
         return $this->settingsView('email');
     }
 
+    public function sms(): View
+    {
+        return $this->settingsView('sms');
+    }
+
     private function settingsView(string $section): View
     {
         $settings = Setting::all()->pluck('value', 'key');
+        $smsSetting = Setting::where('key', 'sms')->first();
+        $smsConfigured = filled($smsSetting?->sms_authorization_token);
         $agent = cash_point();
 
-        return view('settings.index', compact('section', 'settings', 'agent'));
+        return view('settings.index', compact('section', 'settings', 'agent', 'smsConfigured'));
     }
 
     private function legacySectionRoute(mixed $section): string
@@ -61,12 +69,14 @@ class SettingController extends Controller
             'notifications' => 'settings.notifications',
             'cashpoint' => 'settings.cash-point',
             'email' => 'settings.email',
+            'sms' => 'settings.sms',
             default => 'settings.index',
         };
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse
     {
+        $hasSmsAuthorizationToken = Setting::where('key', 'sms')->whereNotNull('sms_authorization_token')->exists();
         $validated = $request->validate([
             'general' => ['nullable', 'array'],
             'general.business_name' => ['nullable', 'string', 'max:120'],
@@ -94,10 +104,33 @@ class SettingController extends Controller
             'email.otp_via_email' => ['nullable', 'in:0,1'],
             'email.reports_via_email' => ['nullable', 'in:0,1'],
             'email.reports_recipients' => ['nullable', 'string', 'max:500'],
+            'sms' => ['nullable', 'array'],
+            'sms.sender_id' => ['nullable', 'required_with:sms', 'string', 'max:32', 'regex:/^[A-Za-z0-9_-]+$/'],
+            'sms.authorization_token' => [
+                Rule::requiredIf(fn (): bool => $request->has('sms') && ! $hasSmsAuthorizationToken),
+                'nullable',
+                'string',
+                'max:255',
+                'regex:/^(?:Bearer\s+)?\S+$/i',
+            ],
         ]);
 
         foreach ($validated as $group => $values) {
             if (is_array($values) && $values !== []) {
+                if ($group === 'sms') {
+                    $token = $this->normalizeSmsToken($values['authorization_token'] ?? null);
+                    unset($values['authorization_token']);
+
+                    $attributes = ['value' => $values];
+                    if ($token !== null) {
+                        $attributes['sms_authorization_token'] = $token;
+                    }
+
+                    Setting::updateOrCreate(['key' => 'sms'], $attributes);
+
+                    continue;
+                }
+
                 Setting::updateOrCreate(['key' => $group], ['value' => $values]);
             }
         }
@@ -109,6 +142,20 @@ class SettingController extends Controller
         }
 
         return back()->with('status', 'Settings saved successfully.');
+    }
+
+    private function normalizeSmsToken(mixed $token): ?string
+    {
+        if (! is_string($token)) {
+            return null;
+        }
+
+        $token = trim($token);
+        if (preg_match('/^Bearer\s+(.+)$/i', $token, $matches) === 1) {
+            $token = trim($matches[1]);
+        }
+
+        return $token !== '' ? $token : null;
     }
 
     public function showTestEmail(Request $request): View

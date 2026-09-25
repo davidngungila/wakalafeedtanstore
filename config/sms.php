@@ -91,4 +91,13 @@ return [
     | shown as "Offline" on the admin screen.
     */
     'offline_after_minutes' => 10,
+
+    'outbound' => [
+        'base_url' => env('SMS_PROVIDER_BASE_URL', 'https://messaging-service.co.tz'),
+        'single_endpoint' => env('SMS_PROVIDER_SINGLE_ENDPOINT', '/api/sms/v2/text/single'),
+        'multiple_endpoint' => env('SMS_PROVIDER_MULTIPLE_ENDPOINT', '/api/sms/v2/text/multi'),
+        'connect_timeout' => 5,
+        'timeout' => 15,
+        'max_bulk_recipients' => 100,
+    ],
 ];

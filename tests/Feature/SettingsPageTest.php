@@ -20,6 +20,7 @@ class SettingsPageTest extends TestCase
             ['settings.notifications', 'Notification Settings', 'Save notification settings'],
             ['settings.cash-point', 'Cash Point Settings', 'Save cash point'],
             ['settings.email', 'Email Settings', 'Save email settings'],
+            ['settings.sms', 'SMS Settings', 'Save SMS settings'],
         ];
 
         foreach ($pages as [$routeName, $title, $button]) {
@@ -56,6 +57,7 @@ class SettingsPageTest extends TestCase
         $response->assertSee(route('settings.notifications'));
         $response->assertSee(route('settings.cash-point'));
         $response->assertSee(route('settings.email'));
+        $response->assertSee(route('settings.sms'));
     }
 
     public function test_layout_persists_sidebar_state_across_refreshes(): void
@@ -83,6 +85,7 @@ class SettingsPageTest extends TestCase
             'notifications' => route('settings.notifications'),
             'cashpoint' => route('settings.cash-point'),
             'email' => route('settings.email'),
+            'sms' => route('settings.sms'),
         ];
 
         foreach ($legacyRoutes as $pane => $destination) {

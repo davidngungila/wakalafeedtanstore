@@ -10,6 +10,8 @@
         $sec = $settings['security'] ?? [];
         $notif = $settings['notifications'] ?? [];
         $email = $settings['email'] ?? [];
+        $sms = $settings['sms'] ?? [];
+        $smsConfigured = $smsConfigured ?? false;
         $pageTitles = [
             'general' => 'General Settings',
             'commissions' => 'Commission Settings',
@@ -17,6 +19,7 @@
             'notifications' => 'Notification Settings',
             'cash-point' => 'Cash Point Settings',
             'email' => 'Email Settings',
+            'sms' => 'SMS Settings',
         ];
         $pageDescriptions = [
             'general' => 'Manage your business profile and regional defaults.',
@@ -25,6 +28,7 @@
             'notifications' => 'Choose how operational updates are delivered.',
             'cash-point' => 'Manage the cash point identity and operating details.',
             'email' => 'Configure SMTP, email authentication, and report delivery.',
+            'sms' => 'Configure outbound SMS credentials and send test messages.',
         ];
     @endphp
     <div class="view-head">
@@ -202,6 +206,42 @@
                         </div>
                     </div>
                 </div>
+            @elseif ($section === 'sms')
+                <h3>SMS Provider</h3>
+                <p style="font-size:13px; color:var(--ink-soft); margin-bottom:16px;">Save the sender ID and bearer token used for outbound SMS. The token is encrypted and is never displayed after saving.</p>
+                <form method="POST" action="{{ route('settings.store') }}" data-settings-form>
+                    @csrf
+                    <div class="form-row">
+                        <div class="field"><label>Sender ID *</label><input type="text" name="sms[sender_id]" value="{{ $sms['sender_id'] ?? '' }}" required maxlength="32" placeholder="TANZANIATIP" autocomplete="off"></div>
+                        <div class="field"><label>Authorization bearer token{{ $smsConfigured ? ' (configured)' : ' *' }}</label><input type="password" name="sms[authorization_token]" value="" maxlength="255" placeholder="{{ $smsConfigured ? 'Leave blank to keep the current token' : 'Bearer your-provider-token' }}" autocomplete="new-password"></div>
+                    </div>
+                    <p style="font-size:12px; color:var(--ink-soft); margin-bottom:16px;">The token is stored encrypted in the database. Leave it blank when updating the sender ID to keep the existing token.</p>
+                    <button type="submit" class="btn btn-primary">Save SMS settings</button>
+                </form>
+                <div style="margin-top:24px; display:grid; gap:16px;">
+                    <div style="padding:16px; background:var(--sand-50); border:1px solid var(--line); border-radius:10px;">
+                        <strong style="font-size:13px;">Send a single test SMS</strong>
+                        <p style="font-size:12px; color:var(--ink-soft); margin:4px 0 10px;">Uses the saved sender ID and token. Test sends may be charged by the provider.</p>
+                        <form data-sms-test-form method="POST" action="{{ route('settings.sms.send') }}">
+                            @csrf
+                            <div class="form-row">
+                                <div class="field"><label>Phone number *</label><input type="text" name="to" required maxlength="30" placeholder="255716718040" inputmode="tel"></div>
+                                <div class="field"><label>Message *</label><textarea name="text" required maxlength="1000" rows="3" placeholder="Write a test message…"></textarea></div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Send test SMS</button>
+                        </form>
+                    </div>
+                    <div style="padding:16px; background:var(--sand-50); border:1px solid var(--line); border-radius:10px;">
+                        <strong style="font-size:13px;">Send a bulk test SMS</strong>
+                        <p style="font-size:12px; color:var(--ink-soft); margin:4px 0 10px;">Separate up to {{ config('sms.outbound.max_bulk_recipients', 100) }} recipients with commas, spaces, or line breaks. The same message is sent to each recipient.</p>
+                        <form data-sms-test-form method="POST" action="{{ route('settings.sms.send-bulk') }}">
+                            @csrf
+                            <div class="field"><label>Recipients *</label><textarea name="recipients" required rows="2" placeholder="255716718040, 0716718041"></textarea></div>
+                            <div class="field" style="margin-top:12px;"><label>Message *</label><textarea name="text" required maxlength="1000" rows="3" placeholder="Write a test message…"></textarea></div>
+                            <button type="submit" class="btn btn-primary" style="margin-top:12px;">Send bulk test SMS</button>
+                        </form>
+                    </div>
+                </div>
             @elseif ($section === 'notifications')
                 <h3>Notifications</h3>
                 <form method="POST" action="{{ route('settings.store') }}" data-settings-form>
@@ -269,6 +309,13 @@
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
                 submitForm(form, { method: 'POST', done: () => toast('Settings saved successfully.', 'success') });
+            });
+        });
+
+        document.querySelectorAll('[data-sms-test-form]').forEach(form => {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                submitForm(form, { method: 'POST', done: () => form.reset() });
             });
         });
 
