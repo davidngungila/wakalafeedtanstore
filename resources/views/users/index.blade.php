@@ -51,6 +51,7 @@
                 <tbody id="usersBody">
                     @forelse ($users as $user)
                         <tr data-id="{{ $user->id }}" data-name="{{ strtolower($user->name) }}" data-role="{{ $user->role }}"
+                            data-fullname="{{ $user->name }}"
                             data-email="{{ $user->email }}" data-phone="{{ $user->phone ?? '' }}"
                             data-agent="{{ $user->agent?->name ?? '' }}" data-agentcode="{{ $user->agent?->code ?? '' }}"
                             data-active="{{ $user->is_active ? '1' : '0' }}"
@@ -103,6 +104,52 @@
                     @endforelse
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- User details popup -->
+    <div class="modal-backdrop" id="userDetailsModal">
+        <style>
+            #userDetailsModal .detail-list{display:flex;flex-direction:column;gap:8px;}
+            #userDetailsModal .detail-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);}
+            #userDetailsModal .dk{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;flex:none;}
+            #userDetailsModal .dv{font-size:13.5px;color:var(--coffee-900);font-weight:600;text-align:right;word-break:break-word;}
+            #userDetailsModal .user-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start;}
+            #userDetailsModal .user-col{min-width:0;}
+            #userDetailsModal .user-col-title{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:8px;}
+            @media (max-width:640px){
+                #userDetailsModal .user-cols{grid-template-columns:1fr;gap:14px;}
+            }
+        </style>
+        <div class="popup" style="max-width:620px; width:100%; margin:auto;">
+            <div class="modal-head">
+                <h3>User details</h3>
+                <button class="modal-close" onclick="closeModal('userDetailsModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="user-cols">
+                    <div class="user-col">
+                        <div class="user-col-title">Account</div>
+                        <div class="detail-list">
+                            <div class="detail-row"><span class="dk">Name</span><span class="dv" id="userDetailName">—</span></div>
+                            <div class="detail-row"><span class="dk">Email</span><span class="dv" id="userDetailEmail">—</span></div>
+                            <div class="detail-row"><span class="dk">Role</span><span class="dv" id="userDetailRole">—</span></div>
+                            <div class="detail-row"><span class="dk">Status</span><span class="dv" id="userDetailStatus">—</span></div>
+                        </div>
+                    </div>
+                    <div class="user-col">
+                        <div class="user-col-title">Assignment</div>
+                        <div class="detail-list">
+                            <div class="detail-row"><span class="dk">Cash point</span><span class="dv" id="userDetailAgent">—</span></div>
+                            <div class="detail-row"><span class="dk">Phone</span><span class="dv" id="userDetailPhone">—</span></div>
+                            <div class="detail-row"><span class="dk">Last login</span><span class="dv" id="userDetailLastLogin">—</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button type="button" class="btn btn-primary" onclick="closeModal('userDetailsModal')">Close</button>
+            </div>
         </div>
     </div>
 
@@ -286,22 +333,35 @@
             closeModal('confirmModalBackdrop');
         }
 
-        bindRowClick('#usersBody tr[data-id]', tr => {
+        document.querySelectorAll('#usersBody tr[data-id]').forEach(tr => {
+            tr.style.cursor = 'pointer';
+            tr.addEventListener('click', (e) => {
+                if (e.target.closest('a, button, input, select, textarea, label')) return;
+                openUserDetails(tr);
+            });
+        });
+
+        function openUserDetails(tr) {
             const roleTag = tr.dataset.role === 'admin'
                 ? '<span class="tag tag-gold">Admin</span>'
                 : (tr.dataset.role === 'supervisor'
                     ? '<span class="tag tag-green">Supervisor</span>'
                     : '<span class="tag tag-terracotta">Cashier</span>');
-            return [
-                ['Name', tr.dataset.name],
-                ['Email', tr.dataset.email],
-                ['Role', { __html: roleTag }],
-                ['Cash point', tr.dataset.agent ? tr.dataset.agent + ' (' + tr.dataset.agentcode + ')' : '—'],
-                ['Phone', tr.dataset.phone || '—'],
-                ['Status', { __html: tr.dataset.active === '1' ? '<span class="tag tag-green">Active</span>' : '<span class="tag tag-grey">Disabled</span>' }],
-                ['Last login', tr.dataset.lastlogin || 'Never'],
-            ];
-        }, 'User details');
+
+            document.getElementById('userDetailName').textContent = tr.dataset.fullname || tr.dataset.name;
+            document.getElementById('userDetailEmail').textContent = tr.dataset.email || '—';
+            document.getElementById('userDetailRole').innerHTML = roleTag;
+            document.getElementById('userDetailAgent').textContent = tr.dataset.agent
+                ? tr.dataset.agent + ' (' + tr.dataset.agentcode + ')'
+                : '—';
+            document.getElementById('userDetailPhone').textContent = tr.dataset.phone || '—';
+            document.getElementById('userDetailStatus').innerHTML = tr.dataset.active === '1'
+                ? '<span class="tag tag-green">Active</span>'
+                : '<span class="tag tag-grey">Disabled</span>';
+            document.getElementById('userDetailLastLogin').textContent = tr.dataset.lastlogin || 'Never';
+
+            openModal('userDetailsModal');
+        }
 
         document.querySelectorAll('[data-user-form]').forEach(form => {
             form.addEventListener('submit', (e) => {

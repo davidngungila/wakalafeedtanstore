@@ -50,7 +50,7 @@
                             data-useremail="{{ $log->user?->email ?? '' }}"
                             data-action="{{ $log->action }}"
                             data-entity="{{ $log->entity_type ?? '' }}"
-                            data-entityid="{{ $log->entity_id ?? '' }}"
+                            data-entityid="{{ $log->encrypted_entity_id }}"
                             data-ip="{{ $log->ip_address ?? '' }}"
                             data-details="{{ json_encode($log->details ?? []) }}">
                             <td>
@@ -71,7 +71,7 @@
                             </td>
                             <td>
                                 <div class="cell-sub">{{ $log->entity_type ?? '—' }}</div>
-                                <div class="cell-title" style="font-size:12px;">#{{ $log->entity_id ?? '—' }}</div>
+                                <div class="cell-title" style="font-size:12px;" title="{{ $log->encrypted_entity_id }}">#{{ \Illuminate\Support\Str::limit($log->encrypted_entity_id, 12, '') }}</div>
                             </td>
                         </tr>
                     @empty

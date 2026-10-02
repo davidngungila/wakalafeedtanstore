@@ -59,7 +59,12 @@ class AuditLogRenderingTest extends TestCase
             $this->createAuditLog($user, 'Pagination marker '.str_pad((string) $marker, 2, '0', STR_PAD_LEFT), $marker);
         }
 
-        $cell = static fn (int $marker): string => '<div class="cell-title" style="font-size:12px;">#'.$marker.'</div>';
+        $tokens = AuditLog::where('action', 'like', 'Pagination marker%')
+            ->get()
+            ->keyBy('entity_id')
+            ->map(fn (AuditLog $log): string => $log->encrypted_entity_id);
+
+        $cell = static fn (int $marker): string => '<div class="cell-title" style="font-size:12px;" title="'.$tokens[$marker].'">#';
 
         $this->actingAs($user)
             ->get(route('audit.index', ['action' => 'Pagination marker']))
@@ -69,7 +74,9 @@ class AuditLogRenderingTest extends TestCase
             ->assertSee($cell(20), false)
             ->assertDontSee($cell(21), false)
             ->assertSee('page=2', false)
-            ->assertSee('action=Pagination%20marker', false);
+            ->assertSee('action=Pagination%20marker', false)
+            // The raw entity id is never rendered.
+            ->assertDontSee('title="1"', false);
 
         $this->actingAs($user)
             ->get(route('audit.index', ['action' => 'Pagination marker', 'page' => 2]))
