@@ -10,7 +10,7 @@
         </div>
         <div class="view-actions">
             @if (! $dailyOpening->is_closed)
-                <button class="btn btn-primary" onclick="openCloseModal()">{{ $isToday ? 'Close Day' : 'Close ' . $openingDate->format('d M Y') }}</button>
+                <a href="{{ route('daily-opening.close-form', $dailyOpening) }}" class="btn btn-primary">{{ $isToday ? 'Close Day' : 'Close ' . $openingDate->format('d M Y') }}</a>
             @endif
             <a href="{{ route('daily-opening.index') }}" class="btn btn-ghost">History</a>
             @if($isAdmin)
@@ -233,59 +233,6 @@
             </div>
         @endif
     </div>
-
-    <!-- Close Day Modal -->
-    @if (! $dailyOpening->is_closed)
-    <div class="modal-backdrop" id="closeDayModal">
-        <div class="modal" style="max-width:520px;">
-            <div class="modal-head">
-                <h3>Close Day</h3>
-                <button class="modal-close" onclick="closeModal('closeDayModal')">✕</button>
-            </div>
-            <form id="closeDayForm" method="POST" action="{{ route('daily-opening.close', $dailyOpening) }}">
-                @csrf
-                <div class="modal-body">
-                    <p style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px;">Enter the actual counted cash and float balances at end of day.</p>
-
-                    <div class="field">
-                        <label>Closing Cash (TZS)</label>
-                        <input type="number" name="cash_closing" step="any" min="0" required placeholder="e.g. 750000">
-                        <p style="font-size:12px;color:var(--ink-soft);margin-top:4px;">System cash: <strong>@money($cashCurrent)</strong> | Expected: <strong>@money($expectedClosingCash)</strong></p>
-                    </div>
-
-                    <div class="activity-list" style="max-height:300px;overflow-y:auto;margin:16px 0;">
-                        @foreach ($networks as $network)
-                            @php
-                                $currentFloat = $currentBalances[$network->id]->balance ?? 0;
-                            @endphp
-                            <div class="activity-row" style="align-items:center;">
-                                <div class="activity-ico" style="background:{{ $network->color }}22;color:{{ $network->color }};">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
-                                </div>
-                                <div class="activity-text" style="flex:1;min-width:0;">
-                                    <b>{{ $network->name }}</b>
-                                    <div class="activity-time">System: <strong>@money($currentFloat)</strong></div>
-                                </div>
-                                <div class="field" style="min-width:180px;margin:0;">
-                                    <input type="number" name="float_closings[{{ $network->id }}]" step="any" min="0" value="{{ $currentFloat }}" required style="width:100%;">
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-
-                    <div class="field">
-                        <label>Notes (optional)</label>
-                        <textarea name="notes" rows="2" placeholder="Variance notes...">{{ $dailyOpening->notes }}</textarea>
-                    </div>
-                </div>
-                <div class="modal-foot">
-                    <button type="button" class="btn btn-ghost" onclick="closeModal('closeDayModal')">Cancel</button>
-                    <button type="submit" class="btn btn-danger">Close Day</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    @endif
 @endsection
 
 @section('scripts')
@@ -335,11 +282,5 @@
             ];
         }, 'Transaction details');
 
-        function openCloseModal() { openModal('closeDayModal'); }
-
-        document.getElementById('closeDayForm')?.addEventListener('submit', (e) => {
-            e.preventDefault();
-            submitForm(e.target, { method: 'PUT', done: () => setTimeout(() => location.reload(), 600) });
-        });
-    </script>
+        </script>
 @endsection

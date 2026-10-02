@@ -361,6 +361,7 @@ class ReconciliationController extends Controller
                 'withdrawals' => $row['withdrawals'],
                 'float_topups' => $row['float_topups'] ?? 0,
                 'bank_ins' => $row['bank_ins'] ?? 0,
+                'commission_received' => $row['commission_received'] ?? 0,
                 'expected' => $row['expected'],
                 'system' => $row['expected'],
                 'counted' => $counted,
@@ -566,6 +567,7 @@ class ReconciliationController extends Controller
                     'withdrawals' => round((float) ($row['withdrawals'] ?? 0), 2),
                     'float_topups' => round((float) ($row['float_topups'] ?? 0), 2),
                     'bank_ins' => round((float) ($row['bank_ins'] ?? 0), 2),
+                    'commission_received' => round((float) ($row['commission_received'] ?? 0), 2),
                     'expected' => $expected,
                     'system' => $expected,
                     'counted' => $counted,
@@ -951,6 +953,9 @@ class ReconciliationController extends Controller
      *         opening: float,
      *         deposits: float,
      *         withdrawals: float,
+     *         float_topups: float,
+     *         bank_ins: float,
+     *         commission_received: float,
      *         expected: float,
      *     }>,
      * }
@@ -994,6 +999,13 @@ class ReconciliationController extends Controller
             ->groupBy('network_id')
             ->map(fn ($group): float => (float) $group->sum('amount'));
 
+        // Commission payouts are already counted inside float_topups (each one also writes a dual
+        // float_topup FloatTransaction). Broken out here for visibility only — never added to expected.
+        $commissionByNetwork = $transactions
+            ->where('type', 'commission_income')
+            ->groupBy('network_id')
+            ->map(fn ($group): float => (float) $group->sum('amount'));
+
         // FloatTransaction top-ups for that date (e.g. 3×1M on 2026-09-21) — float is bank-replenished, must be added to expected
         $floatTransactions = FloatTransaction::where('agent_id', $agent->id)
             ->whereBetween('created_at', [$windowStart, $windowEnd])
@@ -1008,7 +1020,7 @@ class ReconciliationController extends Controller
         $prevDateForFloat = Carbon::parse($date)->subDay()->toDateString();
         $prevReconciliationForFloat = $agent->reconciliations()->where('reconciliation_date', $prevDateForFloat)->latest()->first();
 
-        $rows = $networks->map(function (Network $network) use ($dailyOpening, $balances, $depositsByNetwork, $withdrawalsByNetwork, $floatTopupsByNetwork, $bankToWalletByNetwork, $floatTxTopupsByNetwork, $prevReconciliationForFloat): array {
+        $rows = $networks->map(function (Network $network) use ($dailyOpening, $balances, $depositsByNetwork, $withdrawalsByNetwork, $floatTopupsByNetwork, $bankToWalletByNetwork, $commissionByNetwork, $floatTxTopupsByNetwork, $prevReconciliationForFloat): array {
             $balance = $balances->get($network->id);
 
             // Direct search for previous day Counted to avoid id/name map mismatches (Vodacom 0 vs HaloPesa 1,086,000)
@@ -1046,6 +1058,7 @@ class ReconciliationController extends Controller
             $withdrawals = (float) ($withdrawalsByNetwork[$network->id] ?? 0);
             $floatTopups = (float) ($floatTopupsByNetwork[$network->id] ?? 0) + (float) ($floatTxTopupsByNetwork[$network->id] ?? 0);
             $bankIns = (float) ($bankToWalletByNetwork[$network->id] ?? 0);
+            $commissionReceived = (float) ($commissionByNetwork[$network->id] ?? 0);
 
             // Float expected: opening - deposits + withdrawals + float top-ups + bank in
             $expected = round($opening - $deposits + $withdrawals + $floatTopups + $bankIns, 2);
@@ -1059,6 +1072,7 @@ class ReconciliationController extends Controller
                 'withdrawals' => $withdrawals,
                 'float_topups' => $floatTopups,
                 'bank_ins' => $bankIns,
+                'commission_received' => $commissionReceived,
                 'expected' => $expected,
             ];
         })->values()->all();
@@ -1184,6 +1198,7 @@ class ReconciliationController extends Controller
                 'withdrawals' => $withdrawals,
                 'float_topups' => $floatTopups,
                 'bank_ins' => $bankIns,
+                'commission_received' => (float) ($row['commission_received'] ?? 0),
                 'expected' => $expected,
                 'counted' => $counted,
                 'variance' => round($counted - $expected, 2),

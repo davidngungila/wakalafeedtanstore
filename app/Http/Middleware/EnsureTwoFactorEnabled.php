@@ -2,18 +2,17 @@
 
 namespace App\Http\Middleware;
 
-use App\Services\SmsSender;
-use App\Support\TwoFactorMethods;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureTwoFactorEnabled
 {
-    public function __construct(private SmsSender $sender) {}
-
     /**
      * Handle an incoming request.
+     *
+     * Only accounts that never set two-factor up are held here. A misconfigured
+     * account is routed to setup at login by AuthController::completeLogin().
      *
      * @param  Closure(Request): (Response)  $next
      */
@@ -21,13 +20,7 @@ class EnsureTwoFactorEnabled
     {
         $user = $request->user();
 
-        if (! $user) {
-            return $next($request);
-        }
-
-        $issue = TwoFactorMethods::setupIssue($user, $this->sender);
-
-        if ($issue === null) {
+        if (! $user || $user->two_factor_enabled) {
             return $next($request);
         }
 
@@ -56,9 +49,7 @@ class EnsureTwoFactorEnabled
             return $next($request);
         }
 
-        $message = $issue === 'misconfigured'
-            ? 'Your two-factor authentication is misconfigured. Set it up again before proceeding.'
-            : 'Set up two-factor authentication before proceeding.';
+        $message = 'Set up two-factor authentication before proceeding.';
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -66,11 +57,10 @@ class EnsureTwoFactorEnabled
                 'message' => $message,
                 'redirect' => route('account.index'),
                 'two_factor_required' => true,
-                'two_factor_issue' => $issue,
             ], 422);
         }
 
         return redirect()->route('account.index')
-            ->with('two_factor_alert', ['issue' => $issue, 'message' => $message]);
+            ->with('two_factor_alert', ['issue' => 'missing', 'message' => $message]);
     }
 }

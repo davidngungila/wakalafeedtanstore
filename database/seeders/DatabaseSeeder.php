@@ -117,6 +117,8 @@ class DatabaseSeeder extends Seeder
                     'is_active' => true,
                     'two_factor_secret' => Crypt::encryptString($secret),
                     'two_factor_enabled' => true,
+                    'two_factor_method' => 'app',
+                    'two_factor_app_enabled' => true,
                     'two_factor_recovery_codes' => array_map(
                         static fn (string $code): string => TwoFactor::hashRecoveryCode($code),
                         TwoFactor::generateRecoveryCodes(),

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Agent;
 use App\Models\DailyOpening;
 use App\Models\FloatTransaction;
 use App\Models\Network;
@@ -148,12 +149,55 @@ class DailyOpeningController extends Controller
             abort(403);
         }
 
+        $summary = $this->closingSummary($dailyOpening, $agent);
+
         $openingDate = $dailyOpening->opening_date;
         $isToday = $openingDate->isSameDay(today());
         $isAdmin = is_admin();
 
-        $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
-        $currentBalances = $agent->balances()->with('network')->get()->keyBy('network_id');
+        return view('daily_opening.show', array_merge($summary, compact(
+            'dailyOpening',
+            'agent',
+            'openingDate',
+            'isToday',
+            'isAdmin',
+        )));
+    }
+
+    /**
+     * Dedicated closing page: expected against counted cash and float for the day.
+     */
+    public function closeForm(DailyOpening $dailyOpening): View|RedirectResponse
+    {
+        $agent = cash_point();
+
+        if ($agent === null || $dailyOpening->agent_id !== $agent->id) {
+            abort(403);
+        }
+
+        if ($dailyOpening->is_closed) {
+            return redirect()->route('daily-opening.show', $dailyOpening)
+                ->with('status', 'This day is already closed.');
+        }
+
+        $summary = $this->closingSummary($dailyOpening, $agent);
+
+        return view('daily_opening.close', array_merge($summary, [
+            'dailyOpening' => $dailyOpening,
+            'agent' => $agent,
+            'isAdmin' => is_admin(),
+            'hasUnapprovedReconciliation' => $this->unapprovedReconciliationExists($agent->id),
+        ]));
+    }
+
+    /**
+     * Every figure needed to describe the closing position of a day.
+     *
+     * @return array<string, mixed>
+     */
+    private function closingSummary(DailyOpening $dailyOpening, Agent $agent): array
+    {
+        $openingDate = $dailyOpening->opening_date;
 
         $todayTransactions = Transaction::where('agent_id', $agent->id)
             ->whereDate('created_at', $openingDate)
@@ -184,7 +228,6 @@ class DailyOpeningController extends Controller
         } elseif ($floatCashDelta < 0) {
             $todayWithdrawals += abs($floatCashDelta);
         }
-        $todayFees = (float) $todayTransactions->sum('fee');
 
         $todayVolume = (float) $todayTransactions->sum('amount');
         $todayCommission = (float) $todayTransactions->sum('commission');
@@ -208,34 +251,22 @@ class DailyOpeningController extends Controller
 
         $expectedClosingCash = ((float) $dailyOpening->cash_opening) + $todayDeposits - $todayWithdrawals + $todayCommission;
 
-        $cashCurrent = $agent->cash_balance;
-        $floatCurrent = $agent->totalFloat();
-
-        $openingDate = $dailyOpening->opening_date;
-        $isToday = $openingDate->isSameDay(today());
-        $isAdmin = is_admin();
-
-        return view('daily_opening.show', compact(
-            'dailyOpening',
-            'agent',
-            'networks',
-            'currentBalances',
-            'todayVolume',
-            'todayCommission',
-            'todayCount',
-            'todayDeposits',
-            'todayWithdrawals',
-            'todayFees',
-            'expectedClosingCash',
-            'cashCurrent',
-            'floatCurrent',
-            'todayTransactions',
-            'todayFloatTransactions',
-            'reconciliationForDay',
-            'openingDate',
-            'isToday',
-            'isAdmin',
-        ));
+        return [
+            'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
+            'currentBalances' => $agent->balances()->with('network')->get()->keyBy('network_id'),
+            'todayTransactions' => $todayTransactions,
+            'todayFloatTransactions' => $todayFloatTransactions,
+            'reconciliationForDay' => $reconciliationForDay,
+            'todayVolume' => $todayVolume,
+            'todayCommission' => $todayCommission,
+            'todayCount' => $todayCount,
+            'todayDeposits' => $todayDeposits,
+            'todayWithdrawals' => $todayWithdrawals,
+            'todayFees' => (float) $todayTransactions->sum('fee'),
+            'expectedClosingCash' => $expectedClosingCash,
+            'cashCurrent' => $agent->cash_balance,
+            'floatCurrent' => $agent->totalFloat(),
+        ];
     }
 
     public function close(Request $request, DailyOpening $dailyOpening): JsonResponse|RedirectResponse
@@ -260,12 +291,6 @@ class DailyOpeningController extends Controller
             return back()->with('error', $message);
         }
 
-        \Log::info('Close day request data', [
-            'all' => $request->all(),
-            'content_type' => $request->header('Content-Type'),
-            'method' => $request->method(),
-        ]);
-
         $validated = $request->validate([
             'cash_closing' => ['required', 'numeric', 'min:0'],
             'float_closings' => ['required', 'array'],
@@ -273,18 +298,32 @@ class DailyOpeningController extends Controller
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $todayTransactions = Transaction::where('agent_id', $agent->id)
-            ->whereDate('created_at', $dailyOpening->opening_date)
-            ->where('status', 'completed')
-            ->get();
+        $networks = Network::orderBy('name')->get(['id', 'name']);
+        $counted = collect($validated['float_closings'])->map(fn ($amount): float => (float) $amount);
+        $missing = $networks->reject(fn (Network $network): bool => $counted->has($network->id));
+
+        if ($missing->isNotEmpty()) {
+            return $this->closeFailed(
+                $request,
+                'Count the float for every network before closing. Missing: '.$missing->pluck('name')->implode(', ').'.'
+            );
+        }
+
+        $summary = $this->closingSummary($dailyOpening, $agent);
+
+        $cashVariance = round((float) $validated['cash_closing'] - (float) $summary['expectedClosingCash'], 2);
+
+        if (abs($cashVariance) >= 0.005 && blank($validated['notes'] ?? null)) {
+            return $this->closeFailed($request, 'Add a note explaining the cash variance of '.money($cashVariance).' before closing the day.');
+        }
 
         $dailyOpening->update([
             'is_closed' => true,
             'cash_closing' => $validated['cash_closing'],
             'float_closings' => $validated['float_closings'],
-            'total_volume' => $todayTransactions->sum('amount'),
-            'total_commission' => $todayTransactions->sum('commission'),
-            'total_transactions' => $todayTransactions->count(),
+            'total_volume' => $summary['todayVolume'],
+            'total_commission' => $summary['todayCommission'],
+            'total_transactions' => $summary['todayCount'],
             'closed_at' => now(),
             'notes' => $validated['notes'] ?? $dailyOpening->notes,
         ]);
@@ -301,14 +340,28 @@ class DailyOpeningController extends Controller
 
         $this->recordAudit('Daily closing recorded', 'DailyOpening', $dailyOpening->id, [
             'cash_closing' => $validated['cash_closing'],
+            'cash_variance' => $cashVariance,
             'float_total_closing' => array_sum($validated['float_closings']),
         ]);
 
         if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => 'Day closed successfully.']);
+            return response()->json([
+                'success' => true,
+                'message' => 'Day closed successfully.',
+                'redirect' => route('daily-opening.show', $dailyOpening),
+            ]);
         }
 
         return redirect()->route('daily-opening.show', $dailyOpening)->with('status', 'Day closed successfully.');
+    }
+
+    private function closeFailed(Request $request, string $message): JsonResponse|RedirectResponse
+    {
+        if ($request->expectsJson()) {
+            return response()->json(['success' => false, 'message' => $message], 422);
+        }
+
+        return back()->with('error', $message)->withInput();
     }
 
     public function index(): View

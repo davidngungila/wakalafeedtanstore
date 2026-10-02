@@ -239,7 +239,7 @@
         <div class="panel" style="max-width:980px;">
             <div class="panel-head">
                 <h3>Float reconciliation per network</h3>
-                <span class="link">Opening − deposits + withdrawals + top-ups + bank in = closing — all networks shown (top-ups are bank float, in Expected)</span>
+                <span class="link">Opening − deposits + withdrawals + top-ups + bank in = closing — commission received is already inside top-ups, shown for visibility only</span>
             </div>
             <div class="panel-body">
                 <div class="table-card">
@@ -253,6 +253,7 @@
                                     <th>− Deposits</th>
                                     <th>+ Top-ups</th>
                                     <th>+ Bank in</th>
+                                    <th>+ Commission</th>
                                     <th>= Expected</th>
                                     <th>Counted</th>
                                     <th>Variance</th>
@@ -272,6 +273,7 @@
                                         <td>−@money($row['deposits'])</td>
                                         <td style="color:var(--acacia-600);">+@money($row['float_topups'] ?? 0)</td>
                                         <td style="color:var(--acacia-600);">+@money($row['bank_ins'] ?? 0)</td>
+                                        <td style="color:var(--gold-600, var(--gold-500));">+@money($row['commission_received'] ?? 0)</td>
                                         <td data-run-expected="@money($row['expected'])" style="font-weight:700;">@money($row['expected'])</td>
                                         <td>
                                             <input type="number" name="counted_floats[{{ $row['id'] }}]" min="0" step="0.01"
@@ -282,7 +284,7 @@
                                         <td data-net-var class="cell-sub" style="white-space:nowrap;color:var(--coffee-700);">TZS 0</td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="9" class="empty-state"><h4>No active networks</h4><p>Enable at least one network to reconcile its float.</p></td></tr>
+                                    <tr><td colspan="10" class="empty-state"><h4>No active networks</h4><p>Enable at least one network to reconcile its float.</p></td></tr>
                                 @endforelse
                             </tbody>
                             <tfoot>
@@ -292,6 +294,7 @@
                                     $totalDeposits = collect($run['networks'])->sum('deposits');
                                     $totalTopups = collect($run['networks'])->sum('float_topups');
                                     $totalBankIns = collect($run['networks'])->sum('bank_ins');
+                                    $totalCommission = collect($run['networks'])->sum(fn (array $row): float => (float) ($row['commission_received'] ?? 0));
                                     $totalExpectedFloat = collect($run['networks'])->sum('expected');
                                 @endphp
                                 <tr style="font-weight:700; background:var(--sand-50); border-top:2px solid var(--line);" id="floatTotalRow">
@@ -301,6 +304,7 @@
                                     <td id="totalDepositsFloat">−@money($totalDeposits)</td>
                                     <td id="totalTopupsFloat" style="color:var(--acacia-600);">+@money($totalTopups)</td>
                                     <td id="totalBankInsFloat" style="color:var(--acacia-600);">+@money($totalBankIns)</td>
+                                    <td id="totalCommissionFloat" style="color:var(--gold-600, var(--gold-500));">+@money($totalCommission)</td>
                                     <td id="totalExpectedFloat" style="font-weight:700;">@money($totalExpectedFloat)</td>
                                     <td id="totalCountedFloat">—</td>
                                     <td id="totalVarianceFloat" style="color:var(--coffee-700);">TZS 0</td>

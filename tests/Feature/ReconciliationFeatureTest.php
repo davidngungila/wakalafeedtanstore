@@ -188,6 +188,36 @@ class ReconciliationFeatureTest extends TestCase
         ]);
     }
 
+    public function test_commission_received_is_shown_without_changing_expected_float(): void
+    {
+        $agent = $this->setupAgent();
+        $network = Network::firstWhere('name', 'M-Pesa');
+
+        Transaction::create([
+            'reference' => 'TX-COM-1',
+            'agent_id' => $agent->id,
+            'network_id' => $network->id,
+            'type' => 'commission_income',
+            'amount' => 12000,
+            'commission' => 12000,
+            'status' => 'completed',
+        ]);
+
+        $this->actingAs($this->user())
+            ->from(route('reconciliation.create'))
+            ->post(route('reconciliation.store'), [
+                'reconciliation_date' => date('Y-m-d'),
+                'counted_cash' => 250000,
+            ])
+            ->assertSessionHas('status', 'Reconciliation saved.');
+
+        $row = collect(Reconciliation::first()->network_balances)->firstWhere('network_id', $network->id);
+
+        $this->assertSame(12000.0, (float) $row['commission_received']);
+        $this->assertSame(0.0, (float) $row['float_topups']);
+        $this->assertSame(75000.0, (float) $row['expected']);
+    }
+
     public function test_invalid_store_returns_validation_errors(): void
     {
         $this->setupAgent();

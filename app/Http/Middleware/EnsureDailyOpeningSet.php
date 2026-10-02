@@ -38,6 +38,7 @@ class EnsureDailyOpeningSet
             'daily-opening.show',
             'daily-opening.index',
             'daily-opening.close',
+            'daily-opening.close-form',
             'logout',
             'profile.index',
             'profile.edit',
