@@ -60,6 +60,40 @@ class Transaction extends Model
     }
 
     /**
+     * What this transaction did to the network float.
+     *
+     * Kept here so the receipt, the reconciliation run and the transaction
+     * controller all derive the effect from one place; the logic was previously
+     * duplicated in three controllers.
+     */
+    public function floatDelta(): float
+    {
+        $amount = (float) $this->amount;
+
+        return match ($this->type) {
+            'deposit', 'airtime', 'send_money' => -$amount,
+            'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit', 'commission_income' => $amount,
+            'cash_to_float' => $amount - (float) $this->commission,
+            default => -$amount,
+        };
+    }
+
+    /**
+     * What this transaction did to the cash at the till. Cash only moves for
+     * the types a customer hands over or takes away.
+     */
+    public function cashDelta(): float
+    {
+        if (! in_array($this->type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'send_money', 'cash_to_float'], true)) {
+            return 0.0;
+        }
+
+        $direction = in_array($this->type, ['deposit', 'airtime', 'send_money'], true) ? 1 : -1;
+
+        return $direction * (float) $this->amount;
+    }
+
+    /**
      * @return BelongsTo<DailyOpening, $this>
      */
     public function dailyOpening(): BelongsTo

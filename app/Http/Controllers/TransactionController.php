@@ -15,6 +15,8 @@ use App\Models\Transaction;
 use App\Services\ExportService;
 use App\Services\TransactionJournalService;
 use App\Services\TransactionService;
+use App\Support\Money;
+use App\Support\Shift;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Dompdf\Dompdf;
 use Illuminate\Http\JsonResponse;
@@ -1189,6 +1191,64 @@ class TransactionController extends Controller
         return redirect()->route('transactions.index')->with('status', 'Transaction '.$oldReference.' deleted. Balances for assigned area have been reversed.');
     }
 
+    /**
+     * Loads everything a receipt needs, including SMS linked by provider
+     * reference in case transaction_id was not set at ingest time.
+     */
+    private function loadReceiptRelations(Transaction $transaction): Transaction
+    {
+        $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening', 'smsMessages.device']);
+
+        if (filled($transaction->provider_reference)) {
+            $byRef = SmsMessage::query()
+                ->where('transaction_reference', $transaction->provider_reference)
+                ->whereNull('transaction_id')
+                ->with(['device'])
+                ->get();
+
+            $transaction->setRelation(
+                'smsMessages',
+                $transaction->smsMessages->concat($byRef)->unique('id')->values()
+            );
+        }
+
+        return $transaction;
+    }
+
+    /**
+     * Derived values shared by the HTML and PDF receipts.
+     *
+     * @return array<string, mixed>
+     */
+    private function receiptData(Transaction $transaction): array
+    {
+        $shift = Shift::for($transaction->created_at);
+        [$windowStart, $windowEnd] = Shift::window($shift['date'], $shift['shift']);
+
+        return [
+            'transaction' => $transaction,
+            'business' => app(ExportService::class)->businessInfo(),
+            'amountWords' => Money::inWords($transaction->amount),
+            'cashDelta' => $transaction->cashDelta(),
+            'floatDelta' => $transaction->floatDelta(),
+            'shift' => [
+                'key' => $shift['shift'],
+                'date' => $shift['date'],
+                'label' => Shift::label($shift['shift']),
+                'window' => $windowStart->format('d M Y H:i').' – '.$windowEnd->format('d M Y H:i'),
+            ],
+            // A short code the customer can quote when querying the transaction.
+            // Derived from the reference and id with the app key, so it is
+            // stable for this record but cannot be guessed.
+            'verification' => strtoupper(substr(hash_hmac(
+                'sha256',
+                $transaction->reference.'|'.$transaction->id,
+                (string) config('app.key')
+            ), 0, 8)),
+            'printedAt' => now(),
+        ];
+    }
+
     public function receipt(Request $request, Transaction $transaction): View|RedirectResponse
     {
         $raw = $request->route('transaction');
@@ -1198,23 +1258,7 @@ class TransactionController extends Controller
             return redirect()->route('transactions.receipt', $transaction);
         }
 
-        $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening', 'smsMessages.device']);
-
-        // Include SMS linked by provider reference (in case transaction_id wasn't set at ingest time)
-        if (filled($transaction->provider_reference)) {
-            $byRef = SmsMessage::query()
-                ->where('transaction_reference', $transaction->provider_reference)
-                ->whereNull('transaction_id')
-                ->with(['device'])
-                ->get();
-
-            $transaction->setRelation(
-                'smsMessages',
-                $transaction->smsMessages->concat($byRef)->unique('id')->values()
-            );
-        }
-
-        return view('transactions.receipt', compact('transaction'));
+        return view('transactions.receipt', $this->receiptData($this->loadReceiptRelations($transaction)));
     }
 
     public function receiptPdf(Request $request, Transaction $transaction)
@@ -1224,31 +1268,18 @@ class TransactionController extends Controller
             return redirect()->route('transactions.receipt.pdf', $transaction);
         }
 
-        $transaction->load(['network', 'agent', 'operator', 'reverser', 'dailyOpening', 'smsMessages.device']);
-
-        if (filled($transaction->provider_reference)) {
-            $byRef = SmsMessage::query()
-                ->where('transaction_reference', $transaction->provider_reference)
-                ->whereNull('transaction_id')
-                ->with(['device'])
-                ->get();
-
-            $transaction->setRelation(
-                'smsMessages',
-                $transaction->smsMessages->concat($byRef)->unique('id')->values()
-            );
-        }
+        $data = $this->receiptData($this->loadReceiptRelations($transaction));
 
         try {
-            $pdf = Pdf::loadView('transactions.receipt-pdf', compact('transaction'));
+            $pdf = Pdf::loadView('transactions.receipt-pdf', $data);
             $pdf->setPaper('a4', 'portrait');
-            $pdf->setOptions(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true]);
+            $pdf->setOptions(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => false]);
 
             return $pdf->download('receipt-'.$transaction->reference.'.pdf');
         } catch (\Throwable $e) {
             // Fallback to direct Dompdf if wrapper not available (e.g. production cache issue)
-            $html = view('transactions.receipt-pdf', compact('transaction'))->render();
-            $dompdf = new Dompdf(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true]);
+            $html = view('transactions.receipt-pdf', $data)->render();
+            $dompdf = new Dompdf(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => false]);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
@@ -1380,25 +1411,28 @@ class TransactionController extends Controller
         ];
     }
 
+    /**
+     * The float and cash effects live on the model now; this delegates so the
+     * three copies of the same match expression cannot drift apart again.
+     *
+     * Note: ReconciliationController::cashDelta() deliberately differs — it
+     * treats float_deposit as a cash inflow — so it is left untouched.
+     */
     private function floatDelta(string $type, float $amount, float $commission = 0.0): float
     {
-        return match ($type) {
-            'deposit', 'airtime', 'send_money' => -$amount,
-            'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit', 'commission_income' => $amount,
-            'cash_to_float' => $amount - $commission,
-            default => -$amount,
-        };
+        return (new Transaction)->forceFill([
+            'type' => $type,
+            'amount' => $amount,
+            'commission' => $commission,
+        ])->floatDelta();
     }
 
     private function cashDelta(string $type, float $amount): float
     {
-        if (! in_array($type, ['deposit', 'withdrawal', 'wallet_to_bank', 'airtime', 'send_money', 'cash_to_float'], true)) {
-            return 0;
-        }
-
-        $direction = in_array($type, ['deposit', 'airtime', 'send_money'], true) ? 1 : -1;
-
-        return $direction * $amount;
+        return (new Transaction)->forceFill([
+            'type' => $type,
+            'amount' => $amount,
+        ])->cashDelta();
     }
 
     private function commissionFor(Agent $agent, int $networkId, string $type, float $amount): float
