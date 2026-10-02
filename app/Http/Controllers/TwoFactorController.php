@@ -109,7 +109,7 @@ class TwoFactorController extends Controller
 
         Auth::login($user);
 
-        return $this->completeLogin($request, $recovered);
+        return $this->completeLogin($request, $sender, $recovered);
     }
 
     public function resend(Request $request, SmsSender $sender): JsonResponse|RedirectResponse
@@ -198,7 +198,7 @@ class TwoFactorController extends Controller
 
         $user = User::find((int) $userId);
 
-        if (! $user || ! $user->is_active || ! $user->two_factor_enabled || ! $user->two_factor_secret) {
+        if (! $user || ! $user->is_active || ! $user->two_factor_enabled) {
             return null;
         }
 

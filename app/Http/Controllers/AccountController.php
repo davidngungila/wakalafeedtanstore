@@ -35,7 +35,7 @@ class AccountController extends Controller
             }
         }
 
-        if ($validated['method'] === 'app' && ! $user->two_factor_app_enabled) {
+        if ($validated['method'] === 'app' && ! TwoFactorMethods::appReady($user)) {
             return response()->json(['success' => false, 'message' => 'Set up the authenticator app before selecting it as the default method.'], 422);
         }
 
@@ -59,7 +59,7 @@ class AccountController extends Controller
             return response()->json(['success' => false, 'message' => 'Verify your mobile number before using SMS OTP. A configured SMS provider is also required.'], 422);
         }
 
-        if (! $user->two_factor_enabled) {
+        if (TwoFactorMethods::setupIssue($user, $sender) !== null) {
             // For SMS OTP we don't need TOTP secret — use a random secret but mark method as SMS.
             $secret = TwoFactor::generateSecret();
             $recoveryCodes = TwoFactor::generateRecoveryCodes();
@@ -95,13 +95,14 @@ class AccountController extends Controller
         return TwoFactorMethods::verifiedPhone($user, $sender);
     }
 
-    public function index(Request $request): View
+    public function index(Request $request, SmsSender $sender): View
     {
         $user = auth()->user();
+        $misconfigured = TwoFactorMethods::setupIssue($user, $sender) === 'misconfigured';
 
         $pendingSecret = $request->session()->get('two_factor_pending_secret');
 
-        if ((! $user->two_factor_enabled || ! $user->two_factor_app_enabled) && ! $pendingSecret) {
+        if ((! $user->two_factor_enabled || ! $user->two_factor_app_enabled || $misconfigured) && ! $pendingSecret) {
             $pendingSecret = TwoFactor::generateSecret();
             $request->session()->put('two_factor_pending_secret', $pendingSecret);
         }
@@ -126,6 +127,7 @@ class AccountController extends Controller
             'currentSession' => $currentRow ? $parse($currentRow, true) : null,
             'pendingSecret' => $pendingSecret,
             'currentSessionId' => $currentSessionId,
+            'twoFactorMisconfigured' => $misconfigured,
         ]);
     }
 
@@ -153,11 +155,12 @@ class AccountController extends Controller
         return back()->with('status', 'Password changed successfully.');
     }
 
-    public function confirmTwoFactor(Request $request): JsonResponse
+    public function confirmTwoFactor(Request $request, SmsSender $sender): JsonResponse
     {
         $user = auth()->user();
+        $misconfigured = TwoFactorMethods::setupIssue($user, $sender) === 'misconfigured';
 
-        if ($user->two_factor_enabled && $user->two_factor_app_enabled) {
+        if ($user->two_factor_enabled && $user->two_factor_app_enabled && ! $misconfigured) {
             return response()->json(['success' => false, 'message' => 'Two-factor authentication is already enabled.'], 422);
         }
 
@@ -179,7 +182,7 @@ class AccountController extends Controller
             'two_factor_secret' => Crypt::encryptString($secret),
             'two_factor_enabled' => true,
             'two_factor_app_enabled' => true,
-            'two_factor_method' => $user->two_factor_method ?? 'app',
+            'two_factor_method' => $misconfigured ? 'app' : ($user->two_factor_method ?? 'app'),
         ];
 
         if (! $user->two_factor_enabled || empty($user->two_factor_recovery_codes)) {

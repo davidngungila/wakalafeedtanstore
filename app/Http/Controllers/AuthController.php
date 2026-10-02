@@ -44,11 +44,7 @@ class AuthController extends Controller
         if (! $user->two_factor_enabled) {
             Auth::login($user, $request->boolean('remember'));
 
-            return $this->completeLogin($request);
-        }
-
-        if (! $user->two_factor_secret) {
-            return $this->loginFailed($request, 'Two-factor authentication is misconfigured. Contact support.');
+            return $this->completeLogin($request, $sender);
         }
 
         if (($user->two_factor_method ?? null) === 'sms') {
@@ -111,14 +107,14 @@ class AuthController extends Controller
             $defaultMethod = TwoFactorMethods::default($methods, $user->two_factor_method);
 
             if ($defaultMethod === null) {
-                return $this->loginFailed($request, 'Two-factor authentication is misconfigured. Contact support.');
+                return $this->loginWithMisconfiguredTwoFactor($request, $sender, $user);
             }
 
             if ($defaultMethod === 'sms') {
                 $phone = TwoFactorMethods::verifiedPhone($user, $sender);
 
                 if ($phone === null) {
-                    return $this->loginFailed($request, 'Two-factor authentication is misconfigured. Contact support.');
+                    return $this->loginWithMisconfiguredTwoFactor($request, $sender, $user);
                 }
 
                 $failure = $this->sendSmsChallenge($request, $sender, $user, $phone);
@@ -191,6 +187,19 @@ class AuthController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Sign the user in when two-factor authentication is enabled but no method can
+     * deliver a code. The account page holds them until they set one up again.
+     */
+    private function loginWithMisconfiguredTwoFactor(Request $request, SmsSender $sender, User $user): JsonResponse|RedirectResponse
+    {
+        Log::warning('Two-factor authentication misconfigured at login', ['user_id' => $user->id]);
+
+        Auth::login($user, $request->boolean('remember'));
+
+        return $this->completeLogin($request, $sender);
     }
 
     private function loginFailed(Request $request, string $message): JsonResponse|RedirectResponse

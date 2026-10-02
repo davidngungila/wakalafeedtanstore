@@ -2,6 +2,11 @@
 
 @php
     use App\Support\TwoFactor;
+
+    $twoFactorAlert = session('two_factor_alert') ?? ($twoFactorMisconfigured ? [
+        'issue' => 'misconfigured',
+        'message' => 'Your two-factor authentication is misconfigured, so no verification code could be sent at sign-in. Set it up again to protect your account.',
+    ] : null);
 @endphp
 
 @section('title', 'Account & Security')
@@ -32,7 +37,7 @@
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                     <span class="tag {{ $user->role === 'admin' ? 'tag-gold' : ($user->role === 'supervisor' ? 'tag-green' : 'tag-terracotta') }}">{{ ucfirst($user->role) }}</span>
                     <span class="tag {{ $user->is_active ? 'tag-green' : 'tag-grey' }}">{{ $user->is_active ? 'Active' : 'Inactive' }}</span>
-                    <span class="tag {{ $user->two_factor_enabled ? 'tag-green' : 'tag-grey' }}">{{ $user->two_factor_enabled ? '2FA enabled' : '2FA off' }}</span>
+                    <span class="tag {{ $twoFactorMisconfigured ? 'tag-red' : ($user->two_factor_enabled ? 'tag-green' : 'tag-grey') }}">{{ $twoFactorMisconfigured ? '2FA misconfigured' : ($user->two_factor_enabled ? '2FA enabled' : '2FA off') }}</span>
                 </div>
             </div>
             <a class="btn btn-ghost" href="{{ route('profile.edit') }}" style="text-decoration:none;">Edit profile</a>
@@ -76,14 +81,24 @@
     <div class="panel">
         <div class="panel-head">
             <h3>Two-factor authentication</h3>
-            @if ($user->two_factor_enabled)
+            @if ($twoFactorMisconfigured)
+                <span class="tag tag-red">Misconfigured — no code can be sent</span>
+            @elseif ($user->two_factor_enabled)
                 <span class="tag tag-green">Enabled — {{ $user->two_factor_method === 'sms' ? 'SMS OTP' : 'Authenticator App' }}</span>
             @else
                 <span class="tag tag-gold">Off</span>
             @endif
         </div>
         <div class="panel-body">
-            @if ($user->two_factor_enabled)
+            @if ($twoFactorMisconfigured)
+                <p style="margin:0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.7;">
+                    Two-factor authentication is switched on but <strong>no method can deliver a verification code</strong>, so you were signed in without a second factor. Set up a working method below before you continue.
+                </p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap; align-items:center;">
+                    <button type="button" class="btn btn-primary" onclick="openModal('chooseTwoFactorModal')">Repair two-factor — Choose method</button>
+                    <button type="button" class="btn btn-danger" onclick="openPasswordModal('Disable two-factor authentication', '{{ route('account.two-factor.disable') }}', 'Disable two-factor')">Disable two-factor</button>
+                </div>
+            @elseif ($user->two_factor_enabled)
                 <p style="margin:0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.7;">
                     Two-factor authentication is on via <strong>{{ $user->two_factor_method === 'sms' ? 'SMS OTP' : 'Authenticator App' }}</strong>. Every sign-in now requires a code from {{ $user->two_factor_method === 'sms' ? 'your mobile number (6-digit OTP, valid 5 min)' : 'your authenticator app' }}.
                     Keep your recovery codes somewhere safe in case you lose access.
@@ -200,6 +215,8 @@
 @endsection
 
 @section('scripts')
+    @include('partials.two-factor-alert-modal', ['twoFactorAlert' => $twoFactorAlert])
+
     <script src="/vendor/qrcode/qrcode.js"></script>
     <div class="modal-backdrop" id="passwordConfirmModal">
         <div class="modal">
@@ -353,6 +370,11 @@
 
         function chooseMethodAndProceed(method) {
             closeModal('chooseTwoFactorModal');
+            // The authenticator secret is confirmed on submit, so open its setup directly.
+            if (method === 'app') {
+                openModal('enableTwoFactorModal');
+                return;
+            }
             // Save method first, then open appropriate setup
             fetch('{{ route('account.two-factor.method') }}', {
                 method: 'POST',
@@ -361,18 +383,14 @@
             }).then(r => r.json()).then(data => {
                 if (data.success) {
                     toast(data.message || 'Method saved', 'success');
-                    if (method === 'app') {
-                        setTimeout(() => openModal('enableTwoFactorModal'), 400);
-                    } else {
-                        // For SMS OTP, just enable 2FA with the SMS method — no QR needed, activate directly
-                        fetch('{{ route('account.two-factor.enable-sms') }}', {
-                            method: 'POST',
-                            headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
-                        }).then(r => r.json()).then(d => {
-                            toast(d.message || 'SMS OTP enabled', d.success ? 'success' : 'error');
-                            if (d.success) setTimeout(() => location.reload(), 800);
-                        });
-                    }
+                    // For SMS OTP, just enable 2FA with the SMS method — no QR needed, activate directly
+                    fetch('{{ route('account.two-factor.enable-sms') }}', {
+                        method: 'POST',
+                        headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                    }).then(r => r.json()).then(d => {
+                        toast(d.message || 'SMS OTP enabled', d.success ? 'success' : 'error');
+                        if (d.success) setTimeout(() => location.reload(), 800);
+                    });
                 } else {
                     toast(data.message || 'Failed', 'error');
                 }
