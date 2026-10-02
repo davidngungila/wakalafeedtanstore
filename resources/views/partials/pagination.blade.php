@@ -9,6 +9,21 @@
     sort($visible);
 
     $previousRendered = 0;
+
+    // Page 1 links stay on the clean path — never a "?page=1" query string.
+    $pageUrl = static function (int $page) use ($paginator): string {
+        if ($page <= 1) {
+            $query = $paginator->query ?? [];
+
+            unset($query[$paginator->getPageName()]);
+
+            return $query === []
+                ? $paginator->path()
+                : $paginator->path().'?'.http_build_query($query);
+        }
+
+        return $paginator->url($page);
+    };
 @endphp
 
 @if ($lastPage > 1)
@@ -33,7 +48,7 @@
                 @if ($page === $current)
                     <span class="pager-compact-page is-active" aria-current="page">{{ $page }}</span>
                 @else
-                    <a class="pager-compact-page" href="{{ $paginator->url($page) }}">{{ $page }}</a>
+                    <a class="pager-compact-page" href="{{ $pageUrl($page) }}">{{ $page }}</a>
                 @endif
 
                 @php $previousRendered = $page; @endphp

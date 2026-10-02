@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureDailyOpeningSet;
 use App\Http\Middleware\EnsureDeviceCode;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureTwoFactorEnabled;
+use App\Http\Middleware\NormalizePageQuery;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -22,6 +23,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('reports:daily-email')->dailyAt('20:00');
     })
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->append(NormalizePageQuery::class);
+
         $middleware->alias([
             'role' => EnsureRole::class,
             'device.code' => EnsureDeviceCode::class,
