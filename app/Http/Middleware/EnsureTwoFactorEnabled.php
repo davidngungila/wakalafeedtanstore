@@ -10,12 +10,14 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureTwoFactorEnabled
 {
+    public function __construct(private SmsSender $sender) {}
+
     /**
      * Handle an incoming request.
      *
      * @param  Closure(Request): (Response)  $next
      */
-    public function handle(Request $request, Closure $next, SmsSender $sender): Response
+    public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
 
@@ -23,7 +25,7 @@ class EnsureTwoFactorEnabled
             return $next($request);
         }
 
-        $issue = TwoFactorMethods::setupIssue($user, $sender);
+        $issue = TwoFactorMethods::setupIssue($user, $this->sender);
 
         if ($issue === null) {
             return $next($request);
