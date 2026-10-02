@@ -625,13 +625,12 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
                     <span>Devices</span>
                 </a>
-                <a href="{{ route('sms.index') }}" class="sb-item {{ $isMessageArea ? 'active' : '' }}">
+<a href="{{ route('sms.index') }}" class="sb-item {{ $isMessageArea ? 'active' : '' }}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="9" y1="10" x2="17" y2="10"></line><line x1="9" y1="14" x2="13" y2="14"></line></svg>
                     <span>Messages</span>
                     <span class="badge" id="smsLiveBadge" style="display:none;">Live</span>
                 </a>
 
-               
                 <a href="{{ route('reconciliation.index') }}" class="sb-item {{ $isReconArea ? 'active' : '' }}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="m9 14 2 2 4-4"></path></svg>
                     <span>Reconciliation</span>

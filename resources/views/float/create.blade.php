@@ -33,11 +33,16 @@
                             <select id="floatTxnSelect" style="width:100%; padding:10px 12px; border:1.5px solid var(--line); border-radius:8px; background:var(--white);">
                                 <option value="">— No reference —</option>
                                 @foreach($dayTransactions as $t)
-                                    <option value="{{ $t->id }}" data-network="{{ $t->network_id }}" data-amount="{{ $t->amount }}" data-type="{{ $t->type }}" data-ref="{{ $t->provider_reference ?? $t->reference }}">{{ $t->created_at->format('H:i') }} · {{ $t->reference }} · {{ txn_type_label($t->type) }} · {{ $t->network?->name }} · @money($t->amount) · {{ Str::limit($t->customer_name ?? $t->customer_phone, 24) }}</option>
+                                    <option value="{{ $t->id }}" data-network="{{ $t->network_id }}" data-amount="{{ $t->amount }}" data-type="{{ $t->type }}" data-ref="{{ $t->provider_reference ?? $t->reference }}" {{ (string) old('transaction_id') === (string) $t->id ? 'selected' : '' }}>{{ $t->created_at->format('H:i') }} · {{ $t->reference }} · {{ txn_type_label($t->type) }} · {{ $t->network?->name }} · @money($t->amount) · {{ Str::limit($t->customer_name ?? $t->customer_phone, 24) }}</option>
                                 @endforeach
                             </select>
-                            <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Pick a transaction received on {{ $viewDate->format('d M Y') }} to autofill network/amount and link. Will update that transaction's notes and appear in reconciliation for this date.</p>
+                            <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">Pick a transaction received on {{ $viewDate->format('d M Y') }} to autofill network/amount and link. Check “Transfer this transaction's cash to float” to move the referenced cash into float.</p>
                             <input type="hidden" name="transaction_id" id="floatLinkedTxn" value="{{ old('transaction_id') }}">
+                            <label style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13px; font-weight:600; color:var(--coffee-900);">
+                                <input type="checkbox" name="reference_cash_to_float" value="1" id="referenceCashToFloat" @checked(old('reference_cash_to_float'))>
+                                <span>Transfer this transaction's cash to float</span>
+                            </label>
+                            <p style="font-size:11px; color:var(--ink-soft); margin-top:4px;">The selected transaction prefills the network and amount. Edit the amount for a partial transfer; commission is deducted from the float added.</p>
                         </div>
                     @else
                         <p style="font-size:12px; color:var(--ink-soft);">No completed transactions for {{ $viewDate->format('d M Y') }} to reference.</p>
@@ -166,6 +171,7 @@
         const cashToFloatFields = document.querySelector('[data-cash-to-float-fields]');
         const floatNetPreview = document.querySelector('[data-float-net-preview]');
         const floatNetPreviewValue = document.getElementById('floatNetPreview');
+        const referenceCashToFloat = document.getElementById('referenceCashToFloat');
 
         const updateCashToFloatPreview = () => {
             const isCashToFloat = floatTypeSelect?.value === 'cash_to_float';
@@ -177,9 +183,23 @@
             if (floatNetPreviewValue) floatNetPreviewValue.textContent = 'TZS ' + Math.max(0, amount - commission).toLocaleString('en-US', { maximumFractionDigits: 2 });
         };
 
-        floatTypeSelect?.addEventListener('change', updateCashToFloatPreview);
+        floatTypeSelect?.addEventListener('change', () => {
+            if (floatTypeSelect.value !== 'cash_to_float' && referenceCashToFloat) {
+                referenceCashToFloat.checked = false;
+            }
+            updateCashToFloatPreview();
+        });
+        referenceCashToFloat?.addEventListener('change', () => {
+            if (referenceCashToFloat.checked && floatTypeSelect) {
+                floatTypeSelect.value = 'cash_to_float';
+            }
+            updateCashToFloatPreview();
+        });
         amountInput?.addEventListener('input', updateCashToFloatPreview);
         commissionInput?.addEventListener('input', updateCashToFloatPreview);
+        if (referenceCashToFloat?.checked && floatTypeSelect) {
+            floatTypeSelect.value = 'cash_to_float';
+        }
         updateCashToFloatPreview();
 
         const txnSelect = document.getElementById('floatTxnSelect');
@@ -189,6 +209,7 @@
                 const linked = document.getElementById('floatLinkedTxn');
                 if (!opt || !opt.value) {
                     if (linked) linked.value = '';
+                    if (referenceCashToFloat) referenceCashToFloat.checked = false;
                     document.querySelectorAll('[data-float-net-id]').forEach(row => { row.style.background=''; row.style.outline=''; });
                     return;
                 }
@@ -219,9 +240,14 @@
                     'airtime': 'float_pull',
                     'data': 'float_pull'
                 };
-                if (type && typeMap[type]) {
+                if (referenceCashToFloat?.checked) {
+                    const sel = form.querySelector('select[name=type]');
+                    if (sel) sel.value = 'cash_to_float';
+                    updateCashToFloatPreview();
+                } else if (type && typeMap[type]) {
                     const sel = form.querySelector('select[name=type]');
                     if (sel) sel.value = typeMap[type];
+                    updateCashToFloatPreview();
                 }
                 const notes = form.querySelector('textarea[name=notes]');
                 if (notes && ref) {

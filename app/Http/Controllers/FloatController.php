@@ -115,7 +115,7 @@ class FloatController extends Controller
                 foreach ($txsForNet as $t) {
                     $netTxFloat += match ($t->type) {
                         'deposit' => -(float) $t->amount,
-                        'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => (float) $t->amount,
+                        'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit', 'commission_income' => (float) $t->amount,
                         'cash_to_float' => (float) $t->amount - (float) $t->commission,
                         default => -(float) $t->amount,
                     };
@@ -302,7 +302,7 @@ class FloatController extends Controller
             foreach ($txsForNet as $t) {
                 $netTxFloat += match ($t->type) {
                     'deposit' => -(float) $t->amount,
-                    'withdrawal','bank_to_wallet','float_topup','float_deposit' => (float) $t->amount,
+                    'withdrawal','bank_to_wallet','float_topup','float_deposit','commission_income' => (float) $t->amount,
                     'cash_to_float' => (float) $t->amount - (float) $t->commission,
                     default => -(float) $t->amount,
                 };
@@ -499,6 +499,7 @@ class FloatController extends Controller
             'notes' => ['nullable', 'string', 'max:255'],
             'float_date' => ['nullable', 'date'],
             'transaction_id' => ['nullable', 'exists:transactions,id'],
+            'reference_cash_to_float' => ['nullable', 'boolean'],
         ]);
 
         $agent = cash_point();
@@ -539,6 +540,43 @@ class FloatController extends Controller
             ? round((float) ($validated['commission'] ?? 0), 2)
             : 0.0;
         $isLiveDate = $targetDate->isSameDay(today());
+        $useReferencedCashToFloat = $request->boolean('reference_cash_to_float');
+        $referencedTransaction = null;
+
+        if (! empty($validated['transaction_id'])) {
+            $referencedTransaction = Transaction::whereKey($validated['transaction_id'])
+                ->where('agent_id', $agent->id)
+                ->first();
+
+            if ($referencedTransaction === null) {
+                throw ValidationException::withMessages([
+                    'transaction_id' => 'The referenced transaction does not belong to this cash point.',
+                ]);
+            }
+        }
+
+        if ($useReferencedCashToFloat) {
+            if ($referencedTransaction === null) {
+                throw ValidationException::withMessages([
+                    'transaction_id' => 'Select a transaction to transfer its cash to float.',
+                ]);
+            }
+
+            if ($referencedTransaction->status !== 'completed') {
+                throw ValidationException::withMessages([
+                    'transaction_id' => 'Only a completed transaction can be referenced.',
+                ]);
+            }
+
+            if ($referencedTransaction->created_at === null || ! $referencedTransaction->created_at->isSameDay($targetDate)) {
+                throw ValidationException::withMessages([
+                    'transaction_id' => 'The referenced transaction must belong to the selected float day.',
+                ]);
+            }
+
+            $validated['type'] = 'cash_to_float';
+            $commission = round((float) ($validated['commission'] ?? 0), 2);
+        }
 
         if ($validated['type'] === 'cash_to_float' && $targetDate->isFuture()) {
             throw ValidationException::withMessages([
@@ -668,6 +706,7 @@ class FloatController extends Controller
             'type' => $validated['type'],
             'amount' => $validated['amount'],
             'commission' => $commission,
+            'transaction_id' => $validated['transaction_id'] ?? null,
             'date' => $targetDate->toDateString(),
         ]);
 
@@ -1063,7 +1102,7 @@ class FloatController extends Controller
                 foreach ($txs as $t) {
                     $netFloat += match ($t->type) {
                         'deposit' => -(float) $t->amount,
-                        'withdrawal','bank_to_wallet','float_topup','float_deposit' => (float) $t->amount,
+                        'withdrawal','bank_to_wallet','float_topup','float_deposit','commission_income' => (float) $t->amount,
                         'cash_to_float' => (float) $t->amount - (float) $t->commission,
                         default => -(float) $t->amount,
                     };
@@ -1094,7 +1133,7 @@ class FloatController extends Controller
             foreach ($txs as $t) {
                 $net += match ($t->type) {
                     'deposit' => -(float) $t->amount,
-                    'withdrawal','bank_to_wallet','float_topup','float_deposit' => (float) $t->amount,
+                    'withdrawal','bank_to_wallet','float_topup','float_deposit','commission_income' => (float) $t->amount,
                     'cash_to_float' => (float) $t->amount - (float) $t->commission,
                     default => -(float) $t->amount,
                 };
