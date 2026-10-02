@@ -68,7 +68,10 @@ class TransactionController extends Controller
             });
         }
 
-        $transactions = $query->latest()->limit(200)->get();
+        // Paginated so a busy day does not render every transaction at once. The
+        // global paginator view plus NormalizePageQuery keep the page links
+        // opaque, and withQueryString() preserves the active filters.
+        $transactions = $query->latest()->paginate(20)->withQueryString();
 
         $todayTotals = [
             'deposits' => (float) Transaction::whereDate('created_at', today())->where('type', 'deposit')->where('status', 'completed')->sum('amount'),

@@ -83,8 +83,12 @@
                 </div>
                 <div class="table-search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    <input type="text" placeholder="Search…" oninput="filterTransactionRows(this.value)">
+                    {{-- A real form field so the search runs across every page of
+                         results, not just the rows currently rendered. --}}
+                    <input type="search" name="q" value="{{ $filters['q'] ?? '' }}"
+                           placeholder="Search reference, name, phone or provider ref…">
                 </div>
+                <button type="submit" class="btn btn-primary btn-sm">Search</button>
             </div>
             <div class="table-toolbar" style="border-bottom:none;padding-top:6px;">
                 <select name="network" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;background:var(--white);color:var(--coffee-700);font-weight:600;">
@@ -176,7 +180,7 @@
                 </thead>
                 <tbody id="transactionsBody">
                     @forelse ($transactions as $txn)
-                        <tr data-id="{{ $txn->id }}" data-search="{{ strtolower(($txn->reference ?? '').' '.($txn->customer_name ?? '').' '.($txn->customer_phone ?? '')) }}" data-status="{{ $txn->status }}">
+                        <tr data-id="{{ $txn->id }}" data-status="{{ $txn->status }}">
                             <td>
                                 <div class="cell-title">{{ $txn->reference }}</div>
                                 <div class="cell-sub">{{ $txn->created_at->format('d M Y · H:i') }}</div>
@@ -217,6 +221,16 @@
                 </tbody>
             </table>
         </div>
+
+        @if ($transactions->hasPages())
+            <div class="pager-compact">
+                <div class="pager-compact-info">
+                    Showing <strong>{{ $transactions->firstItem() }}</strong> to <strong>{{ $transactions->lastItem() }}</strong>
+                    of <strong>{{ number_format($transactions->total()) }}</strong> transactions
+                </div>
+                {{ $transactions->links() }}
+            </div>
+        @endif
     </div>
 
 
@@ -299,13 +313,6 @@
         function setStatusFilter(status) {
             document.getElementById('fStatus').value = status;
             document.getElementById('filterForm').submit();
-        }
-
-        function filterTransactionRows(q) {
-            q = q.toLowerCase();
-            document.querySelectorAll('#transactionsBody tr[data-id]').forEach(tr => {
-                tr.style.display = (!q || tr.dataset.search.includes(q)) ? 'table-row' : 'none';
-            });
         }
 
         const TYPE_LABEL = {
