@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -32,21 +33,11 @@ class ReconciliationController extends Controller
 
         $openRecords = Reconciliation::where('status', 'open')->count();
 
-        $reconciledDates = Reconciliation::pluck('reconciliation_date')
-            ->map(fn ($d) => Carbon::parse($d)->toDateString())
-            ->all();
-
-        $pendingDays = Transaction::where('status', 'completed')
-            ->selectRaw('DATE(created_at) as day')
-            ->distinct()
-            ->pluck('day')
-            ->reject(fn ($d) => in_array($d, $reconciledDates, true))
-            ->sort()
-            ->values();
+        $pendingShifts = $this->pendingShifts();
 
         $totals = [
             'reconciled' => Reconciliation::where('status', 'reconciled')->count(),
-            'open' => $openRecords + $pendingDays->count(),
+            'open' => $openRecords + $pendingShifts->count(),
             'variance' => Reconciliation::where('status', 'variance')->count(),
             'resolved' => Reconciliation::where('status', 'resolved')->count(),
             'varianceAmount' => (float) Reconciliation::where('status', 'variance')->sum('cash_variance'),
@@ -57,7 +48,89 @@ class ReconciliationController extends Controller
         $exportColumns = $this->exportColumns();
         $exportRoute = route('reconciliation.export');
 
-        return view('reconciliation.index', compact('records', 'totals', 'networks', 'exportColumns', 'exportRoute', 'pendingDays'));
+        return view('reconciliation.index', compact('records', 'totals', 'networks', 'exportColumns', 'exportRoute') + [
+            'pendingShifts' => $pendingShifts,
+            // Kept for the templates that still expect a flat date list.
+            'pendingDays' => $pendingShifts->pluck('date')->unique()->values(),
+        ]);
+    }
+
+    /**
+     * Business dates and shifts that have completed activity but no
+     * reconciliation yet.
+     *
+     * Reconciliation is per (date, shift), so the list has to be per
+     * (date, shift) too. Bucketing only by DATE(created_at) hid a real problem:
+     * a night shift runs 20:00 to 07:59, so activity after midnight belongs to
+     * the *previous* business date, and comparing only dates meant that
+     * reconciling a morning shift made the whole day look done and left the
+     * night shift's money never reconciled.
+     *
+     * The shift that is currently running is excluded: the till is still open,
+     * so it cannot be counted and closed.
+     *
+     * @return Collection<int, array{date: string, shift: string, label: string, window: string, transactions: int, amount: float}>
+     */
+    private function pendingShifts(): Collection
+    {
+        // Grouping by day+hour keeps this to at most 24 rows per day instead of
+        // loading every transaction. SUBSTR is used rather than HOUR() because
+        // HOUR() is MySQL-only and the suite runs on SQLite.
+        $buckets = Transaction::where('status', 'completed')
+            ->selectRaw('DATE(created_at) as day, SUBSTR(created_at, 12, 2) as hour, COUNT(*) as cnt, SUM(amount) as amount')
+            ->groupBy('day', 'hour')
+            ->get();
+
+        $shifts = [];
+
+        foreach ($buckets as $bucket) {
+            $at = Carbon::parse($bucket->day)->setTime((int) $bucket->hour, 0, 0);
+            $shift = Shift::for($at);
+            $key = $shift['date'].'|'.$shift['shift'];
+
+            if (! isset($shifts[$key])) {
+                $shifts[$key] = [
+                    'date' => $shift['date'],
+                    'shift' => $shift['shift'],
+                    'transactions' => 0,
+                    'amount' => 0.0,
+                ];
+            }
+
+            $shifts[$key]['transactions'] += (int) $bucket->cnt;
+            $shifts[$key]['amount'] += (float) $bucket->amount;
+        }
+
+        // A date is covered by its own shift, or by a full-day reconciliation.
+        $reconciled = Reconciliation::get(['reconciliation_date', 'shift'])
+            ->map(fn (Reconciliation $reconciliation): array => [
+                Carbon::parse($reconciliation->reconciliation_date)->toDateString(),
+                $reconciliation->shift ?: Shift::FULL,
+            ]);
+
+        $fullDays = $reconciled->filter(fn (array $pair): bool => $pair[1] === Shift::FULL)->pluck(0)->all();
+        $covered = $reconciled->reject(fn (array $pair): bool => $pair[1] === Shift::FULL)->map(fn (array $pair): string => $pair[0].'|'.$pair[1])->all();
+
+        $current = Shift::current();
+
+        return collect($shifts)
+            ->reject(fn (array $shift, string $key): bool => in_array($shift['date'], $fullDays, true)
+                || in_array($key, $covered, true)
+                || ($shift['date'] === $current['date'] && $shift['shift'] === $current['shift']))
+            ->map(function (array $shift): array {
+                [$start, $end] = Shift::window($shift['date'], $shift['shift']);
+
+                return [
+                    'date' => $shift['date'],
+                    'shift' => $shift['shift'],
+                    'label' => Shift::label($shift['shift']),
+                    'window' => $start->format('d M H:i').' – '.$end->format('d M H:i'),
+                    'transactions' => $shift['transactions'],
+                    'amount' => round((float) $shift['amount'], 2),
+                ];
+            })
+            ->sortBy(fn (array $shift): string => $shift['date'].$shift['shift'])
+            ->values();
     }
 
     public function approve(Request $request, Reconciliation $reconciliation): JsonResponse|RedirectResponse

@@ -42,22 +42,46 @@
         </div>
     </div>
 
-    @if ($pendingDays->isNotEmpty())
+    @if ($pendingShifts->isNotEmpty())
         <div class="table-card" style="margin-bottom:16px;">
-            <div class="table-head"><h3>Days with transactions not reconciled</h3></div>
+            <div class="table-head">
+                <h3>Shifts with transactions not reconciled</h3>
+                <span class="cell-sub">Reconciliation is per shift — a morning run does not cover the night shift of the same date.</span>
+            </div>
             <div class="table-scroll">
                 <table>
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Shift</th>
+                            <th>Window</th>
+                            <th>Transactions</th>
+                            <th>Value</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($pendingDays as $day)
+                        @foreach ($pendingShifts as $pending)
                             <tr>
-                                <td>{{ \Illuminate\Support\Carbon::parse($day)->format('l, j F Y') }}</td>
-                                <td><a href="{{ route('reconciliation.create', ['date' => $day, 'shift' => \App\Support\Shift::current()['shift']]) }}" class="btn btn-ghost btn-sm">Reconcile</a></td>
+                                <td>
+                                    <div class="cell-title">{{ \Illuminate\Support\Carbon::parse($pending['date'])->format('l, j F Y') }}</div>
+                                    <div class="cell-sub">{{ \Illuminate\Support\Carbon::parse($pending['date'])->format('d M Y') }}</div>
+                                </td>
+                                <td>
+                                    <span class="tag {{ $pending['shift'] === \App\Support\Shift::FULL ? 'tag-terracotta' : ($pending['shift'] === \App\Support\Shift::NIGHT ? 'tag-grey' : 'tag-gold') }}">
+                                        {{ ucfirst($pending['shift']) }}
+                                    </span>
+                                </td>
+                                <td class="cell-sub">{{ $pending['window'] }}</td>
+                                <td class="cell-title">{{ $pending['transactions'] }}</td>
+                                <td class="cell-title">@money($pending['amount'])</td>
+                                <td>
+                                    <a href="{{ route('reconciliation.create', ['date' => $pending['date'], 'shift' => $pending['shift']]) }}"
+                                       class="btn btn-ghost btn-sm"
+                                       title="Reconcile {{ strtolower($pending['label']) }} for {{ $pending['date'] }}">
+                                        Reconcile
+                                    </a>
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
