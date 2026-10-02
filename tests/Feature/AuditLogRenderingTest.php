@@ -85,6 +85,27 @@ class AuditLogRenderingTest extends TestCase
             ->assertDontSee($cell(1), false);
     }
 
+    public function test_audit_page_never_renders_a_plain_entity_id(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'admin',
+            'is_active' => true,
+        ]);
+
+        $log = $this->createAuditLog($user, 'Plain id probe', 7);
+        $log->update(['entity_type' => 'Transaction', 'entity_id' => 163]);
+
+        $response = $this->actingAs($user)->get(route('audit.index'));
+
+        $response->assertOk();
+        // The raw id must not appear anywhere in the markup.
+        $response->assertDontSee('>#163<', false);
+        $response->assertDontSee('data-entityid="163"', false);
+        $response->assertDontSee('title="163"', false);
+        // The opaque token is used instead.
+        $response->assertSee($log->encrypted_entity_id, false);
+    }
+
     private function createAuditLog(User $user, string $action, int $minutesAgo): AuditLog
     {
         $log = AuditLog::create([

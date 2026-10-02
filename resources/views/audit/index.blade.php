@@ -115,7 +115,7 @@
                             <div class="detail-row"><span class="dk">User</span><span class="dv" id="auditModalUser">—</span></div>
                             <div class="detail-row"><span class="dk">Action</span><span class="dv"><span class="tag tag-terracotta" id="auditModalActionTag">—</span></span></div>
                             <div class="detail-row"><span class="dk">Entity</span><span class="dv" id="auditModalEntity">—</span></div>
-                            <div class="detail-row"><span class="dk">Entity ID</span><span class="dv" id="auditModalEntityId">—</span></div>
+                            <div class="detail-row"><span class="dk">Entity ref</span><span class="dv" id="auditModalEntityId">—</span></div>
                             <div class="detail-row"><span class="dk">IP address</span><span class="dv" id="auditModalIp">—</span></div>
                         </div>
                     </div>

@@ -51,9 +51,9 @@ class AuditLogController extends Controller
             'date' => $log->created_at->format('d M Y H:i'),
             'action' => $log->action,
             'user' => $log->user?->name ?? '—',
-            'subject_type' => $log->subject_type ?? '—',
-            'subject_id' => $log->subject_id ?? '—',
-            'extra' => $log->extra ? json_encode($log->extra) : '—',
+            'entity_type' => $log->entity_type ?? '—',
+            'entity_id' => $log->encrypted_entity_id !== '' ? $log->encrypted_entity_id : '—',
+            'details' => $log->details ? json_encode($log->details) : '—',
         ])->map(fn (array $row) => collect($columns)->mapWithKeys(fn ($col) => [$col['key'] => $row[$col['key']] ?? ''])->all());
 
         $title = 'Audit Log';
@@ -72,9 +72,9 @@ class AuditLogController extends Controller
             ['key' => 'date', 'label' => 'Date'],
             ['key' => 'action', 'label' => 'Action'],
             ['key' => 'user', 'label' => 'User'],
-            ['key' => 'subject_type', 'label' => 'Subject Type'],
-            ['key' => 'subject_id', 'label' => 'Subject ID'],
-            ['key' => 'extra', 'label' => 'Details'],
+            ['key' => 'entity_type', 'label' => 'Entity'],
+            ['key' => 'entity_id', 'label' => 'Entity Ref'],
+            ['key' => 'details', 'label' => 'Details'],
         ];
     }
 }
