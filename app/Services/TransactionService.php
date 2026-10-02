@@ -65,7 +65,7 @@ class TransactionService
             // float_topup / float_deposit (topping up float) -> +float only, no cash (bank transfer) — per user: dont need for withdraw cash
             match ($data['type']) {
                 'deposit' => $adjustFloat(-(float) $data['amount']),
-                'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $adjustFloat((float) $data['amount']),
+                'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit', 'commission_income' => $adjustFloat((float) $data['amount']),
                 'cash_to_float' => $adjustFloat((float) $data['amount'] - $commission),
                 default => $adjustFloat(-(float) $data['amount']),
             };

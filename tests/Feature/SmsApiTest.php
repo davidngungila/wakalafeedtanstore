@@ -252,7 +252,7 @@ class SmsApiTest extends TestCase
 
         $this->assertSame(1, $response->json('summary.received'));
         $this->assertSame(0, $response->json('summary.ignored_senders'));
-        $this->assertSame('SMS did not match any financial template.', $response->json('results.0.error'));
+        $this->assertSame('OTP/verification SMS ignored - not a financial transaction.', $response->json('results.0.error'));
 
         $this->assertDatabaseHas('sms_messages', [
             'device_id' => $device->id,

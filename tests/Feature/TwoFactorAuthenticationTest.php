@@ -49,7 +49,8 @@ class TwoFactorAuthenticationTest extends TestCase
         $this->get(route('two-factor.show'))
             ->assertOk()
             ->assertSee('Enter the 6-digit code sent to')
-            ->assertSee('0712345678')
+            ->assertSee('071****678')
+            ->assertDontSee('0712345678')
             ->assertSee('Resend code')
             ->assertDontSee('authenticator app');
     }

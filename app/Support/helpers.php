@@ -12,6 +12,27 @@ if (! function_exists('money')) {
     }
 }
 
+if (! function_exists('mask_phone')) {
+    /**
+     * Mask a phone number for display, keeping the country/area prefix
+     * and the last digits only (e.g. 062****304).
+     */
+    function mask_phone(?string $phone): string
+    {
+        if ($phone === null || $phone === '') {
+            return '';
+        }
+
+        $digits = preg_replace('/\D+/', '', $phone);
+
+        if (strlen($digits) <= 6) {
+            return str_repeat('*', max(strlen($digits) - 2, 2)).substr($digits, -2);
+        }
+
+        return substr($digits, 0, 3).str_repeat('*', strlen($digits) - 6).substr($digits, -3);
+    }
+}
+
 if (! function_exists('txn_type_label')) {
     /**
      * Human friendly label for a transaction type.
@@ -33,6 +54,7 @@ if (! function_exists('txn_type_label')) {
             'cash_in' => 'Cash In',
             'cash_out' => 'Cash Out',
             'cash_to_float' => 'Cash to Float',
+            'commission_income' => 'Commission Income',
             'float_topup' => 'Float Top-up',
             'float_pull' => 'Float Pull',
             default => ucwords(str_replace('_', ' ', $type)),

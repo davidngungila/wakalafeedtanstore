@@ -134,10 +134,9 @@ class SmsProcessor
 
         // Strict: if no approved template matched -> not a transaction (promo/OTP/balance-only/etc. -> NEEDS_REVIEW)
         if ($extracted === null) {
-            $isPromo = $this->isPromoSms($body);
             $sms->update([
                 'processing_status' => 'NEEDS_REVIEW',
-                'processing_error' => $isPromo ? 'Promo/marketing SMS ignored - not a financial transaction.' : 'SMS did not match any financial template.',
+                'processing_error' => $this->rejectionReason($body),
             ]);
 
             return ['ok' => false, 'ignored_sender' => false, 'sms_id' => $sms->id, 'error' => $sms->processing_error];
@@ -303,7 +302,7 @@ class SmsProcessor
             $commissionOverride,
         );
 
-        $isFloatSms = in_array($parsed['type'], ['bank_to_wallet', 'float_topup', 'cash_in'], true)
+        $isFloatSms = in_array($parsed['type'], ['bank_to_wallet', 'float_topup', 'cash_in', 'commission_income'], true)
             || str_contains(strtolower($sms->message_body), 'union financial')
             || str_contains(strtolower($sms->message_body), 'kiasi:tsh')
             || str_contains(strtolower($sms->message_body), 'kiasi: tsh');
@@ -335,7 +334,7 @@ class SmsProcessor
         }
 
         try {
-            $floatType = $parsed['type'] === 'bank_to_wallet' ? 'float_topup' : 'cash_in';
+            $floatType = in_array($parsed['type'], ['bank_to_wallet', 'commission_income'], true) ? 'float_topup' : 'cash_in';
             $dailyOpening = DailyOpening::forAgentAndDate($agent->id, today())->open()->first();
 
             FloatTransaction::create([
@@ -468,6 +467,23 @@ class SmsProcessor
         }
 
         return null;
+    }
+
+    private function rejectionReason(string $body): string
+    {
+        if ($this->isPromoSms($body)) {
+            return 'Promo/marketing SMS ignored - not a financial transaction.';
+        }
+
+        if (preg_match('/\b(otp|one time password|verification code|login code|usiposhare|do not share|code ya kuthibitisha|two.?factor|security code|digit code|expires in \d+ min|code sent to)\b/i', $body)) {
+            return 'OTP/verification SMS ignored - not a financial transaction.';
+        }
+
+        if (preg_match('/\b(you have done|do more transactions|cashin count|cashout count|cash in count|cash out count|daily (summary|report)|transaction summary)\b/i', $body)) {
+            return 'Account summary SMS ignored - not a financial transaction.';
+        }
+
+        return 'SMS did not match any financial template.';
     }
 
     private function isPromoSms(string $body): bool

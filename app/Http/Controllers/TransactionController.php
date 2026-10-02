@@ -1284,7 +1284,7 @@ class TransactionController extends Controller
                 // Reverse is opposite of process(): deposit -amount -> +amount; withdrawal/float_topup/float_deposit/bank_to_wallet +amount -> -amount
                 $delta = match ($transaction->type) {
                     'deposit' => $amount,
-                    'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => -$amount,
+                    'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit', 'commission_income' => -$amount,
                     'cash_to_float' => -($amount - (float) ($transaction->commission ?? 0)),
                     default => $amount,
                 };
@@ -1388,7 +1388,7 @@ class TransactionController extends Controller
     {
         return match ($type) {
             'deposit', 'airtime', 'send_money' => -$amount,
-            'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $amount,
+            'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit', 'commission_income' => $amount,
             'cash_to_float' => $amount - $commission,
             default => -$amount,
         };

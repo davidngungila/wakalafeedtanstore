@@ -40,7 +40,7 @@ class TransactionJournalService
 
     private const FLOAT_OUT_ONLY = ['send_money', 'bill_payment', 'data'];
 
-    private const FLOAT_IN_ONLY = ['bank_to_wallet'];
+    private const FLOAT_IN_ONLY = ['bank_to_wallet', 'commission_income'];
 
     /**
      * Auto-post a balanced journal entry for a completed transaction.

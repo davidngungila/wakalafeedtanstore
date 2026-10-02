@@ -35,7 +35,7 @@ class TwoFactorController extends Controller
         }
 
         return view('auth.two-factor', [
-            'phone' => $user->phone,
+            'phone' => mask_phone($user->phone),
             'methods' => $methods,
             'method' => $method,
         ]);

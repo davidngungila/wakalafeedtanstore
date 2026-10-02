@@ -8,8 +8,8 @@ class AirtelMoneyParser
     {
         return [
             'airtel_sent_tid_trailing' => [
-                'type' => 'send_money',
-                'pattern' => '/(?:AirtelMoney|Airtel\s*Money)[\s\n]+(?:Sent|Transferred|Umetuma)\s+(?P<amount>[\d,]+(?:\.\d+)?)\s*T[Ss][Hh]\s+(?:to|kwenda)\s+(?P<customer>[A-Z][A-Za-z\'\s.]{1,59}?)\s+(?P<phone>\d{9,10})\b.*?Balance\s*(?P<balance>[\d,]+(?:\.\d+)?)\s*T[Ss][Hh].*?commission\s+before\s+Tax\s+is\s+(?P<commission>[\d,]+(?:\.\d+)?)\s*T[Ss][Hh].*?(?:TID|TXN|TNX|Trans\.?\s*ID)\s*[:#]\s*(?P<ref>[A-Z0-9][A-Z0-9.\-]{4,})/isu',
+                'type' => 'deposit',
+                'pattern' => '/(?:AirtelMoney|Airtel\s*Money)?[\s\n]*(?:Sent|Transferred|Umetuma)\s+(?P<amount>[\d,]+(?:\.\d+)?)\s*T[Ss][Hh]\s+(?:to|kwenda)\s+(?P<customer>[A-Z][A-Za-z\'\s.]{1,59}?)\s+(?P<phone>\d{9,10})\b.*?Balance\s*(?P<balance>[\d,]+(?:\.\d+)?)\s*T[Ss][Hh].*?commission\s+before\s+Tax\s+is\s+(?P<commission>[\d,]+(?:\.\d+)?)\s*T[Ss][Hh].*?(?:TID|TXN|TNX|Trans\.?\s*ID)\s*[:#]\s*(?P<ref>[A-Z0-9][A-Z0-9.\-]{4,})/isu',
             ],
             'airtel_received_tid_trailing' => [
                 'type' => 'withdrawal',
