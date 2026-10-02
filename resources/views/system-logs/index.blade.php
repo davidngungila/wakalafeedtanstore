@@ -154,17 +154,58 @@
 
     <div class="modal-backdrop" id="logEntryModal">
         <style>
-            #logEntryModal .receipt{max-height:340px;overflow:auto;}
-            #logEntryModal .receipt-row{display:block;}
-            #logEntryModal .receipt-row span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:3px;}
-            #logEntryModal .receipt-row b{display:block;white-space:pre-wrap;word-break:break-word;font-weight:600;}
+            #logEntryModal .log-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:18px;align-items:start;}
+            #logEntryModal .log-col{min-width:0;}
+            #logEntryModal .log-col-title{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:8px;}
+            #logEntryModal .detail-list{display:flex;flex-direction:column;gap:8px;}
+            #logEntryModal .detail-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);}
+            #logEntryModal .detail-row:last-child{border-bottom:none;}
+            #logEntryModal .dk{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;flex:none;}
+            #logEntryModal .dv{font-size:13.5px;color:var(--coffee-900);font-weight:600;text-align:right;word-break:break-word;}
+            #logEntryModal .dv-wrap{text-align:left;}
+            #logEntryModal .log-trace{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.55;color:#4a3b2c;background:var(--sand-100);border-radius:8px;padding:10px 12px;margin-top:8px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all;text-align:left;}
+            @media (max-width:640px){
+                #logEntryModal .log-cols{grid-template-columns:1fr;gap:14px;}
+            }
         </style>
-        <div class="modal">
+        <div class="popup" style="max-width:760px; width:100%; margin:auto;">
             <div class="modal-head">
-                <h4 id="logEntryTitle">Log entry</h4>
-                <button type="button" class="modal-close" onclick="closeModal('logEntryModal')">&times;</button>
+                <h3>Log entry</h3>
+                <button class="modal-close" onclick="closeModal('logEntryModal')">✕</button>
             </div>
-            <div class="modal-body" id="logEntryBody"></div>
+            <div class="modal-body">
+                <div class="log-cols">
+                    <div class="log-col">
+                        <div class="log-col-title">Entry</div>
+                        <div class="detail-list">
+                            <div class="detail-row"><span class="dk">When</span><span class="dv" id="logModalWhen">—</span></div>
+                            <div class="detail-row"><span class="dk">Level</span><span class="dv"><span class="tag log-lv" id="logModalLevel">—</span></span></div>
+                            <div class="detail-row"><span class="dk">Environment</span><span class="dv" id="logModalEnv">—</span></div>
+                            <div class="detail-row"><span class="dk">Frames</span><span class="dv" id="logModalFrames">—</span></div>
+                            <div class="detail-row" style="flex-direction:column;align-items:stretch;gap:6px;">
+                                <span class="dk">Message</span>
+                                <div class="log-msg" id="logModalMessage" style="max-width:none;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="log-col">
+                        <div class="log-col-title">Context &amp; trace</div>
+                        <div class="detail-list">
+                            <div class="detail-row" style="flex-direction:column;align-items:stretch;gap:6px;">
+                                <span class="dk">Context</span>
+                                <div class="dv dv-wrap" id="logModalContext" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;">—</div>
+                            </div>
+                            <div class="detail-row" style="flex-direction:column;align-items:stretch;gap:6px;">
+                                <span class="dk">Stack trace</span>
+                                <div id="logModalTraceWrap" style="display:none;">
+                                    <div class="log-trace" id="logModalTrace"></div>
+                                </div>
+                                <div class="dv" id="logModalTraceEmpty" style="font-weight:500;color:var(--ink-soft);">—</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="modal-foot">
                 <button type="button" class="btn btn-primary" onclick="closeModal('logEntryModal')">Close</button>
             </div>
@@ -175,59 +216,57 @@
 @section('scripts')
     <script>
         @php
+            // Only the fields the popup needs, so the page stays light even when
+            // a record carries a long stack trace.
             $entries = $logs->getCollection()->map(fn (array $entry): array => [
                 'time' => $entry['time'],
                 'level' => $entry['level'],
                 'env' => $entry['env'],
                 'message' => $entry['message'],
-                'exception' => $entry['exception'],
                 'context' => $entry['context'] === [] ? null : json_encode($entry['context'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
                 'trace' => $entry['trace'] === [] ? null : implode("\n", $entry['trace']),
-                'raw' => $entry['raw'],
             ])->values();
         @endphp
         const sysLogEntries = @json($entries);
 
-        document.querySelectorAll('#logRows tr[data-index]').forEach(row => {
-            row.addEventListener('click', () => {
-                const entry = sysLogEntries[Number(row.dataset.index)];
-                if (!entry) return;
+        function openLogModal(tr) {
+            const entry = sysLogEntries[Number(tr.dataset.index)];
+            if (!entry) return;
 
-                const rows = [
-                    ['When', entry.time],
-                    ['Level', entry.level],
-                    ['Environment', entry.env],
-                    ['Message', entry.message],
-                    ['Exception', entry.exception || '—'],
-                    ['Context', entry.context || '—'],
-                    ['Stack trace', entry.trace || '—'],
-                ];
+            document.getElementById('logModalWhen').textContent = entry.time;
 
-                const body = document.getElementById('logEntryBody');
-                body.innerHTML = '';
+            const level = document.getElementById('logModalLevel');
+            level.textContent = entry.level;
+            level.className = 'tag log-lv log-lv-' + entry.level;
 
-                const receipt = document.createElement('div');
-                receipt.className = 'receipt';
+            document.getElementById('logModalEnv').textContent = entry.env;
 
-                rows.forEach(([label, value]) => {
-                    const r = document.createElement('div');
-                    r.className = 'receipt-row';
-                    const s = document.createElement('span');
-                    s.textContent = label;
-                    const b = document.createElement('b');
-                    b.textContent = value;
-                    if (label === 'Stack trace' && entry.trace) {
-                        b.className = 'log-trace';
-                    }
-                    r.appendChild(s);
-                    r.appendChild(b);
-                    receipt.appendChild(r);
-                });
+            const frames = entry.trace ? entry.trace.split('\n').length : 0;
+            document.getElementById('logModalFrames').textContent = frames ? frames + (frames === 1 ? ' frame' : ' frames') : '—';
 
-                body.appendChild(receipt);
-                document.getElementById('logEntryTitle').textContent = entry.level + ' · ' + entry.time;
-                openModal('logEntryModal');
-            });
+            document.getElementById('logModalMessage').textContent = entry.message || '—';
+            document.getElementById('logModalContext').textContent = entry.context || '—';
+
+            const trace = document.getElementById('logModalTrace');
+            const wrap = document.getElementById('logModalTraceWrap');
+            const empty = document.getElementById('logModalTraceEmpty');
+
+            if (entry.trace) {
+                trace.textContent = entry.trace;
+                wrap.style.display = 'block';
+                empty.style.display = 'none';
+            } else {
+                trace.textContent = '';
+                wrap.style.display = 'none';
+                empty.style.display = 'block';
+            }
+
+            openModal('logEntryModal');
+        }
+
+        document.querySelectorAll('#logRows tr[data-index]').forEach(tr => {
+            tr.style.cursor = 'pointer';
+            tr.addEventListener('click', () => openLogModal(tr));
         });
     </script>
 @endsection
