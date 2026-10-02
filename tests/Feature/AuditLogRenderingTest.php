@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Support\PageToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -66,20 +67,28 @@ class AuditLogRenderingTest extends TestCase
 
         $cell = static fn (int $marker): string => '<div class="cell-title" style="font-size:12px;" title="'.$tokens[$marker].'">#';
 
-        $this->actingAs($user)
-            ->get(route('audit.index', ['action' => 'Pagination marker']))
+        $response = $this->actingAs($user)
+            ->get(route('audit.index', ['action' => 'Pagination marker']));
+
+        $response
             ->assertSee('Showing <strong>1</strong> to <strong>20</strong>', false)
             ->assertSee('of <strong>21</strong> results', false)
             ->assertSee($cell(1), false)
             ->assertSee($cell(20), false)
             ->assertDontSee($cell(21), false)
-            ->assertSee('page=2', false)
-            ->assertSee('action=Pagination%20marker', false)
+            ->assertSee('page='.PageToken::encode(2), false)
+            ->assertDontSee('page=2"', false)
             // The raw entity id is never rendered.
             ->assertDontSee('title="1"', false);
 
+        // The action filter is preserved on the pager link.
+        $this->assertMatchesRegularExpression(
+            '/audit\?action=Pagination(\+|%20)marker&amp;page=/',
+            $response->getContent()
+        );
+
         $this->actingAs($user)
-            ->get(route('audit.index', ['action' => 'Pagination marker', 'page' => 2]))
+            ->get(route('audit.index', ['action' => 'Pagination marker', 'page' => PageToken::encode(2)]))
             ->assertSee('Showing <strong>21</strong> to <strong>21</strong>', false)
             ->assertSee($cell(21), false)
             ->assertDontSee($cell(1), false);
