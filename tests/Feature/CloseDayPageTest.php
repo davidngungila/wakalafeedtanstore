@@ -150,6 +150,42 @@ class CloseDayPageTest extends TestCase
         $this->assertTrue($opening->fresh()->is_closed);
     }
 
+    public function test_close_day_page_submits_through_method_spoofing_like_a_browser_form(): void
+    {
+        $opening = $this->openDay();
+        $network = Network::firstWhere('name', 'M-Pesa');
+
+        $response = $this->actingAs($this->user())
+            ->from(route('daily-opening.close-form', $opening))
+            ->post(route('daily-opening.close', $opening), [
+                '_method' => 'PUT',
+                '_token' => csrf_token(),
+                'cash_closing' => 250000,
+                'float_closings' => [$network->id => 75000],
+            ]);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertTrue($opening->fresh()->is_closed);
+    }
+
+    public function test_close_day_page_reports_the_fields_it_needs_when_a_value_is_missing(): void
+    {
+        $opening = $this->openDay();
+        $network = Network::firstWhere('name', 'M-Pesa');
+
+        $this->actingAs($this->user())
+            ->from(route('daily-opening.close-form', $opening))
+            ->post(route('daily-opening.close', $opening), [
+                '_method' => 'PUT',
+                'cash_closing' => '',
+                'float_closings' => [$network->id => 75000],
+            ])
+            ->assertRedirect(route('daily-opening.close-form', $opening))
+            ->assertSessionHasErrors('cash_closing');
+
+        $this->assertFalse($opening->fresh()->is_closed);
+    }
+
     public function test_day_page_links_to_the_close_day_page(): void
     {
         $opening = $this->openDay();
