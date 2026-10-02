@@ -23,6 +23,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SmsController;
 use App\Http\Controllers\SmsCustomerController;
+use App\Http\Controllers\SystemLogController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\UserController;
@@ -237,6 +238,8 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
             ->name('settings.sms.send-bulk');
         Route::get('/settings/email/test', [SettingController::class, 'showTestEmail'])->name('settings.email.test.page');
         Route::post('/settings/email/test', [SettingController::class, 'sendTestEmail'])->name('settings.email.test');
+
+        Route::get('/system/logs', SystemLogController::class)->name('system.logs');
     });
 });
 

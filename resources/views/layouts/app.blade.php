@@ -589,6 +589,7 @@
         $isUserArea = str_starts_with($routeName, 'users');
         $isAuditArea = str_starts_with($routeName, 'audit');
         $isSettingArea = str_starts_with($routeName, 'settings');
+        $isSystemLogArea = str_starts_with($routeName, 'system');
         $isProfileArea = str_starts_with($routeName, 'profile');
         $isAccountArea = str_starts_with($routeName, 'account');
         $currentUser = auth()->user();
@@ -700,7 +701,7 @@
                         <span>Audit Logs</span>
                     </a>
                 @endif
-                <div class="sb-drop {{ $isSettingArea || $isProfileArea || $isAccountArea ? 'open' : '' }}" data-drop-key="system">
+                <div class="sb-drop {{ $isSettingArea || $isProfileArea || $isAccountArea || $isSystemLogArea ? 'open' : '' }}" data-drop-key="system">
                     <button type="button" class="sb-drop-toggle {{ $isSettingArea || $isProfileArea || $isAccountArea ? '' : '' }}" onclick="toggleSbDrop(this)" style="width:100%;padding:11px 12px;border-radius:10px;background:none;cursor:pointer;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px;flex:none;display:inline;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 0 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z"></path></svg>
                         <span>{{ is_admin() ? 'System' : 'Account' }}</span>
@@ -735,6 +736,10 @@
                             <a href="{{ route('settings.sms') }}" class="sb-drop-sub {{ in_array($routeName, ['settings.sms', 'settings.sms.send.page'], true) ? 'active' : '' }}">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 20l1-4.2a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-9 8.4 8.4 0 0 1 9 8.5Z"></path><path d="M8 10h.01M12 10h.01M16 10h.01"></path></svg>
                                 SMS Settings
+                            </a>
+                            <a href="{{ route('system.logs') }}" class="sb-drop-sub {{ $routeName === 'system.logs' ? 'active' : '' }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="15" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>
+                                System Logs
                             </a>
                         @endif
                         <a href="{{ route('account.index') }}" class="sb-drop-sub {{ $isAccountArea ? 'active' : '' }}">
