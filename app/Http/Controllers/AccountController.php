@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\SmsSender;
+use App\Services\SmsTemplates;
 use App\Support\SessionFormatter;
 use App\Support\TwoFactor;
 use App\Support\TwoFactorMethods;
@@ -75,6 +76,8 @@ class AccountController extends Controller
             $request->session()->forget('two_factor_pending_secret');
 
             $this->recordAudit('Two-factor enabled via SMS OTP', 'User', $user->id);
+
+            app(SmsTemplates::class)->sendToUser($user, 'two_factor_enabled', ['method' => 'SMS OTP']);
 
             return response()->json(['success' => true, 'message' => 'SMS OTP enabled. Codes will be sent to '.$phone.' at login.', 'recovery_codes' => $recoveryCodes]);
         }
@@ -196,6 +199,10 @@ class AccountController extends Controller
             $user->id
         );
 
+        if ($user->wasChanged('two_factor_enabled')) {
+            app(SmsTemplates::class)->sendToUser($user, 'two_factor_enabled', ['method' => 'Authenticator App']);
+        }
+
         $response = [
             'success' => true,
             'message' => 'Authenticator app verification is now available.',
@@ -236,6 +243,8 @@ class AccountController extends Controller
         $request->session()->forget('two_factor_pending_secret');
 
         $this->recordAudit('Two-factor authentication disabled', 'User', $user->id);
+
+        app(SmsTemplates::class)->sendToUser($user, 'two_factor_disabled');
 
         return response()->json(['success' => true, 'message' => 'Two-factor authentication has been disabled.']);
     }

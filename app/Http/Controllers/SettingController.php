@@ -46,6 +46,27 @@ class SettingController extends Controller
         return $this->settingsView('email');
     }
 
+    public function saveSmsTemplates(Request $request): JsonResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'templates' => ['required', 'array'],
+            'templates.*' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $cleaned = collect($validated['templates'])
+            ->filter(fn ($text) => is_string($text) && trim($text) !== '')
+            ->map(fn ($text) => trim($text))
+            ->all();
+
+        Setting::updateOrCreate(['key' => 'sms_templates'], ['value' => $cleaned]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'SMS templates saved.']);
+        }
+
+        return back()->with('status', 'SMS templates saved.');
+    }
+
     public function sms(): View
     {
         return $this->settingsView('sms');

@@ -69,10 +69,30 @@
         </div>
         <div class="panel-body">
             @if ($user->phone)
+                @php
+                    $templateVars = ['name' => $user->name ?? '', 'email' => $user->email ?? '', 'phone' => $user->phone ?? ''];
+                    $templateTexts = collect(app(\App\Services\SmsTemplates::class)->all())->mapWithKeys(fn ($t, $k) => [$k => app(\App\Services\SmsTemplates::class)->render($k, $templateVars)])->all();
+                @endphp
+                <div class="field" style="margin-bottom:14px;">
+                    <label>Template (optional)</label>
+                    <select id="userSmsTemplate">
+                        <option value="">— Custom message —</option>
+                        @foreach (app(\App\Services\SmsTemplates::class)->all() as $key => $template)
+                            <option value="{{ $key }}">{{ $template['label'] }}</option>
+                        @endforeach
+                    </select>
+                </div>
                 <div class="field">
                     <label>Message</label>
                     <textarea id="userSmsText" rows="3" maxlength="1000" placeholder="Write a message to {{ $user->name }}…"></textarea>
                 </div>
+                <script>
+                    const USER_SMS_TEMPLATES = @json($templateTexts);
+                    document.getElementById('userSmsTemplate')?.addEventListener('change', function () {
+                        const text = USER_SMS_TEMPLATES[this.value];
+                        if (text !== undefined) { document.getElementById('userSmsText').value = text; }
+                    });
+                </script>
                 <div style="display:flex; gap:10px; margin-top:14px; align-items:center;">
                     <button type="button" id="sendUserSmsBtn" class="btn btn-primary btn-sm">Send SMS</button>
                     <span id="userSmsStatus" style="font-size:13px; color:var(--ink-soft);"></span>

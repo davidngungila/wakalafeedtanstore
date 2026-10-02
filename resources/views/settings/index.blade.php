@@ -215,6 +215,20 @@
                     <button type="button" id="smsConnectionButton" data-sms-connection-check class="btn btn-ghost btn-sm" style="margin-top:12px;">Check connection</button>
                 </div>
                 <a href="{{ route('settings.sms.send.page') }}" class="btn btn-primary" style="margin-top:16px;">Open SMS sender</a>
+
+                @php $smsTemplates = app(\App\Services\SmsTemplates::class)->all(); @endphp
+                <h3 style="margin-top:28px;">Message Templates</h3>
+                <p style="font-size:13px; color:var(--ink-soft); margin-bottom:16px;">Automatic messages sent to users on system events. Use placeholders like {name}, {email}, {phone}, {password}, {method}.</p>
+                <form method="POST" action="{{ route('settings.sms.templates') }}" data-settings-form>
+                    @csrf
+                    @foreach ($smsTemplates as $key => $template)
+                        <div class="field" style="margin-bottom:14px;">
+                            <label>{{ $template['label'] }}</label>
+                            <textarea name="templates[{{ $key }}]" rows="2" maxlength="1000">{{ $template['text'] }}</textarea>
+                        </div>
+                    @endforeach
+                    <button type="submit" class="btn btn-primary">Save templates</button>
+                </form>
             @elseif ($section === 'notifications')
                 <h3>Notifications</h3>
                 <form method="POST" action="{{ route('settings.store') }}" data-settings-form>

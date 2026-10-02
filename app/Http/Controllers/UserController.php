@@ -6,6 +6,7 @@ use App\Models\Agent;
 use App\Models\User;
 use App\Services\ExportService;
 use App\Services\SmsSender;
+use App\Services\SmsTemplates;
 use App\Support\SessionFormatter;
 use App\Support\TwoFactorMethods;
 use Illuminate\Http\JsonResponse;
@@ -150,6 +151,8 @@ class UserController extends Controller
 
         $this->recordAudit('User account created', 'User', $user->id, ['email' => $user->email, 'role' => $user->role]);
 
+        app(SmsTemplates::class)->sendToUser($user, 'credentials', ['password' => $validated['password']]);
+
         if ($request->expectsJson()) {
             return response()->json(['success' => true, 'message' => 'User account created successfully.']);
         }
@@ -188,6 +191,8 @@ class UserController extends Controller
 
         if ($user->wasChanged('phone')) {
             $user->forceFill(['phone_verified_at' => null])->save();
+
+            app(SmsTemplates::class)->sendToUser($user, 'phone_changed');
         }
 
         $this->recordAudit('User account updated', 'User', $user->id, ['email' => $user->email]);

@@ -226,6 +226,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
             ->middleware('throttle:10,1')
             ->name('settings.sms.connection');
         Route::post('/settings', [SettingController::class, 'store'])->name('settings.store');
+        Route::post('/settings/sms/templates', [SettingController::class, 'saveSmsTemplates'])->name('settings.sms.templates');
         Route::post('/settings/sms/send', [OutboundSmsController::class, 'single'])
             ->middleware('throttle:10,1')
             ->name('settings.sms.send');

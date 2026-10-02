@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\SmsSender;
+use App\Services\SmsTemplates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -80,6 +81,8 @@ class PhoneVerificationController extends Controller
 
         $this->recordAudit('Phone number verified', 'User', $user->id);
 
+        app(SmsTemplates::class)->sendToUser($user, 'phone_verified');
+
         return response()->json(['success' => true, 'message' => 'Mobile number verified successfully.']);
     }
 
@@ -130,6 +133,8 @@ class PhoneVerificationController extends Controller
         Cache::forget('phone_verification_'.$user->id);
 
         $this->recordAudit('Phone number verified during login', 'User', $user->id);
+
+        app(SmsTemplates::class)->sendToUser($user, 'phone_verified');
 
         // Phone verified — continue with the SMS two-factor challenge.
         try {
