@@ -98,6 +98,7 @@
                             <option value="float_deposit" {{ old('type', $transaction->type) === 'float_deposit' ? 'selected' : '' }}>Float Deposit</option>
                             <option value="float_topup" {{ old('type', $transaction->type) === 'float_topup' ? 'selected' : '' }}>Float Top-up</option>
                             <option value="cash_to_float" {{ old('type', $transaction->type) === 'cash_to_float' ? 'selected' : '' }}>Cash to Float</option>
+                            <option value="commission_income" {{ old('type', $transaction->type) === 'commission_income' ? 'selected' : '' }}>Commission Income</option>
                         </select>
                         @error('type')<p style="color:var(--danger);font-size:12px;margin-top:4px;">{{ $message }}</p>@enderror
                     </div>

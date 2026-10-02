@@ -251,7 +251,7 @@ class TransactionController extends Controller
     {
         $validated = $request->validate([
             'network_id' => ['required', 'exists:networks,id'],
-            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup,cash_to_float'],
+            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup,cash_to_float,commission_income'],
             'customer_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['required', 'string', 'max:30'],
             'amount' => ['required', 'numeric', 'min:1'],
@@ -679,7 +679,7 @@ class TransactionController extends Controller
     {
         $validated = $request->validate([
             'network_id' => ['required', 'exists:networks,id'],
-            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup,cash_to_float'],
+            'type' => ['required', 'in:deposit,withdrawal,send_money,bill_payment,airtime,data,bank_to_wallet,wallet_to_bank,float_deposit,float_topup,cash_to_float,commission_income'],
             'customer_name' => ['nullable', 'string', 'max:120'],
             'customer_phone' => ['required', 'string', 'max:30'],
             'amount' => ['required', 'numeric', 'min:1'],
@@ -1380,7 +1380,7 @@ class TransactionController extends Controller
     {
         return [
             'networks' => Network::orderBy('name')->get(['id', 'name', 'color']),
-            'types' => ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank', 'float_deposit', 'float_topup', 'cash_to_float'],
+            'types' => ['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank', 'float_deposit', 'float_topup', 'cash_to_float', 'commission_income'],
         ];
     }
 

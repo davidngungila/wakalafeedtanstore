@@ -70,6 +70,7 @@
                             <option value="float_deposit" {{ old('type') === 'float_deposit' ? 'selected' : '' }}>Float Deposit</option>
                             <option value="float_topup" {{ old('type') === 'float_topup' ? 'selected' : '' }}>Float Top-up</option>
                             <option value="cash_to_float" {{ old('type') === 'cash_to_float' ? 'selected' : '' }}>Cash to Float</option>
+                            <option value="commission_income" {{ old('type') === 'commission_income' ? 'selected' : '' }}>Commission Income</option>
                         </select>
                     </div>
                 </div>
