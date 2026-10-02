@@ -6,6 +6,7 @@ use App\Models\Setting;
 use App\Models\Transaction;
 use App\Observers\TransactionObserver;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -26,6 +27,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Blade::directive('money', fn (string $expression) => "<?php echo money($expression); ?>");
+
+        // Compact pagination used by every paginated table in the app.
+        Paginator::defaultView('partials.pagination');
+        Paginator::defaultSimpleView('partials.pagination');
 
         RateLimiter::for('device-me', fn () => Limit::perMinute(30)->by(request()->ip() ?? 'unknown'));
 

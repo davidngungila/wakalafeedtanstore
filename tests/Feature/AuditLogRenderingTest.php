@@ -63,7 +63,8 @@ class AuditLogRenderingTest extends TestCase
 
         $this->actingAs($user)
             ->get(route('audit.index', ['action' => 'Pagination marker']))
-            ->assertSee('Page 1 of 2')
+            ->assertSee('Showing <strong>1</strong> to <strong>20</strong>', false)
+            ->assertSee('of <strong>21</strong> results', false)
             ->assertSee($cell(1), false)
             ->assertSee($cell(20), false)
             ->assertDontSee($cell(21), false)
@@ -72,7 +73,7 @@ class AuditLogRenderingTest extends TestCase
 
         $this->actingAs($user)
             ->get(route('audit.index', ['action' => 'Pagination marker', 'page' => 2]))
-            ->assertSee('Page 2 of 2')
+            ->assertSee('Showing <strong>21</strong> to <strong>21</strong>', false)
             ->assertSee($cell(21), false)
             ->assertDontSee($cell(1), false);
     }

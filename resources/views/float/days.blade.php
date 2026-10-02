@@ -65,9 +65,7 @@
                     </tbody>
                 </table>
             </div>
-            <div style="padding:12px;">
-                {{ $openings->links() }}
-            </div>
+            {{ $openings->links() }}
             <div style="padding:10px 12px; background:var(--sand-50); border-top:1px solid var(--line); font-size:12px; color:var(--ink-soft);">
                 Single-day page <code>/float/day/{encrypted}</code> (and legacy <code>/float?date=eyJ...</code>) is clean — each shows only its own opening. Use this table as <strong>index</strong> for all days. Use the green arrow to transfer cash to that day’s float and enter the amount. Icons: ↓ Transfer cash to float, 👁 View dedicated day page (only that day opened), ✏️ Edit opening, 🗑️ Delete day.
             </div>

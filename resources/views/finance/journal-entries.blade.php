@@ -101,12 +101,7 @@
                 </tbody>
             </table>
         </div>
-        @if ($entries->hasPages())
-            <div class="table-pager">
-                <span class="pager-info">Page {{ $entries->currentPage() }} of {{ $entries->lastPage() }}</span>
-                <div class="pager-pages">{{ $entries->links() }}</div>
-            </div>
-        @endif
+        {{ $entries->links() }}
     </div>
 
     {{-- Reverse confirmation modal (popup, not browser confirm) --}}

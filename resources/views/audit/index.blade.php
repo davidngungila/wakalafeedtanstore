@@ -80,12 +80,7 @@
                 </tbody>
             </table>
         </div>
-        @if ($logs->hasPages())
-            <div class="table-pager">
-                <span class="pager-info">Page {{ $logs->currentPage() }} of {{ $logs->lastPage() }}</span>
-                <div class="pager-pages">{{ $logs->links() }}</div>
-            </div>
-        @endif
+        {{ $logs->links() }}
     </div>
 
     <div class="modal-backdrop" id="auditLogModal">
