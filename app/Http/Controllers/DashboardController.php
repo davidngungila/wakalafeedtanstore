@@ -109,7 +109,9 @@ class DashboardController extends Controller
         // Transaction value distribution (all-time completed buckets)
         $valueDistribution = $this->valueDistribution();
 
-        $recentTransactions = Transaction::with(['network', 'agent'])
+        // operator is read by the row popup, so it must be eager loaded too or the
+        // dashboard runs an extra query per row.
+        $recentTransactions = Transaction::with(['network', 'agent', 'operator'])
             ->latest()
             ->limit(5)
             ->get();

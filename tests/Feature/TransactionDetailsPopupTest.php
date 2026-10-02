@@ -158,4 +158,51 @@ class TransactionDetailsPopupTest extends TestCase
         $this->assertStringContainsString('v.textContent = value', $content);
         $this->assertStringContainsString('left.appendChild(window.txnDetailRow(row[0], row[1]))', $content);
     }
+
+    /**
+     * The dashboard's recent transactions table must use the same shared popup
+     * rather than the generic one.
+     */
+    public function test_the_dashboard_uses_the_shared_details_modal(): void
+    {
+        Transaction::factory()->create([
+            'agent_id' => $this->cashPoint()->id,
+            'network_id' => Network::factory()->create(['name' => 'Mixx by Yas'])->id,
+            'type' => 'deposit',
+            'status' => 'completed',
+            'amount' => 5_000,
+            'fee' => 0,
+            'commission' => 99,
+            'customer_name' => 'ELIZABETH URIO',
+            'customer_phone' => '255779572349',
+            'notes' => 'Via SMS approval (SMS #641)',
+            'running_cash_balance' => 782_500,
+            'running_float_balance' => 2_853_643.2,
+            'running_network_balance' => 510_880,
+        ]);
+
+        $response = $this->actingAs($this->admin())->get(route('dashboard'));
+
+        $response->assertOk()
+            ->assertSee('id="txnModal"', false)
+            ->assertSee('id="txnModalLeft"', false)
+            ->assertSee('id="txnModalRight"', false);
+
+        $content = $response->getContent();
+
+        $this->assertStringContainsString("bindTransactionRows('#dashTxnRows tr[data-id]'", $content);
+        $this->assertStringNotContainsString("bindRowClick('#dashTxnRows", $content);
+
+        // The popup needs these fields, so the dashboard payload must carry them.
+        $this->assertStringContainsString('type_label', $content);
+        $this->assertStringContainsString('running_network_balance', $content);
+        $this->assertStringContainsString('receipt_url', $content);
+
+        // The shared script must load before the page calls into it.
+        $this->assertLessThan(
+            strpos($content, 'bindTransactionRows('),
+            strpos($content, 'window.bindTransactionRows = function'),
+            'The shared modal script must be included before the page binds rows.'
+        );
+    }
 }
