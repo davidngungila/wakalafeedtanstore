@@ -99,10 +99,6 @@
             @endif
         </p>
 
-        @if ($errors->any())
-            <div class="error">{{ $errors->first() }}</div>
-        @endif
-
         @if (count($methods) > 1)
             <div role="group" aria-label="Verification method" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px;">
                 @foreach ($methods as $availableMethod)
@@ -136,6 +132,8 @@
             <button type="submit" style="background:none;border:none;color:var(--coffee-300);font-size:11.5px;cursor:pointer;text-decoration:underline;">Cancel and return to sign in</button>
         </form>
     </div>
+
+    @include('auth.partials._error-modal')
 
     <script>
         const plain = document.querySelector('#otpForm');

@@ -83,10 +83,6 @@
         <h1>Sign in to your account</h1>
         <p class="sub">Access your cash point control room.</p>
 
-        @if ($errors->any())
-            <div class="error">{{ $errors->first() }}</div>
-        @endif
-
         <form id="loginForm" method="POST" action="{{ route('login') }}">
             @csrf
             <div class="field">
@@ -101,7 +97,9 @@
         </form>
 
        
-    <script>
+    @include('auth.partials._error-modal')
+
+        <script>
         document.getElementById('loginForm').addEventListener('submit', function(e){
             const btn = document.getElementById('loginBtn');
             btn.disabled = true;

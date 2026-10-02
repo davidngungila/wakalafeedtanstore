@@ -83,10 +83,6 @@
         <h1>Verify your phone</h1>
         <p class="sub">Enter the 6-digit code sent to <b>{{ $phone }}</b>. It expires in 5 minutes.</p>
 
-        @if ($errors->any())
-            <div class="error">{{ $errors->first() }}</div>
-        @endif
-
         <form id="verifyForm" method="POST" action="{{ route('phone-verification.verify') }}">
             @csrf
             <div class="field">
@@ -106,6 +102,8 @@
             <button type="submit">Cancel and return to sign in</button>
         </form>
     </div>
+
+    @include('auth.partials._error-modal')
 
     <script>
         const form = document.querySelector('#verifyForm');
