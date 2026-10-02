@@ -194,6 +194,7 @@
                             <div class="detail-row" style="flex-direction:column;align-items:stretch;gap:6px;">
                                 <span class="dk">Context</span>
                                 <div class="dv dv-wrap" id="logModalContext" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;">—</div>
+                                <div class="cell-sub" id="logModalContextNote" style="color:var(--danger);"></div>
                             </div>
                             <div class="detail-row" style="flex-direction:column;align-items:stretch;gap:6px;">
                                 <span class="dk">Stack trace</span>
@@ -224,6 +225,7 @@
                 'env' => $entry['env'],
                 'message' => $entry['message'],
                 'context' => $entry['context'] === [] ? null : json_encode($entry['context'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+                'contextTruncated' => (bool) $entry['contextTruncated'],
                 'trace' => $entry['trace'] === [] ? null : implode("\n", $entry['trace']),
             ])->values();
         @endphp
@@ -245,7 +247,13 @@
             document.getElementById('logModalFrames').textContent = frames ? frames + (frames === 1 ? ' frame' : ' frames') : '—';
 
             document.getElementById('logModalMessage').textContent = entry.message || '—';
-            document.getElementById('logModalContext').textContent = entry.context || '—';
+
+            const context = document.getElementById('logModalContext');
+            context.textContent = entry.context || '—';
+            context.style.color = entry.contextTruncated ? 'var(--danger)' : '';
+            document.getElementById('logModalContextNote').textContent = entry.contextTruncated
+                ? 'Context was cut short by the logger — some values may be missing.'
+                : '';
 
             const trace = document.getElementById('logModalTrace');
             const wrap = document.getElementById('logModalTraceWrap');

@@ -257,6 +257,101 @@ class SystemLogsPageTest extends TestCase
         $this->assertStringContainsString('RuntimeException', $inline['exception']);
     }
 
+    /**
+     * Monolog caps the serialised context when it holds an exception, leaving the
+     * JSON unterminated. A strict decode fails on those records, so the reader
+     * repairs the fragment instead of reporting no context at all.
+     */
+    public function test_the_reader_recovers_context_that_monolog_truncated(): void
+    {
+        // Verbatim shape from a real record: no closing quote, no closing brace.
+        $this->writeLog([
+            '[2026-09-29 01:30:36] local.ERROR: SmsController::stream(): Return value must be of type '
+            .'App\Http\Controllers\StreamedResponse, Symfony\Component\HttpFoundation\StreamedResponse returned '
+            .'{"userId":1,"exception":"[object] (TypeError(code: 0): SmsController::stream() returned at '
+            .'/var/www/app/Http/Controllers/SmsController.php:312)',
+            '[stacktrace]',
+            '#0 /var/www/app/vendor/laravel/framework/src/Illuminate/Routing/ControllerDispatcher.php(46): SmsController->stream()',
+        ]);
+
+        $entry = app(SystemLogReader::class)->read('laravel.log')->first();
+
+        $this->assertSame('ERROR', $entry['level']);
+        $this->assertTrue($entry['contextTruncated'], 'The truncated context must be flagged.');
+        $this->assertSame(1, $entry['context']['userId']);
+        $this->assertStringContainsString('SmsController::stream()', $entry['context']['exception']);
+
+        // The context must not leak into the message.
+        $this->assertSame(
+            'SmsController::stream(): Return value must be of type App\Http\Controllers\StreamedResponse, '
+            .'Symfony\Component\HttpFoundation\StreamedResponse returned',
+            $entry['message']
+        );
+        $this->assertStringNotContainsString('userId', $entry['message']);
+    }
+
+    /**
+     * When truncation cuts a value in half, the repaired value keeps the text that
+     * survived rather than dropping the key, and the truncation is flagged.
+     */
+    public function test_the_reader_keeps_a_partially_written_value_and_flags_it(): void
+    {
+        $this->writeLog([
+            '[2026-09-29 01:31:00] local.ERROR: Boom {"userId":7,"ref":"TXN-9","note":"this string was cut off here',
+        ]);
+
+        $entry = app(SystemLogReader::class)->read('laravel.log')->first();
+
+        $this->assertSame(7, $entry['context']['userId']);
+        $this->assertSame('TXN-9', $entry['context']['ref']);
+        $this->assertSame('this string was cut off here', $entry['context']['note']);
+        $this->assertTrue($entry['contextTruncated']);
+        $this->assertSame('Boom', $entry['message']);
+    }
+
+    /**
+     * A brace inside the message must never be mistaken for the context.
+     */
+    public function test_braces_in_the_message_do_not_break_context_detection(): void
+    {
+        $this->writeLog([
+            '[2026-10-02 09:15:00] local.INFO: Failed to parse {not: json} for the record {"id":7,"total":1500}',
+            '[2026-10-02 09:16:00] local.INFO: Legit brace {here} with no context',
+        ]);
+
+        // Newest first, so the no-context line comes first.
+        $entries = app(SystemLogReader::class)->read('laravel.log');
+
+        $withContext = $entries->last();
+        $this->assertSame('Failed to parse {not: json} for the record', $withContext['message']);
+        $this->assertSame(['id' => 7, 'total' => 1500], $withContext['context']);
+        $this->assertFalse($withContext['contextTruncated']);
+
+        // Nothing to recover: the brace in the message is not context.
+        $noContext = $entries->first();
+        $this->assertSame('Legit brace {here} with no context', $noContext['message']);
+        $this->assertSame([], $noContext['context']);
+    }
+
+    /**
+     * A cut that lands mid-key cannot be repaired into valid JSON, so the intact
+     * pairs are salvaged instead.
+     */
+    public function test_the_reader_salvages_pairs_when_the_cut_lands_mid_key(): void
+    {
+        $this->writeLog([
+            '[2026-09-29 01:32:00] local.ERROR: Boom {"userId":7,"ref":"TXN-9","partiallyWrittenKe',
+        ]);
+
+        $entry = app(SystemLogReader::class)->read('laravel.log')->first();
+
+        $this->assertSame(7, $entry['context']['userId']);
+        $this->assertSame('TXN-9', $entry['context']['ref']);
+        $this->assertArrayNotHasKey('partiallyWrittenKe', $entry['context']);
+        $this->assertTrue($entry['contextTruncated']);
+        $this->assertSame('Boom', $entry['message']);
+    }
+
     public function test_the_reader_reads_the_tail_of_a_large_file(): void
     {
         // A leading entry that sits before the read window must not appear,

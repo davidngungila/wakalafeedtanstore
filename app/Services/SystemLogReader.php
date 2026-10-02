@@ -271,8 +271,6 @@ class SystemLogReader
         }
 
         $context = $this->extractContext($text);
-        $message = $context === [] ? $text : trim(substr($text, 0, (int) strrpos($text, '{')));
-
         $timestamp = $this->parseTimestamp($header['timestamp']);
 
         return [
@@ -280,9 +278,12 @@ class SystemLogReader
             'env' => $header['env'],
             'timestamp' => $timestamp,
             'time' => $timestamp?->format('d M Y H:i:s') ?? $header['timestamp'],
-            'message' => $message === '' ? '(no message)' : $message,
-            'context' => $context,
-            'exception' => $this->exception($context, $message),
+            'message' => $context['start'] === null
+                ? ($text === '' ? '(no message)' : $text)
+                : (trim(substr($text, 0, $context['start'])) ?: '(no message)'),
+            'context' => $context['data'],
+            'contextTruncated' => $context['truncated'],
+            'exception' => $this->exception($context['data'], $text),
             'trace' => $trace,
             'raw' => trim(implode("\n", $lines)),
         ];
@@ -291,32 +292,129 @@ class SystemLogReader
     /**
      * Pull the trailing JSON context Monolog appends to a record.
      *
-     * @return array<string, mixed>
+     * Monolog caps the serialised context when it holds an exception, which
+     * leaves the JSON unterminated (no closing quote or brace). A strict decode
+     * fails on those records, so three strategies are tried in order: a plain
+     * decode, a decode of a repaired fragment, and finally salvaging the
+     * complete key/value pairs that are still intact.
+     *
+     * @return array{data: array<string, mixed>, start: int|null, truncated: bool}
      */
     private function extractContext(string $text): array
     {
         $text = rtrim($text);
+        $starts = [];
 
-        if (! str_ends_with($text, '}')) {
-            return [];
-        }
-
-        // Try each opening brace from the left: the first one that decodes to
-        // a JSON object is the context. Log messages can themselves contain
-        // braces, so scanning from the right alone is not reliable.
         $offset = 0;
-
         while (($brace = strpos($text, '{', $offset)) !== false) {
-            $decoded = json_decode(substr($text, $brace), true);
-
-            if (is_array($decoded)) {
-                return $decoded;
-            }
-
+            $starts[] = $brace;
             $offset = $brace + 1;
         }
 
-        return [];
+        $none = ['data' => [], 'start' => null, 'truncated' => false];
+
+        if ($starts === []) {
+            return $none;
+        }
+
+        // A complete object always wins, so a brace inside the message (e.g.
+        // "failed for {id: 7}") cannot be mistaken for the context.
+        foreach ($starts as $start) {
+            $fragment = substr($text, $start);
+            $decoded = json_decode($fragment, true);
+
+            if (is_array($decoded)) {
+                return ['data' => $decoded, 'start' => $start, 'truncated' => false];
+            }
+        }
+
+        foreach ($starts as $start) {
+            $fragment = substr($text, $start);
+            $decoded = json_decode($this->repair($fragment), true);
+
+            if (is_array($decoded)) {
+                return ['data' => $decoded, 'start' => $start, 'truncated' => true];
+            }
+        }
+
+        foreach ($starts as $start) {
+            $salvaged = $this->salvage($text, $start);
+
+            if ($salvaged !== []) {
+                return ['data' => $salvaged, 'start' => $start, 'truncated' => true];
+            }
+        }
+
+        return $none;
+    }
+
+    /**
+     * Close any string and containers left open by a truncated fragment.
+     */
+    private function repair(string $fragment): string
+    {
+        $stack = [];
+        $inString = false;
+        $escaped = false;
+
+        for ($i = 0, $length = strlen($fragment); $i < $length; $i++) {
+            $char = $fragment[$i];
+
+            if ($inString) {
+                if ($escaped) {
+                    $escaped = false;
+                } elseif ($char === '\\') {
+                    $escaped = true;
+                } elseif ($char === '"') {
+                    $inString = false;
+                }
+
+                continue;
+            }
+
+            if ($char === '"') {
+                $inString = true;
+            } elseif ($char === '{' || $char === '[') {
+                $stack[] = $char;
+            } elseif ($char === '}' || $char === ']') {
+                array_pop($stack);
+            }
+        }
+
+        $closers = array_map(
+            fn (string $open): string => $open === '{' ? '}' : ']',
+            array_reverse($stack)
+        );
+
+        return $fragment.($inString ? '"' : '').implode('', $closers);
+    }
+
+    /**
+     * Recover the complete "key": value pairs from a fragment that was cut off
+     * mid-token, so a truncated exception does not hide the surrounding data.
+     *
+     * @return array<string, mixed>
+     */
+    private function salvage(string $text, int $start): array
+    {
+        $fragment = substr($text, $start);
+
+        // Only pairs whose value is complete are recovered; a value that was cut
+        // mid-token is dropped rather than shown half-written.
+        preg_match_all(
+            '/"(?<key>(?:[^"\\\\]|\\\\.)*)"\s*:\s*(?<value>"(?:[^"\\\\]|\\\\.)*"|-?\d+(?:\.\d+)?|true|false|null)/',
+            $fragment,
+            $matches,
+            PREG_SET_ORDER
+        );
+
+        $data = [];
+
+        foreach ($matches as $match) {
+            $data[$match['key']] = json_decode($match['value']);
+        }
+
+        return $data;
     }
 
     /**
