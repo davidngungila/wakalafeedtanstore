@@ -252,15 +252,19 @@
         </div>
     </div>
     @endif
+
+    @include('transactions.partials.details-modal')
 @endsection
 
 @section('scripts')
+    @include('transactions.partials.details-modal-js')
     <script>
         @php
             $cpTxns = $recentTransactions->map(fn ($t) => [
                 'id' => $t->id,
                 'reference' => $t->reference,
                 'type' => $t->type,
+                'type_label' => txn_type_label($t->type),
                 'status' => $t->status,
                 'customer_name' => $t->customer_name,
                 'customer_phone' => $t->customer_phone,
@@ -270,36 +274,19 @@
                 'provider_reference' => $t->provider_reference,
                 'notes' => $t->notes,
                 'reversal_reason' => $t->reversal_reason,
+                'running_cash_balance' => $t->running_cash_balance !== null ? (float) $t->running_cash_balance : null,
+                'running_float_balance' => $t->running_float_balance !== null ? (float) $t->running_float_balance : null,
+                'running_network_balance' => $t->running_network_balance !== null ? (float) $t->running_network_balance : null,
                 'network' => $t->network?->name,
                 'network_color' => $t->network?->color,
                 'created_at' => $t->created_at->format('d M Y H:i'),
                 'operator' => $t->operator?->name,
+                'receipt_url' => route('transactions.receipt', $t),
             ])->values();
         @endphp
         const cpTxns = @json($cpTxns);
 
-        function cpFmt(n) { return 'TZS ' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
-
-        bindRowClick('#cpTxnRows tr[data-id]', tr => {
-            const t = cpTxns.find(x => Number(x.id) === Number(tr.dataset.id));
-            if (!t) return [];
-            return [
-                ['Reference', t.reference],
-                ['Provider ref', t.provider_reference || '—'],
-                ['Date', t.created_at],
-                ['Type', t.type.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')],
-                ['Network', t.network ? { __html: `<span class="net-dot" style="background:${t.network_color || '#999'};"></span> ${t.network}` } : '—'],
-                ['Customer', t.customer_name || '—'],
-                ['Phone', t.customer_phone],
-                ['Amount', cpFmt(t.amount)],
-                ['Fee', cpFmt(t.fee)],
-                ['Commission', cpFmt(t.commission)],
-                ['Status', { __html: statusBadgeHtml(t.status) }],
-                ...(t.reversal_reason ? [['Reversal reason', t.reversal_reason]] : []),
-                ...(t.notes ? [['Notes', t.notes]] : []),
-                ['Operator', t.operator || '{{ auth()->user()->name }}'],
-            ];
-        }, 'Transaction details');
+        bindTransactionRows('#cpTxnRows tr[data-id]', cpTxns, '{{ auth()->user()->name }}');
 
         function openCashPointDrawer() { openModal('cashPointDrawer'); }
         document.querySelectorAll('[data-cashpoint-form]').forEach(form => {

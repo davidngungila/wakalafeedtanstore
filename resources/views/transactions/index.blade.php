@@ -253,48 +253,7 @@
             </div>
         </div>
     </div>
-    <!-- Transaction details modal - mirrors the audit log entry popup -->
-    <div class="modal-backdrop" id="txnModal">
-        <style>
-            #txnModal .txn-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:18px;align-items:start;}
-            #txnModal .txn-col{min-width:0;}
-            #txnModal .txn-col-title{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:8px;}
-            #txnModal .detail-list{display:flex;flex-direction:column;gap:8px;}
-            #txnModal .detail-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);}
-            #txnModal .detail-row:last-child{border-bottom:none;}
-            #txnModal .dk{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;flex:none;}
-            #txnModal .dv{font-size:13.5px;color:var(--coffee-900);font-weight:600;text-align:right;word-break:break-word;}
-            #txnModal .dv-wrap{text-align:left;}
-            #txnModal .dv-amount{font-size:16px;font-weight:700;}
-            #txnModal .popup{max-height:90vh;overflow:hidden;display:flex;flex-direction:column;}
-            #txnModal .modal-body{max-height:66vh;overflow-y:auto;}
-            @media (max-width:640px){
-                #txnModal .txn-cols{grid-template-columns:1fr;gap:14px;}
-            }
-        </style>
-        <div class="popup" style="max-width:720px; width:100%; margin:auto;">
-            <div class="modal-head">
-                <h3>Transaction details</h3>
-                <button class="modal-close" onclick="closeModal('txnModal')">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="txn-cols">
-                    <div class="txn-col">
-                        <div class="txn-col-title">Transaction</div>
-                        <div class="detail-list" id="txnModalLeft"></div>
-                    </div>
-                    <div class="txn-col">
-                        <div class="txn-col-title">Money &amp; balances</div>
-                        <div class="detail-list" id="txnModalRight"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-foot">
-                <a class="btn btn-ghost" id="txnReceiptLink" href="#">View receipt</a>
-                <button class="btn btn-primary" onclick="closeModal('txnModal')">Close</button>
-            </div>
-        </div>
-    </div>
+    @include('transactions.partials.details-modal')
 
     <style>
         /* Receipt as centered popup - overrides drawer transform */
@@ -305,6 +264,7 @@
 @endsection
 
 @section('scripts')
+    @include('transactions.partials.details-modal-js')
     <script>
         const authUser = @json(auth()->user()->name);
         @php
@@ -312,6 +272,7 @@
                 'id' => $t->id,
                 'reference' => $t->reference,
                 'type' => $t->type,
+                'type_label' => txn_type_label($t->type),
                 'customer_name' => $t->customer_name,
                 'customer_phone' => $t->customer_phone,
                 'amount' => (float) $t->amount,
@@ -413,89 +374,7 @@
             });
         });
 
-        /**
-         * Builds a label/value row using textContent, so customer names and
-         * notes coming from SMS are never interpreted as markup.
-         */
-        function txnDetailRow(label, value, options = {}) {
-            const row = document.createElement('div');
-            row.className = 'detail-row';
-
-            const k = document.createElement('span');
-            k.className = 'dk';
-            k.textContent = label;
-
-            const v = document.createElement('span');
-            v.className = 'dv' + (options.wrap ? ' dv-wrap' : '') + (options.amount ? ' dv-amount' : '');
-            v.textContent = value;
-
-            row.appendChild(k);
-            row.appendChild(v);
-
-            return row;
-        }
-
-        function txnMoney(value) {
-            return value === null || value === undefined ? '—' : fmt(value);
-        }
-
-        function openTxnModal(tr) {
-            const t = transactionsData.find(x => Number(x.id) === Number(tr.dataset.id));
-            if (!t) {
-                toast('Transaction not found in local data. Please reload.', 'error');
-                return;
-            }
-
-            const left = document.getElementById('txnModalLeft');
-            const right = document.getElementById('txnModalRight');
-            left.innerHTML = '';
-            right.innerHTML = '';
-
-            [
-                ['Reference', t.reference || '—'],
-                ['Provider ref', t.provider_reference || '—'],
-                ['Date', t.created_at || '—'],
-                ['Type', TYPE_LABEL[t.type] || t.type || '—'],
-                ['Network', t.network || '—'],
-                ['Customer', t.customer_name || '—'],
-                ['Phone', t.customer_phone || '—'],
-                ['Status', String(t.status || 'unknown').toUpperCase()],
-                ['Operator', t.operator || authUser],
-            ].forEach(([label, value]) => left.appendChild(txnDetailRow(label, value)));
-
-            right.appendChild(txnDetailRow('Amount', txnMoney(t.amount), { amount: true }));
-            [
-                ['Fee', txnMoney(t.fee)],
-                ['Commission', txnMoney(t.commission)],
-                ['Running Float' + (t.network ? ' (' + t.network + ')' : ''), txnMoney(t.running_network_balance)],
-                ['Total Float (all)', txnMoney(t.running_float_balance)],
-                ['Running Cash', txnMoney(t.running_cash_balance)],
-            ].forEach(([label, value]) => right.appendChild(txnDetailRow(label, value)));
-
-            if (t.reversal_reason) {
-                right.appendChild(txnDetailRow('Reversal reason', t.reversal_reason, { wrap: true }));
-            }
-            if (t.notes) {
-                right.appendChild(txnDetailRow('Notes', t.notes, { wrap: true }));
-            }
-
-            const receiptLink = document.getElementById('txnReceiptLink');
-            if (receiptLink) {
-                if (t.receipt_url) {
-                    receiptLink.href = t.receipt_url;
-                    receiptLink.style.display = '';
-                } else {
-                    receiptLink.style.display = 'none';
-                }
-            }
-
-            openModal('txnModal');
-        }
-
-        document.querySelectorAll('#transactionsBody tr[data-id]').forEach(tr => {
-            tr.style.cursor = 'pointer';
-            tr.addEventListener('click', () => openTxnModal(tr));
-        });
+        bindTransactionRows('#transactionsBody tr[data-id]', transactionsData, authUser);
 
         let deleteTxnId = null;
         function deleteTxn(id, ref) {

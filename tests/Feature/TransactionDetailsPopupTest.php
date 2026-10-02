@@ -64,12 +64,54 @@ class TransactionDetailsPopupTest extends TestCase
         $response = $this->actingAs($this->admin())->get(route('transactions.index'));
 
         $response->assertOk();
-        // The row click is wired to the dedicated modal, not bindRowClick.
-        $this->assertStringContainsString('openTxnModal', $response->getContent());
+        $content = $response->getContent();
+
+        // The row click goes through the shared binder, not the generic popup.
+        $this->assertStringContainsString('bindTransactionRows(', $content);
+        $this->assertStringContainsString('openTransactionDetails', $content);
         $this->assertStringNotContainsString(
             "bindRowClick('#transactionsBody",
-            $response->getContent()
+            $content
         );
+    }
+
+    /**
+     * The same popup must appear on any page that lists transactions, so the
+     * cash point page uses the shared partial rather than its own.
+     */
+    public function test_the_cash_point_page_uses_the_shared_details_modal(): void
+    {
+        $agent = $this->cashPoint();
+
+        Transaction::factory()->create([
+            'agent_id' => $agent->id,
+            'network_id' => Network::factory()->create(['name' => 'Mixx by Yas'])->id,
+            'type' => 'deposit',
+            'status' => 'completed',
+            'amount' => 1_000,
+            'fee' => 0,
+            'commission' => 28,
+            'notes' => 'Via SMS approval (SMS #639)',
+        ]);
+
+        $response = $this->actingAs($this->admin())->get(route('cash-point.index'));
+
+        $response->assertOk()
+            ->assertSee('id="txnModal"', false)
+            ->assertSee('id="txnModalLeft"', false)
+            ->assertSee('id="txnModalRight"', false)
+            ->assertSee('txn-cols', false);
+
+        $content = $response->getContent();
+
+        $this->assertStringContainsString("bindTransactionRows('#cpTxnRows tr[data-id]'", $content);
+        $this->assertStringNotContainsString("bindRowClick('#cpTxnRows", $content);
+
+        // Labels and balances are supplied from PHP so the popup matches the
+        // transactions page instead of showing the raw type.
+        $this->assertStringContainsString('type_label', $content);
+        $this->assertStringContainsString('running_network_balance', $content);
+        $this->assertStringContainsString('receipt_url', $content);
     }
 
     public function test_the_modal_receives_the_receipt_link_and_balances(): void
@@ -114,6 +156,6 @@ class TransactionDetailsPopupTest extends TestCase
         // The details modal is assembled with textContent, never by interpolating
         // values into innerHTML.
         $this->assertStringContainsString('v.textContent = value', $content);
-        $this->assertStringContainsString('left.appendChild(txnDetailRow(', $content);
+        $this->assertStringContainsString('left.appendChild(window.txnDetailRow(row[0], row[1]))', $content);
     }
 }
