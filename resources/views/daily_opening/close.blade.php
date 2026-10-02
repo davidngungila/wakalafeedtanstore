@@ -4,15 +4,15 @@
 
 @php
     $floatRows = $networks->map(function ($network) use ($currentBalances, $dailyOpening): array {
-        $system = (float) ($currentBalances[$network->id]->balance ?? 0);
+$system = (float) ($currentBalances[$network->id]->balance ?? 0);
 
-        return [
-            'id' => $network->id,
-            'name' => $network->name,
-            'color' => $network->color,
-            'opening' => $dailyOpening->getFloatOpening($network->id),
-            'system' => $system,
-        ];
+            return [
+                'id' => (int) $network->id,
+                'name' => $network->name,
+                'color' => $network->color,
+                'opening' => $dailyOpening->getFloatOpening((int) $network->id),
+                'system' => $system,
+            ];
     });
 @endphp
 
@@ -62,7 +62,11 @@
         </div>
     @endif
 
-    <div class="panel-grid">
+    <form method="POST" action="{{ route('daily-opening.close', $dailyOpening) }}" id="closeDayForm">
+        @csrf
+        <input type="hidden" name="_method" value="PUT">
+
+        <div class="panel-grid">
         <div class="panel">
             <div class="panel-head">
                 <h3>Cash</h3>
@@ -81,7 +85,7 @@
                 <div class="field" style="margin-bottom:10px;">
                     <label for="cashClosing">Counted closing cash (TZS)</label>
                     <input type="number" name="cash_closing" id="cashClosing" step="any" min="0" required
-                        value="{{ old('cash_closing', $cashCurrent) }}" data-expected="{{ $expectedClosingCash }}" placeholder="0.00">
+                        value="{{ old('cash_closing', $cashCurrent ?? 0) }}" data-expected="{{ $expectedClosingCash }}" placeholder="0.00">
                 </div>
                 <p style="margin:0;font-size:13px;font-weight:700;" id="cashVarianceDisplay">Count the till to see the variance.</p>
                 <p style="margin:6px 0 0;font-size:12px;color:var(--ink-soft);">
@@ -105,10 +109,6 @@
             </div>
         </div>
     </div>
-
-    <form method="POST" action="{{ route('daily-opening.close', $dailyOpening) }}" id="closeDayForm">
-        @csrf
-        <input type="hidden" name="_method" value="PUT">
 
         <div class="panel">
             <div class="panel-head">

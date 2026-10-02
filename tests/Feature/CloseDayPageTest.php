@@ -52,7 +52,7 @@ class CloseDayPageTest extends TestCase
     {
         $opening = $this->openDay();
 
-        $this->actingAs($this->user())
+        $response = $this->actingAs($this->user())
             ->get(route('daily-opening.close-form', $opening))
             ->assertOk()
             ->assertSee('Close Day')
@@ -60,6 +60,17 @@ class CloseDayPageTest extends TestCase
             ->assertSee('Counted float per network')
             ->assertSee('M-Pesa')
             ->assertSee('Not reconciled');
+
+        $html = $response->getContent();
+        $formStart = strpos($html, 'id="closeDayForm"');
+        $cashField = strpos($html, 'name="cash_closing"');
+        $floatField = strpos($html, 'name="float_closings[');
+
+        $this->assertNotFalse($formStart, 'The close-day form is missing.');
+        $this->assertNotFalse($cashField, 'The counted cash field is missing.');
+        $this->assertNotFalse($floatField, 'The counted float fields are missing.');
+        $this->assertLessThan($cashField, $formStart, 'The counted cash field must sit inside the close-day form.');
+        $this->assertGreaterThan($cashField, $floatField, 'The counted float fields must sit inside the close-day form.');
     }
 
     public function test_close_day_page_redirects_when_the_day_is_already_closed(): void
