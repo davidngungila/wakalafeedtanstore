@@ -9,7 +9,9 @@ use App\Models\Network;
 use App\Models\Reconciliation;
 use App\Models\ReconciliationCorrection;
 use App\Models\Transaction;
+use App\Models\User;
 use App\Services\ExportService;
+use App\Services\SmsSender;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Dompdf\Dompdf;
 use Illuminate\Http\JsonResponse;
@@ -319,6 +321,8 @@ class ReconciliationController extends Controller
             'status' => $status,
         ]);
 
+        $this->notifySupervisorsForApproval($record);
+
         if ($request->expectsJson()) {
             return response()->json(['success' => true, 'message' => $status === 'reconciled'
                 ? 'Reconciliation matched perfectly.'
@@ -326,6 +330,37 @@ class ReconciliationController extends Controller
         }
 
         return back()->with('status', 'Reconciliation saved.');
+    }
+
+    /**
+     * Notify active supervisors by SMS that a reconciliation needs their approval.
+     */
+    private function notifySupervisorsForApproval(Reconciliation $record): void
+    {
+        try {
+            $sender = app(SmsSender::class);
+
+            if (! $sender->isConfigured()) {
+                return;
+            }
+
+            $date = Carbon::parse($record->reconciliation_date)->format('d M Y');
+            $text = 'Reconciliation #'.$record->code.' for '.$date.' ('.$record->status.') awaits your approval. Please login and approve it.';
+
+            User::query()
+                ->where('role', 'supervisor')
+                ->where('is_active', true)
+                ->whereNotNull('phone')
+                ->each(function (User $supervisor) use ($sender, $text): void {
+                    try {
+                        $sender->sendSingle($sender->normalizeRecipient((string) $supervisor->phone), $text);
+                    } catch (\Throwable $exception) {
+                        \Log::warning('Supervisor approval SMS failed', ['user_id' => $supervisor->id, 'error' => $exception->getMessage()]);
+                    }
+                });
+        } catch (\Throwable $exception) {
+            \Log::warning('Could not notify supervisors for reconciliation approval', ['error' => $exception->getMessage()]);
+        }
     }
 
     public function show(Reconciliation $reconciliation): View
