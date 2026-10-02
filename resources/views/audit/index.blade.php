@@ -89,6 +89,16 @@
     </div>
 
     <div class="modal-backdrop" id="auditLogModal">
+        <style>
+            #auditLogModal .detail-list{display:flex;flex-direction:column;gap:8px;}
+            #auditLogModal .detail-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);}
+            #auditLogModal .detail-row:last-child{border-bottom:none;}
+            #auditLogModal .dk{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;flex:none;}
+            #auditLogModal .dv{font-size:13.5px;color:var(--coffee-900);font-weight:600;text-align:right;word-break:break-word;}
+            #auditLogModal table{width:100%;border-collapse:collapse;font-size:12.5px;}
+            #auditLogModal th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);padding:6px 8px;border-bottom:1px solid var(--line);}
+            #auditLogModal td{padding:6px 8px;border-bottom:1px solid var(--line);}
+        </style>
         <div class="popup" style="max-width:520px; width:100%; margin:auto;">
             <div class="modal-head">
                 <h3>Audit log entry</h3>
@@ -153,12 +163,10 @@
                 const diffKeys = [...new Set([...Object.keys(oldValues || {}), ...Object.keys(newValues || {})])];
                 const changed = diffKeys.filter(key => auditValue(oldValues?.[key]) !== auditValue(newValues?.[key]));
 
-                html += '<div class="detail-row" style="padding-top:12px;margin-top:6px;border-top:1px solid var(--line);"><span class="dk">Changes</span><span class="dv">' +
-                    (changed.length === 0
-                        ? '<em style="color:var(--ink-soft);">No field values changed.</em>'
-                        : '</span></div>';
-
-                if (changed.length > 0) {
+                if (changed.length === 0) {
+                    html += '<div class="detail-row" style="padding-top:12px;margin-top:6px;border-top:1px solid var(--line);"><span class="dk">Changes</span><span class="dv"><em style="color:var(--ink-soft);">No field values changed.</em></span></div>';
+                } else {
+                    html += '<div class="detail-row" style="padding-top:12px;margin-top:6px;border-top:1px solid var(--line);"><span class="dk">Changes</span><span class="dv">' + changed.length + ' field(s) changed</span></div>';
                     html += '<div class="table-scroll" style="margin:8px 0 4px;"><table><thead><tr><th>Field</th><th>Old</th><th>New</th></tr></thead><tbody>';
                     changed.forEach(key => {
                         html += '<tr>' +
