@@ -111,10 +111,18 @@ class ReconciliationController extends Controller
         $fullDays = $reconciled->filter(fn (array $pair): bool => $pair[1] === Shift::FULL)->pluck(0)->all();
         $covered = $reconciled->reject(fn (array $pair): bool => $pair[1] === Shift::FULL)->map(fn (array $pair): string => $pair[0].'|'.$pair[1])->all();
 
+        // A catch-up runs from its own date through to now, so it also clears
+        // every later date that is still waiting.
+        $caughtUpFrom = $reconciled
+            ->filter(fn (array $pair): bool => $pair[1] === Shift::CATCHUP)
+            ->map(fn (array $pair): string => $pair[0])
+            ->min();
+
         $current = Shift::current();
 
         return collect($shifts)
             ->reject(fn (array $shift, string $key): bool => in_array($shift['date'], $fullDays, true)
+                || ($caughtUpFrom !== null && $shift['date'] >= $caughtUpFrom)
                 || in_array($key, $covered, true)
                 || ($shift['date'] === $current['date'] && $shift['shift'] === $current['shift']))
             ->map(function (array $shift): array {
@@ -253,7 +261,7 @@ class ReconciliationController extends Controller
         }
 
         $current = Shift::current();
-        $shift = in_array($request->input('shift'), ['full', 'morning', 'night'], true)
+        $shift = Shift::isValid($request->input('shift'))
             ? $request->input('shift')
             : ($viewDate === $current['date'] ? $current['shift'] : Shift::FULL);
 
@@ -317,7 +325,7 @@ class ReconciliationController extends Controller
     {
         $validated = $request->validate([
             'reconciliation_date' => ['required', 'date'],
-            'shift' => ['nullable', 'in:full,morning,night'],
+            'shift' => ['nullable', Rule::in(Shift::types())],
             'counted_cash' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:255'],
             'counted_floats' => ['nullable', 'array'],
@@ -477,7 +485,39 @@ class ReconciliationController extends Controller
         $run = $this->runFromRecord($reconciliation);
         $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
 
-        return view('reconciliation.edit', compact('reconciliation', 'run', 'networks'));
+        $canChangeShift = $this->canChangeShift($reconciliation);
+        $shiftOptions = $this->shiftOptions($reconciliation->reconciliation_date->toDateString(), $reconciliation->shift);
+
+        return view('reconciliation.edit', compact('reconciliation', 'run', 'networks', 'shiftOptions', 'canChangeShift'));
+    }
+
+    /**
+     * Changing the shift re-bases a report that has already been counted, so it
+     * is limited to administrators and is not allowed once a supervisor has
+     * signed the report off.
+     */
+    private function canChangeShift(Reconciliation $reconciliation): bool
+    {
+        return is_admin() && $reconciliation->approved_at === null;
+    }
+
+    /**
+     * The shift types offered on the edit form, with the window each covers.
+     *
+     * @return array<int, array{value: string, label: string, window: string}>
+     */
+    private function shiftOptions(string $date, string $current): array
+    {
+        return array_map(function (string $shift) use ($date, $current): array {
+            [$start, $end] = Shift::window($date, $shift);
+
+            return [
+                'value' => $shift,
+                'label' => Shift::label($shift),
+                'window' => $start->format('d M H:i').' – '.$end->format('d M H:i'),
+                'selected' => $shift === $current,
+            ];
+        }, Shift::types());
     }
 
     public function update(Request $request, Reconciliation $reconciliation): JsonResponse|RedirectResponse
@@ -489,36 +529,82 @@ class ReconciliationController extends Controller
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $run = $this->runFromRecord($reconciliation);
+        // A shift can only be re-based by an administrator; for anyone else the
+        // submitted value is ignored rather than trusted.
+        $previousShift = $reconciliation->shift ?: Shift::FULL;
+        $newShift = $this->canChangeShift($reconciliation) && Shift::isValid($request->input('shift'))
+            ? $request->input('shift')
+            : $previousShift;
+        $shiftChanged = $newShift !== $previousShift;
+
         $countedCash = (float) $validated['counted_cash'];
         $countedFloatsInput = $validated['counted_floats'] ?? [];
 
-        // Map counted_floats by network name or id to handle both
-        $networkBalances = collect($reconciliation->network_balances ?? [])->map(function (array $row) use ($countedFloatsInput) {
-            $keyName = $row['network'] ?? null;
-            $keyId = $row['network_id'] ?? null;
-            $newCounted = null;
-            if ($keyName && isset($countedFloatsInput[$keyName])) {
-                $newCounted = (float) $countedFloatsInput[$keyName];
-            } elseif ($keyId && isset($countedFloatsInput[$keyId])) {
-                $newCounted = (float) $countedFloatsInput[$keyId];
-            } else {
-                $newCounted = (float) ($row['counted'] ?? $row['expected'] ?? 0);
-            }
-            $expected = (float) ($row['expected'] ?? $row['system'] ?? 0);
+        if ($shiftChanged) {
+            // The window changed, so the stored basis no longer describes the
+            // report. Rebuild it from the transactions for the new window rather
+            // than keeping figures that belong to the old one.
+            $run = $this->buildRun(
+                $reconciliation->agent,
+                $reconciliation->reconciliation_date->toDateString(),
+                $newShift
+            );
 
-            return array_merge($row, [
-                'counted' => $newCounted,
-                'variance' => round($newCounted - $expected, 2),
-            ]);
-        })->values()->all();
+            $networkBalances = collect($run['networks'])->map(function (array $row) use ($countedFloatsInput): array {
+                $id = $row['id'] ?? null;
+                $name = $row['name'] ?? 'Network';
+                $expected = round((float) ($row['expected'] ?? 0), 2);
+
+                // The form submits counted floats keyed by network name.
+                $counted = (float) ($countedFloatsInput[$name] ?? $countedFloatsInput[$id] ?? $expected);
+
+                return [
+                    'network_id' => $id,
+                    'network' => $name,
+                    'opening' => round((float) ($row['opening'] ?? 0), 2),
+                    'deposits' => round((float) ($row['deposits'] ?? 0), 2),
+                    'withdrawals' => round((float) ($row['withdrawals'] ?? 0), 2),
+                    'float_topups' => round((float) ($row['float_topups'] ?? 0), 2),
+                    'bank_ins' => round((float) ($row['bank_ins'] ?? 0), 2),
+                    'expected' => $expected,
+                    'system' => $expected,
+                    'counted' => $counted,
+                    'variance' => round($counted - $expected, 2),
+                ];
+            })->values()->all();
+
+            $expectedCash = (float) $run['expectedCash'];
+            $expectedFloat = (float) $run['expectedFloat'];
+        } else {
+            $run = $this->runFromRecord($reconciliation);
+            $expectedCash = (float) $run['expectedCash'];
+            $expectedFloat = (float) $run['expectedFloat'];
+
+            // Map counted_floats by network name or id to handle both
+            $networkBalances = collect($reconciliation->network_balances ?? [])->map(function (array $row) use ($countedFloatsInput) {
+                $keyName = $row['network'] ?? null;
+                $keyId = $row['network_id'] ?? null;
+                $newCounted = null;
+                if ($keyName && isset($countedFloatsInput[$keyName])) {
+                    $newCounted = (float) $countedFloatsInput[$keyName];
+                } elseif ($keyId && isset($countedFloatsInput[$keyId])) {
+                    $newCounted = (float) $countedFloatsInput[$keyId];
+                } else {
+                    $newCounted = (float) ($row['counted'] ?? $row['expected'] ?? 0);
+                }
+                $expected = (float) ($row['expected'] ?? $row['system'] ?? 0);
+
+                return array_merge($row, [
+                    'counted' => $newCounted,
+                    'variance' => round($newCounted - $expected, 2),
+                ]);
+            })->values()->all();
+        }
 
         $countedFloatTotal = collect($networkBalances)->sum('counted');
-        $cashVariance = round($countedCash - (float) $reconciliation->expected_cash, 2);
-        // For float, expected is from stored run
-        $expectedFloat = (float) $reconciliation->total_float;
+        $cashVariance = round($countedCash - $expectedCash, 2);
         $floatVariance = round($countedFloatTotal - $expectedFloat, 2);
-        $tieOut = round(((float) $reconciliation->expected_cash + $expectedFloat) - ($countedCash + $countedFloatTotal), 2);
+        $tieOut = round(($expectedCash + $expectedFloat) - ($countedCash + $countedFloatTotal), 2);
         $channels = $this->settledChannels($reconciliation);
         // Recompute status after update
         $anyVariance = abs($cashVariance) > 0.005 || abs($floatVariance) > 0.005 || abs($tieOut) > 0.005;
@@ -541,7 +627,7 @@ class ReconciliationController extends Controller
             }
         }
 
-        $reconciliation->update([
+        $changes = [
             'counted_cash' => $countedCash,
             'cash_variance' => $cashVariance,
             'float_variance' => $floatVariance,
@@ -550,7 +636,23 @@ class ReconciliationController extends Controller
             'total_float' => $expectedFloat,
             'status' => $status,
             'notes' => $validated['notes'] ?? $reconciliation->notes,
-        ]);
+        ];
+
+        if ($shiftChanged) {
+            // The basis changed, so the opening and expected columns have to be
+            // rewritten too or the report would show a night shift's figures
+            // under a catch-up heading.
+            $changes += [
+                'shift' => $newShift,
+                'opening_cash' => round((float) $run['openingCash'], 2),
+                'cash_deposits' => round((float) $run['cashDeposits'], 2),
+                'cash_withdrawals' => round((float) $run['cashWithdrawals'], 2),
+                'expected_cash' => $expectedCash,
+                'opening_float' => round((float) $run['openingFloat'], 2),
+            ];
+        }
+
+        $reconciliation->update($changes);
 
         // If reconciled, update live balances to counted
         if ($status === 'reconciled') {
@@ -575,7 +677,13 @@ class ReconciliationController extends Controller
             }
         }
 
-        $this->recordAudit('Reconciliation recorrected full', 'Reconciliation', $reconciliation->id, ['counted_cash' => $countedCash, 'status' => $status]);
+        $this->recordAudit('Reconciliation recorrected full', 'Reconciliation', $reconciliation->id, [
+            'counted_cash' => $countedCash,
+            'status' => $status,
+            'shift_from' => $previousShift,
+            'shift_to' => $newShift,
+            'shift_changed' => $shiftChanged,
+        ]);
 
         if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
             return response()->json(['success' => true, 'message' => 'Reconciliation recorrected. Status: '.$status]);

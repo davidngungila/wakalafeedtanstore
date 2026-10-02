@@ -46,7 +46,7 @@
         <div class="table-card" style="margin-bottom:16px;">
             <div class="table-head">
                 <h3>Shifts with transactions not reconciled</h3>
-                <span class="cell-sub">Reconciliation is per shift — a morning run does not cover the night shift of the same date.</span>
+                <span class="cell-sub">Reconciliation is per shift — a morning run does not cover the night shift of the same date. Use <b>Reconcile full day</b> once to count the till against everything traded since the earliest date below.</span>
             </div>
             <div class="table-scroll">
                 <table>
@@ -76,11 +76,20 @@
                                 <td class="cell-title">{{ $pending['transactions'] }}</td>
                                 <td class="cell-title">@money($pending['amount'])</td>
                                 <td>
-                                    <a href="{{ route('reconciliation.create', ['date' => $pending['date'], 'shift' => $pending['shift']]) }}"
-                                       class="btn btn-ghost btn-sm"
-                                       title="Reconcile {{ strtolower($pending['label']) }} for {{ $pending['date'] }}">
-                                        Reconcile
-                                    </a>
+                                    <div class="row-actions" style="gap:6px;justify-content:flex-end;">
+                                        @if ($pending['date'] === $pendingShifts->first()['date'])
+                                            <a href="{{ route('reconciliation.create', ['date' => $pending['date'], 'shift' => \App\Support\Shift::CATCHUP]) }}"
+                                               class="btn btn-primary btn-sm"
+                                               title="Count the till once against everything traded from {{ \Illuminate\Support\Carbon::parse($pending['date'])->format('d M') }} up to now">
+                                                Reconcile full day
+                                            </a>
+                                        @endif
+                                        <a href="{{ route('reconciliation.create', ['date' => $pending['date'], 'shift' => $pending['shift']]) }}"
+                                           class="btn btn-ghost btn-sm"
+                                           title="Reconcile {{ strtolower($pending['label']) }} for {{ $pending['date'] }}">
+                                            Reconcile shift
+                                        </a>
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach

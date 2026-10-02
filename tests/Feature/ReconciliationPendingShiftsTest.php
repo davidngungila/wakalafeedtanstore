@@ -155,6 +155,53 @@ class ReconciliationPendingShiftsTest extends TestCase
      * The reconcile link must carry the shift being listed, not whatever shift
      * happens to be running now.
      */
+    /**
+     * A catch-up covers everything from its date through now, so it also clears
+     * every later date still waiting.
+     */
+    public function test_a_catch_up_clears_every_later_pending_date(): void
+    {
+        $earliest = today()->subDays(5);
+        $later = today()->subDays(2);
+
+        $this->transactionAt($earliest->copy()->setTime(21, 0));
+        $this->transactionAt($later->copy()->setTime(21, 0));
+
+        $this->reconcile($earliest->toDateString(), Shift::CATCHUP);
+
+        $this->actingAs($this->supervisor())
+            ->get(route('reconciliation.index'))
+            ->assertOk()
+            ->assertDontSee('Shifts with transactions not reconciled');
+    }
+
+    public function test_the_catch_up_window_runs_from_the_date_at_eight_until_now(): void
+    {
+        $date = today()->subDays(4)->toDateString();
+
+        [$start, $end] = Shift::window($date, Shift::CATCHUP);
+
+        $this->assertSame($date.' 08:00:00', $start->toDateTimeString());
+        $this->assertTrue($end->greaterThan(now()->subMinute(1)), 'Catch-up must extend to now.');
+
+        // A plain full day must keep its own narrower window.
+        [$fullStart, $fullEnd] = Shift::window($date, Shift::FULL);
+        $this->assertSame($date.' 08:00:00', $fullStart->toDateTimeString());
+        $this->assertSame(today()->subDays(3)->toDateString().' 07:59:59', $fullEnd->toDateTimeString());
+    }
+
+    public function test_the_pending_table_offers_a_catch_up_action(): void
+    {
+        $day = today()->subDays(3)->toDateString();
+
+        $this->transactionAt(Carbon::parse($day)->setTime(21, 0));
+
+        $links = $this->pendingLinks();
+
+        $this->assertContains($day.'|'.Shift::CATCHUP, $links);
+        $this->assertContains($day.'|'.Shift::NIGHT, $links);
+    }
+
     public function test_the_reconcile_link_carries_the_listed_shift(): void
     {
         $day = today()->subDays(3)->toDateString();

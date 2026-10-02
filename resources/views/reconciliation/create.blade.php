@@ -200,8 +200,8 @@
                     <div class="field">
                         <label>Shift</label>
                         <select name="shift" onchange="window.location.href='{{ route('reconciliation.create') }}?date={{ urlencode($selectedDate) }}&shift='+this.value;">
-                            @foreach (['full' => 'Full day (08:00 – 07:59+)', 'morning' => 'Morning shift (08:00 – 19:59)', 'night' => 'Night shift (20:00 – 07:59)'] as $value => $label)
-                                <option value="{{ $value }}" {{ ($selectedShift ?? 'full') === $value ? 'selected' : '' }}>{{ $label }}</option>
+                            @foreach (\App\Support\Shift::types() as $shiftType)
+                                <option value="{{ $shiftType }}" {{ ($selectedShift ?? 'full') === $shiftType ? 'selected' : '' }}>{{ ucfirst($shiftType) }} — {{ \App\Support\Shift::label($shiftType) }}</option>
                             @endforeach
                         </select>
                     </div>

@@ -16,6 +16,38 @@
     <form method="POST" action="{{ route('reconciliation.update', $reconciliation) }}" data-recon-edit>
         @csrf
         @method('PUT')
+        @if ($canChangeShift)
+            <div class="panel" style="max-width:980px;margin-bottom:18px;">
+                <div class="panel-head">
+                    <h3>Shift covered by this report</h3>
+                    <span class="link">Administrators only</span>
+                </div>
+                <div class="panel-body">
+                    <div class="field" style="margin-bottom:0;">
+                        <label for="recon-shift">Shift type</label>
+                        <select name="shift" id="recon-shift"
+                                onchange="document.getElementById('recon-shift-window').textContent = this.options[this.selectedIndex].dataset.window;">
+                            @foreach ($shiftOptions as $option)
+                                <option value="{{ $option['value'] }}"
+                                        data-window="{{ $option['window'] }}"
+                                        @selected($option['selected'])>
+                                    {{ ucfirst($option['value']) }} — {{ $option['label'] }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <div class="cell-sub" id="recon-shift-window" style="margin-top:6px;">
+                            Covers: {{ collect($shiftOptions)->firstWhere('selected', true)['window'] ?? '—' }}
+                        </div>
+                        <div style="margin-top:10px;background:var(--gold-100);color:#8a6418;border:1px solid var(--gold-500);border-radius:10px;padding:10px 12px;font-size:12.5px;">
+                            Changing the shift rebuilds the expected cash and float for the new window from the recorded transactions, so the counted figures will not match and the report will show a variance until you recount. The previous shift is kept in the audit trail.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @else
+            <input type="hidden" name="shift" value="{{ $reconciliation->shift }}">
+        @endif
+
         <div class="panel" style="max-width:980px;">
             <div class="panel-head">
                 <h3>Recorrect — Cash & Float Counted</h3>

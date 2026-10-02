@@ -14,6 +14,33 @@ class Shift
     public const FULL = 'full';
 
     /**
+     * A catch-up reconciliation: from the given date at 08:00 through to now.
+     *
+     * Shifts are reconciled as they close, but a till that was left unrun for
+     * days would otherwise need one reconciliation per shift. A catch-up counts
+     * the cash in hand once against everything traded since that date.
+     */
+    public const CATCHUP = 'catchup';
+
+    /**
+     * Every shift type that can be reconciled or stored on a report.
+     *
+     * @return array<int, string>
+     */
+    public static function types(): array
+    {
+        return [self::MORNING, self::NIGHT, self::FULL, self::CATCHUP];
+    }
+
+    /**
+     * Whether the value is a shift type this application understands.
+     */
+    public static function isValid(mixed $value): bool
+    {
+        return is_string($value) && in_array($value, self::types(), true);
+    }
+
+    /**
      * The business day / shift a timestamp falls in.
      *
      * Morning shift: 08:00–19:59:59 on the same calendar date.
@@ -75,6 +102,8 @@ class Shift
         return match ($shift) {
             self::MORNING => [$start, Carbon::parse($date)->setTime(19, 59, 59)],
             self::NIGHT => [Carbon::parse($date)->setTime(20, 0, 0), Carbon::parse($date)->addDay()->setTime(7, 59, 59)],
+            // Everything traded since the start of that date, up to this moment.
+            self::CATCHUP => [$start, now()],
             default => [$start, Carbon::parse($date)->addDay()->setTime(7, 59, 59)],
         };
     }
@@ -84,6 +113,7 @@ class Shift
         return match ($shift) {
             self::MORNING => 'Morning (08:00–19:59)',
             self::NIGHT => 'Night (20:00–07:59)',
+            self::CATCHUP => 'Catch-up (08:00 → now)',
             default => 'Full day (08:00–07:59+)',
         };
     }
