@@ -93,22 +93,37 @@
             #auditLogModal table{width:100%;border-collapse:collapse;font-size:12.5px;}
             #auditLogModal th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);padding:6px 8px;border-bottom:1px solid var(--line);}
             #auditLogModal td{padding:6px 8px;border-bottom:1px solid var(--line);}
+            #auditLogModal .audit-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:18px;align-items:start;}
+            #auditLogModal .audit-col{min-width:0;}
+            #auditLogModal .audit-col-title{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:8px;}
+            #auditLogModal .detail-list .detail-row:first-child{border-top:none;}
+            @media (max-width:640px){
+                #auditLogModal .audit-cols{grid-template-columns:1fr;gap:14px;}
+            }
         </style>
-        <div class="popup" style="max-width:520px; width:100%; margin:auto;">
+        <div class="popup" style="max-width:660px; width:100%; margin:auto;">
             <div class="modal-head">
                 <h3>Audit log entry</h3>
                 <button class="modal-close" onclick="closeModal('auditLogModal')">✕</button>
             </div>
             <div class="modal-body">
-                <div class="detail-list" style="margin-bottom:14px;">
-                    <div class="detail-row"><span class="dk">When</span><span class="dv" id="auditModalWhen">—</span></div>
-                    <div class="detail-row"><span class="dk">User</span><span class="dv" id="auditModalUser">—</span></div>
-                    <div class="detail-row"><span class="dk">Action</span><span class="dv"><span class="tag tag-terracotta" id="auditModalActionTag">—</span></span></div>
-                    <div class="detail-row"><span class="dk">Entity</span><span class="dv" id="auditModalEntity">—</span></div>
-                    <div class="detail-row"><span class="dk">Entity ID</span><span class="dv" id="auditModalEntityId">—</span></div>
-                    <div class="detail-row"><span class="dk">IP address</span><span class="dv" id="auditModalIp">—</span></div>
+                <div class="audit-cols">
+                    <div class="audit-col">
+                        <div class="audit-col-title">Entry</div>
+                        <div class="detail-list">
+                            <div class="detail-row"><span class="dk">When</span><span class="dv" id="auditModalWhen">—</span></div>
+                            <div class="detail-row"><span class="dk">User</span><span class="dv" id="auditModalUser">—</span></div>
+                            <div class="detail-row"><span class="dk">Action</span><span class="dv"><span class="tag tag-terracotta" id="auditModalActionTag">—</span></span></div>
+                            <div class="detail-row"><span class="dk">Entity</span><span class="dv" id="auditModalEntity">—</span></div>
+                            <div class="detail-row"><span class="dk">Entity ID</span><span class="dv" id="auditModalEntityId">—</span></div>
+                            <div class="detail-row"><span class="dk">IP address</span><span class="dv" id="auditModalIp">—</span></div>
+                        </div>
+                    </div>
+                    <div class="audit-col">
+                        <div class="audit-col-title">Details</div>
+                        <div id="auditModalBody"></div>
+                    </div>
                 </div>
-                <div id="auditModalBody"></div>
             </div>
             <div class="modal-foot">
                 <button type="button" class="btn btn-primary" onclick="closeModal('auditLogModal')">Close</button>
