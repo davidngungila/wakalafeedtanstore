@@ -1,6 +1,9 @@
 <?php
 
 use App\Models\Agent;
+use App\Models\DailyOpening;
+use App\Models\Reconciliation;
+use App\Models\Transaction;
 
 if (! function_exists('money')) {
     /**
@@ -264,6 +267,58 @@ if (! function_exists('is_admin')) {
     function is_admin(): bool
     {
         return is_role('admin');
+    }
+}
+
+if (! function_exists('cashier_shift_blockers')) {
+    /**
+     * Pending shift tasks that block a cashier from logging out:
+     * the day must be closed, reconciled, and the reconciliation
+     * approved by a supervisor.
+     *
+     * @return array<int, string>
+     */
+    function cashier_shift_blockers(): array
+    {
+        $user = auth()->user();
+
+        if (! $user || $user->role !== 'cashier') {
+            return [];
+        }
+
+        $agent = cash_point();
+
+        if ($agent === null) {
+            return [];
+        }
+
+        $blockers = [];
+
+        $opening = DailyOpening::forAgentAndDate($agent->id, today())->first();
+
+        if ($opening !== null && ! $opening->is_closed) {
+            $blockers[] = 'Close today\'s daily opening.';
+        }
+
+        $reconciliation = Reconciliation::where('agent_id', $agent->id)
+            ->whereDate('reconciliation_date', today())
+            ->latest()
+            ->first();
+
+        $hadActivity = Transaction::where('agent_id', $agent->id)
+            ->where('status', 'completed')
+            ->whereDate('created_at', today())
+            ->exists();
+
+        if ($hadActivity && $reconciliation === null) {
+            $blockers[] = 'Reconcile today\'s shift (no reconciliation recorded).';
+        }
+
+        if ($reconciliation !== null && $reconciliation->approved_at === null) {
+            $blockers[] = 'Reconciliation is awaiting supervisor approval.';
+        }
+
+        return $blockers;
     }
 }
 

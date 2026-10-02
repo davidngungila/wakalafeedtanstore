@@ -149,6 +149,20 @@ class AuthController extends Controller
 
     public function logout(Request $request): RedirectResponse
     {
+        $blockers = cashier_shift_blockers();
+
+        if ($blockers !== []) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Complete the pending shift tasks before logging out.',
+                    'blockers' => $blockers,
+                ], 422);
+            }
+
+            return back()->with('error', 'Complete the pending shift tasks before logging out: '.implode(' ', $blockers));
+        }
+
         $this->recordAudit('User logged out', 'User', Auth::id());
 
         Auth::logout();

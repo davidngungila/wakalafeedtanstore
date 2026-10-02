@@ -829,7 +829,7 @@
                                 </a>
                             @endif
                             <div class="menu-sep"></div>
-                            <form method="POST" action="{{ route('logout') }}">
+                            <form method="POST" action="{{ route('logout') }}" id="logoutForm">
                                 @csrf
                                 <button type="submit" class="danger">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -1105,6 +1105,35 @@
             }
         }
     </script>
+    @php $logoutBlockers = is_role('cashier') ? cashier_shift_blockers() : []; @endphp
+    @if (count($logoutBlockers) > 0)
+        <div class="modal-backdrop" id="logoutBlockedModal">
+            <div class="popup" style="max-width:440px; width:100%; margin:auto;">
+                <div class="modal-head">
+                    <h3>Cannot logout yet</h3>
+                    <button class="modal-close" onclick="closeModal('logoutBlockedModal')">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size:13.5px; color:var(--ink-soft); margin-bottom:10px;">Complete these pending items before logging out:</p>
+                    <ol style="margin:0; padding-left:20px; font-size:13.5px; line-height:1.8;">
+                        @foreach ($logoutBlockers as $blocker)
+                            <li>{{ $blocker }}</li>
+                        @endforeach
+                    </ol>
+                </div>
+                <div class="modal-foot">
+                    <button type="button" class="btn btn-primary" onclick="closeModal('logoutBlockedModal')">OK, I'll complete them</button>
+                </div>
+            </div>
+        </div>
+        <script>
+            document.getElementById('logoutForm')?.addEventListener('submit', function (e) {
+                e.preventDefault();
+                openModal('logoutBlockedModal');
+            });
+        </script>
+    @endif
+
     @yield('scripts')
 </body>
 </html>
