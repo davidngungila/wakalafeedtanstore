@@ -34,20 +34,14 @@ class TransactionController extends Controller
 
     public function index(Request $request): View
     {
-        $query = Transaction::with(['network', 'agent', 'operator', 'dailyOpening'])
-            ->whereNotIn('type', ['float_topup', 'float_deposit', 'cash_to_float']);
+        $query = Transaction::with(['network', 'agent', 'operator', 'dailyOpening']);
 
         if ($request->filled('status') && $request->input('status') !== 'all') {
             $query->where('status', $request->input('status'));
         }
 
         if ($request->filled('type') && $request->input('type') !== 'all') {
-            if (in_array($request->input('type'), ['float_topup', 'float_deposit'], true)) {
-                // These types are now float-only and not shown in transactions list
-                $query->where('type', $request->input('type'));
-            } else {
-                $query->where('type', $request->input('type'));
-            }
+            $query->where('type', $request->input('type'));
         }
 
         if ($request->filled('network') && $request->input('network') !== 'all') {

@@ -64,6 +64,27 @@
 
     <div class="panel">
         <div class="panel-head">
+            <h3>Send SMS</h3>
+            <span class="link">{{ $user->phone ?: 'No phone on file' }}</span>
+        </div>
+        <div class="panel-body">
+            @if ($user->phone)
+                <div class="field">
+                    <label>Message</label>
+                    <textarea id="userSmsText" rows="3" maxlength="1000" placeholder="Write a message to {{ $user->name }}…"></textarea>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:14px; align-items:center;">
+                    <button type="button" id="sendUserSmsBtn" class="btn btn-primary btn-sm">Send SMS</button>
+                    <span id="userSmsStatus" style="font-size:13px; color:var(--ink-soft);"></span>
+                </div>
+            @else
+                <p style="font-size:13px; color:var(--ink-soft);">Add a phone number to this user to send SMS.</p>
+            @endif
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
             <h3>Danger Zone</h3>
         </div>
         <div class="panel-body">
@@ -79,6 +100,31 @@
 
 @section('scripts')
     <script>
+        document.getElementById('sendUserSmsBtn')?.addEventListener('click', async () => {
+            const btn = document.getElementById('sendUserSmsBtn');
+            const status = document.getElementById('userSmsStatus');
+            const text = document.getElementById('userSmsText').value.trim();
+            if (!text) { status.textContent = 'Type a message first.'; return; }
+            btn.disabled = true;
+            status.textContent = 'Sending…';
+            try {
+                const resp = await fetch('{{ route('settings.sms.send') }}', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to: '{{ $user->phone }}', text: text }),
+                });
+                const data = await resp.json().catch(() => ({}));
+                status.textContent = (resp.ok && data.success) ? (data.message || 'SMS sent.') : (data.message || 'Failed to send SMS.');
+                status.style.color = (resp.ok && data.success) ? 'var(--acacia-600)' : 'var(--danger)';
+                if (resp.ok && data.success) document.getElementById('userSmsText').value = '';
+            } catch (e) {
+                status.textContent = 'Network error.';
+                status.style.color = 'var(--danger)';
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
         document.querySelectorAll('[data-user-form]').forEach(form => {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
