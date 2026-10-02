@@ -11,6 +11,7 @@ use App\Services\ExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
 class DailyOpeningController extends Controller
@@ -27,6 +28,13 @@ class DailyOpeningController extends Controller
 
         if ($todayOpening) {
             return redirect()->route('daily-opening.show', $todayOpening);
+        }
+
+        $awaitingApproval = $this->unapprovedReconciliationExists($agent->id);
+
+        if ($awaitingApproval) {
+            return redirect()->route('reconciliation.index')
+                ->with('error', 'A reconciliation from a previous day is awaiting supervisor approval. It must be approved before a new shift can be opened.');
         }
 
         $networks = Network::active()->orderBy('name')->get(['id', 'name', 'color']);
@@ -54,6 +62,15 @@ class DailyOpeningController extends Controller
             'float_openings.*' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
+
+        if ($this->unapprovedReconciliationExists($agent->id)) {
+            $message = 'A reconciliation from a previous day is awaiting supervisor approval. It must be approved before a new shift can be opened.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return redirect()->route('reconciliation.index')->with('error', $message);
+        }
 
         $opening = DailyOpening::create([
             'agent_id' => $agent->id,
@@ -85,6 +102,30 @@ class DailyOpeningController extends Controller
         }
 
         return redirect()->route('daily-opening.show', $opening)->with('status', 'Daily opening recorded successfully.');
+    }
+
+    private function unapprovedReconciliationExists(int $agentId): bool
+    {
+        $approvedDays = Reconciliation::where('agent_id', $agentId)
+            ->whereNotNull('approved_at')
+            ->pluck('reconciliation_date')
+            ->map(fn ($d) => Carbon::parse($d)->toDateString())
+            ->all();
+
+        $previousTxnDays = Transaction::where('agent_id', $agentId)
+            ->where('status', 'completed')
+            ->where('created_at', '<', now()->startOfDay())
+            ->selectRaw('DATE(created_at) as day')
+            ->distinct()
+            ->pluck('day');
+
+        foreach ($previousTxnDays as $day) {
+            if (! in_array($day, $approvedDays, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function show(DailyOpening $dailyOpening): View

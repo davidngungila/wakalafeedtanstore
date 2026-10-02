@@ -27,9 +27,23 @@ class ReconciliationController extends Controller
     {
         $records = Reconciliation::with(['agent', 'reconciler'])->latest()->limit(120)->get();
 
+        $openRecords = Reconciliation::where('status', 'open')->count();
+
+        $reconciledDates = Reconciliation::pluck('reconciliation_date')
+            ->map(fn ($d) => Carbon::parse($d)->toDateString())
+            ->all();
+
+        $pendingDays = Transaction::where('status', 'completed')
+            ->selectRaw('DATE(created_at) as day')
+            ->distinct()
+            ->pluck('day')
+            ->reject(fn ($d) => in_array($d, $reconciledDates, true))
+            ->sort()
+            ->values();
+
         $totals = [
             'reconciled' => Reconciliation::where('status', 'reconciled')->count(),
-            'open' => Reconciliation::where('status', 'open')->count(),
+            'open' => $openRecords + $pendingDays->count(),
             'variance' => Reconciliation::where('status', 'variance')->count(),
             'resolved' => Reconciliation::where('status', 'resolved')->count(),
             'varianceAmount' => (float) Reconciliation::where('status', 'variance')->sum('cash_variance'),
@@ -40,7 +54,38 @@ class ReconciliationController extends Controller
         $exportColumns = $this->exportColumns();
         $exportRoute = route('reconciliation.export');
 
-        return view('reconciliation.index', compact('records', 'totals', 'networks', 'exportColumns', 'exportRoute'));
+        return view('reconciliation.index', compact('records', 'totals', 'networks', 'exportColumns', 'exportRoute', 'pendingDays'));
+    }
+
+    public function approve(Request $request, Reconciliation $reconciliation): JsonResponse|RedirectResponse
+    {
+        if (! is_role('supervisor', 'admin')) {
+            abort(403);
+        }
+
+        $agent = cash_point();
+
+        if ($agent && (int) $reconciliation->agent_id !== (int) $agent->id && ! is_admin()) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'approval_note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $reconciliation->update([
+            'approved_by' => auth()->id(),
+            'approved_at' => now(),
+            'approval_note' => $validated['approval_note'] ?? null,
+        ]);
+
+        $this->recordAudit('Reconciliation approved', 'Reconciliation', $reconciliation->id);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Reconciliation approved. The team may proceed to the next shift.']);
+        }
+
+        return back()->with('status', 'Reconciliation approved. The team may proceed to the next shift.');
     }
 
     public function export(Request $request, ExportService $export)
@@ -829,7 +874,7 @@ class ReconciliationController extends Controller
     {
         return match ($type) {
             'deposit', 'airtime', 'send_money' => -$amount,
-            'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit' => $amount,
+            'withdrawal', 'bank_to_wallet', 'float_topup', 'float_deposit', 'commission_income' => $amount,
             'cash_to_float' => $amount - $commission,
             default => -$amount,
         };

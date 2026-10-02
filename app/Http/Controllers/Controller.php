@@ -50,7 +50,12 @@ abstract class Controller
         );
 
         if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => 'Welcome back, '.$user->name.'!']);
+            return response()->json(array_filter([
+                'success' => true,
+                'message' => 'Welcome back, '.$user->name.'!',
+                'two_factor_setup_required' => $user->two_factor_enabled ? null : true,
+                'redirect' => $user->two_factor_enabled ? null : route('account.index'),
+            ]));
         }
 
         $request->session()->regenerate();

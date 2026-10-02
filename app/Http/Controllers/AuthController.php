@@ -53,7 +53,42 @@ class AuthController extends Controller
 
         if (($user->two_factor_method ?? null) === 'sms') {
             if ($user->phone_verified_at === null) {
-                return $this->loginFailed($request, 'SMS login codes are unavailable. Verify your mobile number before signing in with SMS.');
+                if (! $sender->isConfigured()) {
+                    return $this->loginFailed($request, 'SMS login codes are unavailable. Ask an administrator to configure the SMS provider.');
+                }
+
+                try {
+                    $phone = $sender->normalizeRecipient((string) $user->phone);
+                } catch (InvalidArgumentException) {
+                    return $this->loginFailed($request, 'SMS login codes are unavailable. Ask an administrator to update your mobile number.');
+                }
+
+                $request->session()->put('two_factor_user_id', $user->id);
+                $request->session()->put('two_factor_user_email', $user->email);
+                $request->session()->regenerate();
+
+                try {
+                    $verificationCode = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                    $sender->sendVerificationCode($phone, $verificationCode);
+                    Cache::put('phone_verification_'.$user->id, ['code' => $verificationCode, 'phone' => $phone], 300);
+                } catch (Throwable $exception) {
+                    Log::warning('Phone verification code failed during login', ['error' => $exception->getMessage(), 'user_id' => $user->id]);
+
+                    return $this->loginFailed($request, 'Could not send the verification code. Please try again.');
+                }
+
+                $this->recordAudit('Phone verification started during login', 'User', $user->id);
+
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => true,
+                        'phone_verification' => true,
+                        'message' => 'Enter the verification code sent to your phone.',
+                        'redirect' => route('phone-verification.show'),
+                    ]);
+                }
+
+                return redirect()->route('phone-verification.show');
             }
 
             if (! $sender->isConfigured()) {

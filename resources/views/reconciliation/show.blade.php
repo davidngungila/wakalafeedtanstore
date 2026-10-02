@@ -46,6 +46,19 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                 Back to list
             </a>
+            @if ($reconciliation->approved_at === null && is_role('supervisor', 'admin'))
+                <form method="POST" action="{{ route('reconciliation.approve', $reconciliation) }}" style="display:inline;">
+                    @csrf
+                    <button type="submit" class="btn btn-primary btn-sm" style="background:var(--acacia-600);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="m9 12 2 2 4-4"></path><circle cx="12" cy="12" r="10"></circle></svg>
+                        Approve reconciliation
+                    </button>
+                </form>
+            @elseif ($reconciliation->approved_at !== null)
+                <span class="tag tag-green">Approved by {{ $reconciliation->approver?->name ?? '—' }} · {{ $reconciliation->approved_at->format('d M Y H:i') }}</span>
+            @else
+                <span class="tag tag-gold">Awaiting supervisor approval</span>
+            @endif
             @if(is_admin())
                 <button type="button" onclick="openModal('deleteReconShowModal')" class="btn btn-danger">Delete reconciled</button>
             @endif

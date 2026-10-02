@@ -26,6 +26,9 @@ use Illuminate\Support\Facades\Crypt;
     'is_locked',
     'notes',
     'reconciled_by',
+    'approved_by',
+    'approved_at',
+    'approval_note',
 ])]
 class Reconciliation extends Model
 {
@@ -45,6 +48,7 @@ class Reconciliation extends Model
             'tie_out' => 'decimal:2',
             'network_balances' => 'array',
             'is_locked' => 'boolean',
+            'approved_at' => 'datetime',
         ];
     }
 
@@ -62,6 +66,11 @@ class Reconciliation extends Model
     public function reconciler(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reconciled_by');
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     /**

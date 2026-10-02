@@ -46,6 +46,12 @@ Route::middleware('guest')->group(function () {
         ->middleware('throttle:10,1')
         ->name('two-factor.resend');
     Route::post('/two-factor/cancel', [TwoFactorController::class, 'cancel'])->name('two-factor.cancel');
+
+    Route::get('/phone-verification', [PhoneVerificationController::class, 'loginShow'])->name('phone-verification.show');
+    Route::post('/phone-verification', [PhoneVerificationController::class, 'loginVerify'])->name('phone-verification.verify');
+    Route::post('/phone-verification/resend', [PhoneVerificationController::class, 'loginResend'])
+        ->middleware('throttle:10,1')
+        ->name('phone-verification.resend');
 });
 
 Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
@@ -102,6 +108,7 @@ Route::middleware(['auth', 'two.factor', 'daily.opening'])->group(function () {
     Route::get('/reconciliation/create', [ReconciliationController::class, 'create'])->name('reconciliation.create');
     Route::post('/reconciliation', [ReconciliationController::class, 'store'])->name('reconciliation.store');
     Route::post('/reconciliation/{reconciliation}/toggle-lock', [ReconciliationController::class, 'toggleLock'])->name('reconciliation.toggle-lock');
+    Route::post('/reconciliation/{reconciliation}/approve', [ReconciliationController::class, 'approve'])->name('reconciliation.approve');
     Route::get('/reconciliation/{reconciliation}/edit', [ReconciliationController::class, 'edit'])->name('reconciliation.edit');
     Route::put('/reconciliation/{reconciliation}', [ReconciliationController::class, 'update'])->name('reconciliation.update');
     Route::get('/reconciliation/{reconciliation}/export', [ReconciliationController::class, 'exportSingle'])->name('reconciliation.export.single');

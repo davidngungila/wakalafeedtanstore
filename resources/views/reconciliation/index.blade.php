@@ -42,6 +42,30 @@
         </div>
     </div>
 
+    @if ($pendingDays->isNotEmpty())
+        <div class="table-card" style="margin-bottom:16px;">
+            <div class="table-head"><h3>Days with transactions not reconciled</h3></div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($pendingDays as $day)
+                            <tr>
+                                <td>{{ \Illuminate\Support\Carbon::parse($day)->format('l, j F Y') }}</td>
+                                <td><a href="{{ route('reconciliation.create', ['date' => $day]) }}" class="btn btn-ghost btn-sm">Reconcile</a></td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
+
     <div class="table-card">
         <div class="table-scroll">
             <table>
