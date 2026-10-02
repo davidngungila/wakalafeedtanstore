@@ -253,6 +253,49 @@
             </div>
         </div>
     </div>
+    <!-- Transaction details modal - mirrors the audit log entry popup -->
+    <div class="modal-backdrop" id="txnModal">
+        <style>
+            #txnModal .txn-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:18px;align-items:start;}
+            #txnModal .txn-col{min-width:0;}
+            #txnModal .txn-col-title{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;margin-bottom:8px;}
+            #txnModal .detail-list{display:flex;flex-direction:column;gap:8px;}
+            #txnModal .detail-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);}
+            #txnModal .detail-row:last-child{border-bottom:none;}
+            #txnModal .dk{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:700;flex:none;}
+            #txnModal .dv{font-size:13.5px;color:var(--coffee-900);font-weight:600;text-align:right;word-break:break-word;}
+            #txnModal .dv-wrap{text-align:left;}
+            #txnModal .dv-amount{font-size:16px;font-weight:700;}
+            #txnModal .popup{max-height:90vh;overflow:hidden;display:flex;flex-direction:column;}
+            #txnModal .modal-body{max-height:66vh;overflow-y:auto;}
+            @media (max-width:640px){
+                #txnModal .txn-cols{grid-template-columns:1fr;gap:14px;}
+            }
+        </style>
+        <div class="popup" style="max-width:720px; width:100%; margin:auto;">
+            <div class="modal-head">
+                <h3>Transaction details</h3>
+                <button class="modal-close" onclick="closeModal('txnModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="txn-cols">
+                    <div class="txn-col">
+                        <div class="txn-col-title">Transaction</div>
+                        <div class="detail-list" id="txnModalLeft"></div>
+                    </div>
+                    <div class="txn-col">
+                        <div class="txn-col-title">Money &amp; balances</div>
+                        <div class="detail-list" id="txnModalRight"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <a class="btn btn-ghost" id="txnReceiptLink" href="#">View receipt</a>
+                <button class="btn btn-primary" onclick="closeModal('txnModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
     <style>
         /* Receipt as centered popup - overrides drawer transform */
         #receiptModal.show { display:flex !important; align-items:center; justify-content:center; }
@@ -287,6 +330,7 @@
                 'network_color' => $t->network?->color,
                 'created_at' => $t->created_at->format('d M Y H:i'),
                 'operator' => $t->operator?->name,
+                'receipt_url' => route('transactions.receipt', $t),
             ])->values();
         @endphp
         const transactionsData = @json($jsonTxns);
@@ -311,12 +355,16 @@
 
         function fmt(n) { return 'TZS ' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
 
+        /** Escapes a value for safe interpolation into the receipt markup. */
+        function txnEsc(value) {
+            return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
         function viewTxn(id) {
             try {
-                console.log('viewTxn called', id, 'data len', transactionsData.length);
                 const t = transactionsData.find(x => String(x.id) === String(id));
-                if (!t) { console.warn('viewTxn not found', id, transactionsData); toast('Transaction not found in local data. Please reload.', 'error'); return; }
-                const safe = (v) => v === null || v === undefined || v === '' ? '—' : v;
+                if (!t) { toast('Transaction not found in local data. Please reload.', 'error'); return; }
+                const safe = (v) => v === null || v === undefined || v === '' ? '—' : txnEsc(v);
                 const bodyEl = document.getElementById('receiptBody');
                 if (!bodyEl) { toast('Receipt container missing', 'error'); return; }
                 bodyEl.innerHTML = `
@@ -327,12 +375,12 @@
                         </div>
                         <div class="rc-rule"></div>
                         <div class="rc-title">Transaction Receipt</div>
-                        <div class="rc-subtitle">${TYPE_LABEL[t.type] || t.type}</div>
+                        <div class="rc-subtitle">${txnEsc(TYPE_LABEL[t.type] || t.type)}</div>
                         <div class="rc-rule"></div>
                         <div class="rc-row"><span>Reference</span><b>${safe(t.reference)}</b></div>
                         <div class="rc-row"><span>Provider ref</span><b>${safe(t.provider_reference)}</b></div>
                         <div class="rc-row"><span>Date</span><b>${safe(t.created_at)}</b></div>
-                        <div class="rc-row"><span>Network</span><b><span class="net-dot" style="background:${t.network_color || '#999'};"></span>&nbsp;${safe(t.network)}</b></div>
+                        <div class="rc-row"><span>Network</span><b><span class="net-dot" style="background:${txnEsc(t.network_color || '#999')};"></span>&nbsp;${safe(t.network)}</b></div>
                         <div class="rc-row"><span>Customer</span><b>${safe(t.customer_name)}</b></div>
                         <div class="rc-row"><span>Phone</span><b>${safe(t.customer_phone)}</b></div>
                         <div class="rc-rule"></div>
@@ -342,47 +390,16 @@
                         <div class="rc-row"><span>Running Cash</span><b>${t.running_cash_balance === null || t.running_cash_balance === undefined ? '—' : fmt(t.running_cash_balance)}</b></div>
                         <div class="rc-row"><span>Running Float (${safe(t.network) || 'network'})</span><b>${t.running_network_balance !== null && t.running_network_balance !== undefined ? fmt(t.running_network_balance) : (t.running_float_balance !== null && t.running_float_balance !== undefined ? fmt(t.running_float_balance) + ' (total)' : '—')}</b></div>
                         ${t.running_network_balance !== null && t.running_float_balance !== null ? `<div class="rc-row"><span>Total Float (all)</span><b>${fmt(t.running_float_balance)}</b></div>` : ''}
-                        <div class="rc-row"><span>Status</span><b>${String(t.status || 'unknown').toUpperCase()}</b></div>
-                        ${t.reversal_reason ? `<div class="rc-row"><span>Reason</span><b>${t.reversal_reason}</b></div>` : ''}
-                        ${t.notes ? `<div class="rc-row"><span>Notes</span><b>${t.notes}</b></div>` : ''}
+                        <div class="rc-row"><span>Status</span><b>${txnEsc(String(t.status || 'unknown').toUpperCase())}</b></div>
+                        ${t.reversal_reason ? `<div class="rc-row"><span>Reason</span><b>${txnEsc(t.reversal_reason)}</b></div>` : ''}
+                        ${t.notes ? `<div class="rc-row"><span>Notes</span><b>${txnEsc(t.notes)}</b></div>` : ''}
                         <div class="rc-rule"></div>
                         <div class="rc-row"><span>Operator</span><b>${safe(t.operator) || safe(authUser)}</b></div>
                         <div class="rc-rule"></div>
                         <div class="rc-foot">Thank you for using Wakala Feedtan Store</div>
                     </div>`;
-                console.log('receipt HTML built, opening modal, body len', bodyEl.innerHTML.length);
-                const modalEl = document.getElementById('receiptModal');
-                console.log('modalEl before', modalEl, 'class', modalEl?.className, 'inner', modalEl?.querySelector('.popup')?.className);
                 openModal('receiptModal');
-                console.log('modalEl after open', modalEl?.className, 'zIndex', modalEl?.style.zIndex);
-                // fallback: ensure modal is visible even if CSS fails - force popup visible
-                if (modalEl && !modalEl.classList.contains('show')) {
-                    console.warn('modal show class not added, forcing');
-                    modalEl.classList.add('show');
-                }
-                if (modalEl) {
-                    modalEl.style.display = 'flex';
-                    const inner = modalEl.querySelector('.popup') || modalEl.querySelector('.modal');
-                    if (inner) {
-                        console.log('inner before transform', inner.style.transform, getComputedStyle(inner).transform);
-                        inner.style.transform = 'none';
-                        inner.style.position = 'relative';
-                        inner.style.right = 'auto';
-                        console.log('inner after', inner.style.transform);
-                    }
-                    // verify visibility after 50ms
-                    setTimeout(() => {
-                        const rect = modalEl.getBoundingClientRect();
-                        const innerRect = modalEl.querySelector('.popup')?.getBoundingClientRect();
-                        console.log('modal rect', rect, 'inner rect', innerRect, 'computed display', getComputedStyle(modalEl).display);
-                        if (!innerRect || innerRect.width === 0) {
-                            console.error('popup still not visible, showing alert fallback');
-                            alert(bodyEl.innerText || 'Receipt ready but modal hidden - check console');
-                        }
-                    }, 100);
-                }
             } catch (e) {
-                console.error('viewTxn error', e);
                 toast('Failed to render receipt: ' + (e.message || 'unknown'), 'error');
             }
         }
@@ -396,29 +413,89 @@
             });
         });
 
-        bindRowClick('#transactionsBody tr[data-id]', tr => {
+        /**
+         * Builds a label/value row using textContent, so customer names and
+         * notes coming from SMS are never interpreted as markup.
+         */
+        function txnDetailRow(label, value, options = {}) {
+            const row = document.createElement('div');
+            row.className = 'detail-row';
+
+            const k = document.createElement('span');
+            k.className = 'dk';
+            k.textContent = label;
+
+            const v = document.createElement('span');
+            v.className = 'dv' + (options.wrap ? ' dv-wrap' : '') + (options.amount ? ' dv-amount' : '');
+            v.textContent = value;
+
+            row.appendChild(k);
+            row.appendChild(v);
+
+            return row;
+        }
+
+        function txnMoney(value) {
+            return value === null || value === undefined ? '—' : fmt(value);
+        }
+
+        function openTxnModal(tr) {
             const t = transactionsData.find(x => Number(x.id) === Number(tr.dataset.id));
-            if (!t) return [];
-            return [
-                ['Reference', t.reference],
+            if (!t) {
+                toast('Transaction not found in local data. Please reload.', 'error');
+                return;
+            }
+
+            const left = document.getElementById('txnModalLeft');
+            const right = document.getElementById('txnModalRight');
+            left.innerHTML = '';
+            right.innerHTML = '';
+
+            [
+                ['Reference', t.reference || '—'],
                 ['Provider ref', t.provider_reference || '—'],
-                ['Date', t.created_at],
-                ['Type', TYPE_LABEL[t.type] || t.type],
-                ['Network', t.network ? { __html: `<span class="net-dot" style="background:${t.network_color || '#999'};"></span> ${t.network}` } : '—'],
+                ['Date', t.created_at || '—'],
+                ['Type', TYPE_LABEL[t.type] || t.type || '—'],
+                ['Network', t.network || '—'],
                 ['Customer', t.customer_name || '—'],
-                ['Phone', t.customer_phone],
-                ['Amount', fmt(t.amount)],
-                ['Fee', fmt(t.fee)],
-                ['Commission', fmt(t.commission)],
-                ['Running Float (' + (t.network || 'network') + ')', t.running_network_balance !== null && t.running_network_balance !== undefined ? fmt(t.running_network_balance) : (t.running_float_balance !== null ? fmt(t.running_float_balance) + ' (total)' : '—')],
-                ...(t.running_network_balance !== null && t.running_float_balance !== null && t.running_network_balance !== t.running_float_balance ? [['Total Float (all)', fmt(t.running_float_balance)]] : []),
-                ['Running Cash', t.running_cash_balance !== null ? fmt(t.running_cash_balance) : '—'],
-                ['Status', { __html: statusBadgeHtml(t.status) }],
-                ...(t.reversal_reason ? [['Reversal reason', t.reversal_reason]] : []),
-                ...(t.notes ? [['Notes', t.notes]] : []),
+                ['Phone', t.customer_phone || '—'],
+                ['Status', String(t.status || 'unknown').toUpperCase()],
                 ['Operator', t.operator || authUser],
-            ];
-        }, 'Transaction details');
+            ].forEach(([label, value]) => left.appendChild(txnDetailRow(label, value)));
+
+            right.appendChild(txnDetailRow('Amount', txnMoney(t.amount), { amount: true }));
+            [
+                ['Fee', txnMoney(t.fee)],
+                ['Commission', txnMoney(t.commission)],
+                ['Running Float' + (t.network ? ' (' + t.network + ')' : ''), txnMoney(t.running_network_balance)],
+                ['Total Float (all)', txnMoney(t.running_float_balance)],
+                ['Running Cash', txnMoney(t.running_cash_balance)],
+            ].forEach(([label, value]) => right.appendChild(txnDetailRow(label, value)));
+
+            if (t.reversal_reason) {
+                right.appendChild(txnDetailRow('Reversal reason', t.reversal_reason, { wrap: true }));
+            }
+            if (t.notes) {
+                right.appendChild(txnDetailRow('Notes', t.notes, { wrap: true }));
+            }
+
+            const receiptLink = document.getElementById('txnReceiptLink');
+            if (receiptLink) {
+                if (t.receipt_url) {
+                    receiptLink.href = t.receipt_url;
+                    receiptLink.style.display = '';
+                } else {
+                    receiptLink.style.display = 'none';
+                }
+            }
+
+            openModal('txnModal');
+        }
+
+        document.querySelectorAll('#transactionsBody tr[data-id]').forEach(tr => {
+            tr.style.cursor = 'pointer';
+            tr.addEventListener('click', () => openTxnModal(tr));
+        });
 
         let deleteTxnId = null;
         function deleteTxn(id, ref) {
