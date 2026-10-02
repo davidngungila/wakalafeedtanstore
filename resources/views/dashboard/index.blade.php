@@ -97,6 +97,12 @@
             </div>
             <div class="panel-body">
                 <div class="chart-box"><canvas id="volumeChart"></canvas></div>
+                <div class="kpi-row">
+                    <div class="kpi-item"><b id="volTotal">&mdash;</b><span>Total moved</span></div>
+                    <div class="kpi-item"><b id="volAvg">&mdash;</b><span>Average per day</span></div>
+                    <div class="kpi-item"><b id="volCount">&mdash;</b><span>Transactions</span></div>
+                    <div class="kpi-item"><b id="volBest">&mdash;</b><span>Busiest day</span></div>
+                </div>
             </div>
         </div>
 
@@ -202,10 +208,11 @@
         <div class="panel">
             <div class="panel-head">
                 <h3>Transaction status</h3>
-                <span class="link"></span>
+                <span class="link" id="statusRate">&mdash;</span>
             </div>
             <div class="panel-body">
                 <div class="chart-box"><canvas id="statusChart"></canvas></div>
+                <div class="kpi-row" id="statusKpis"></div>
             </div>
         </div>
     </div>
@@ -240,6 +247,11 @@
             </div>
             <div class="panel-body">
                 <div class="chart-box"><canvas id="avgChart"></canvas></div>
+                <div class="kpi-row">
+                    <div class="kpi-item"><b id="avgMean">&mdash;</b><span>Period average</span></div>
+                    <div class="kpi-item"><b id="avgHigh">&mdash;</b><span>Highest day</span></div>
+                    <div class="kpi-item"><b id="avgActiveDays">&mdash;</b><span>Trading days</span></div>
+                </div>
             </div>
         </div>
 
@@ -272,6 +284,12 @@
             </div>
             <div class="panel-body">
                 <div class="chart-box"><canvas id="feesCommChart"></canvas></div>
+                <div class="kpi-row">
+                    <div class="kpi-item"><b id="fcFees">&mdash;</b><span>Fees</span></div>
+                    <div class="kpi-item"><b id="fcComm">&mdash;</b><span>Commission</span></div>
+                    <div class="kpi-item"><b id="fcNet">&mdash;</b><span>Total income</span></div>
+                    <div class="kpi-item"><b id="fcShare">&mdash;</b><span>Commission share</span></div>
+                </div>
             </div>
         </div>
     </div>
@@ -522,7 +540,134 @@
         const statusKeys = ['completed', 'pending', 'failed', 'reversed'];
         const statusColors = { completed: '#5E6E3F', pending: '#D4A24C', failed: '#B33A3A', reversed: '#7A5C42' };
 
-        const PALETTE = { volume: '#C2592B', volumeFill: 'rgba(194,89,43,.18)', float: '#5E6E3F', floatFill: 'rgba(94,110,63,.20)', cash: '#7A5C42', cashFill: 'rgba(122,92,66,.18)', avg: '#8a6418', fees: '#B33A3A', commission: '#5E6E3F' };
+        const PALETTE = { volume: '#C2592B', volumeFill: 'rgba(194,89,43,.18)', float: '#5E6E3F', floatFill: 'rgba(94,110,63,.20)', cash: '#7A5C42', cashFill: 'rgba(122,92,66,.18)', avg: '#8a6418', avgFill: 'rgba(138,100,24,.15)', avgLine: 'rgba(138,100,24,.65)', fees: '#B33A3A', commission: '#5E6E3F' };
+
+        /* ---------- Shared formatting helpers ---------- */
+
+        const dashInt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+
+        function dashMoney(n) {
+            return 'TZS ' + dashInt.format(Math.round(Number(n) || 0));
+        }
+
+        /** Compact axis label (4.5M, 250K) so long numbers never crowd the grid. */
+        function dashCompact(value) {
+            const abs = Math.abs(value);
+            if (abs >= 1e9) return trimZero(value / 1e9) + 'B';
+            if (abs >= 1e6) return trimZero(value / 1e6) + 'M';
+            if (abs >= 1e3) return trimZero(value / 1e3) + 'K';
+            return dashInt.format(value);
+        }
+
+        function trimZero(n) {
+            return Number(n.toFixed(1)).toString();
+        }
+
+        /** Y-axis that speaks TZS with compact ticks. */
+        function moneyAxis() {
+            return {
+                beginAtZero: true,
+                ticks: { callback: v => dashCompact(v), color: '#7A5C42', font: { size: 10 } },
+                grid: { color: '#F0E7D6' },
+            };
+        }
+
+        /** Y-axis for plain counts (never shows 2.5 transactions). */
+        function countAxis(stacked = false) {
+            return {
+                beginAtZero: true,
+                stacked,
+                precision: 0,
+                ticks: { color: '#7A5C42', font: { size: 10 }, stepSize: 1 },
+                grid: { color: '#F0E7D6' },
+            };
+        }
+
+        function categoryAxis(stacked = false) {
+            return {
+                stacked,
+                ticks: { color: '#7A5C42', font: { size: 10 } },
+                grid: { color: '#F0E7D6', display: false },
+            };
+        }
+
+        /** Tooltip that prints the real amount instead of a raw float. */
+        function moneyTooltip(extra = {}) {
+            return {
+                backgroundColor: 'rgba(58,43,31,.94)',
+                padding: 10,
+                cornerRadius: 8,
+                titleFont: { size: 12 },
+                bodyFont: { size: 12 },
+                displayColors: true,
+                callbacks: {
+                    label: ctx => ' ' + ctx.dataset.label + ': ' + dashMoney(ctx.parsed.y),
+                    ...extra,
+                },
+            };
+        }
+
+        /* ---------- Period summaries ---------- */
+
+        function setText(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        }
+
+        /** Reads a series array and returns null-safe entries. */
+        function points(arr) {
+            return (arr || []).map(v => (v === null || v === undefined ? null : Number(v)));
+        }
+
+        function updateSummaries() {
+            const s = dashSeries[currentPeriod];
+
+            // Volume trend
+            const vol = points(s.volume);
+            const volSum = vol.reduce((a, b) => a + (b || 0), 0);
+            const volCount = (s.counts || []).reduce((a, b) => a + Number(b || 0), 0);
+            const activeDays = vol.filter(v => v > 0).length;
+            const bestIdx = vol.indexOf(Math.max(...vol));
+            setText('volTotal', dashMoney(volSum));
+            setText('volAvg', dashMoney(activeDays ? volSum / activeDays : 0));
+            setText('volCount', dashInt.format(volCount));
+            setText('volBest', bestIdx > -1 && vol[bestIdx] > 0 ? s.labels[bestIdx] : '—');
+
+            // Average transaction value
+            const avg = points(s.avgValue);
+            const avgVals = avg.filter(v => v !== null);
+            const highIdx = avgVals.length ? avg.indexOf(Math.max(...avgVals)) : -1;
+            setText('avgMean', avgVals.length ? dashMoney(avgVals.reduce((a, b) => a + b, 0) / avgVals.length) : '—');
+            setText('avgHigh', highIdx > -1 ? dashMoney(avg[highIdx]) : '—');
+            setText('avgActiveDays', String(avgVals.length));
+
+            // Transaction status
+            const st = s.statuses || {};
+            const totals = {};
+            let grand = 0;
+            statusKeys.forEach(k => {
+                totals[k] = (st[k] || []).reduce((a, b) => a + Number(b || 0), 0);
+                grand += totals[k];
+            });
+            setText('statusRate', grand ? (totals.completed / grand * 100).toFixed(1) + '% completed' : 'No activity');
+
+            const kpiHost = document.getElementById('statusKpis');
+            if (kpiHost) {
+                kpiHost.innerHTML = statusKeys
+                    .filter(k => totals[k] > 0)
+                    .map(k => '<div class="kpi-item"><b>' + dashInt.format(totals[k]) + '</b><span>' + ucFirst(k) + '</span></div>')
+                    .join('') || '<div class="kpi-item"><b>0</b><span>No transactions in this period</span></div>';
+            }
+
+            // Fees vs commission
+            const fees = points(s.fees).reduce((a, b) => a + (b || 0), 0);
+            const comm = points(s.commission).reduce((a, b) => a + (b || 0), 0);
+            const net = fees + comm;
+            setText('fcFees', dashMoney(fees));
+            setText('fcComm', dashMoney(comm));
+            setText('fcNet', dashMoney(net));
+            setText('fcShare', net ? (comm / net * 100).toFixed(1) + '%' : '—');
+        }
 
         let currentPeriod = 30;
         let volumeChart, floatChart, statusChart, commissionChart, countChart, hourlyChart, avgChart, cashChart, floatDonutChart, feesCommChart, reconChart, waterfallChart, distChart;
@@ -532,22 +677,36 @@
             document.getElementById('bars-30').hidden = period !== 30;
         }
 
+        /** Point radius is wider over 7 days than 30 so the sparse series reads. */
+        function pointRadius() {
+            return currentPeriod === 7 ? 3 : 0;
+        }
+
         function updateCharts() {
             const s = dashSeries[currentPeriod];
 
             volumeChart.data.labels = s.labels;
             volumeChart.data.datasets[0].data = s.volume;
-            volumeChart.data.datasets[0].pointRadius = currentPeriod === 7 ? 3 : 0;
+            volumeChart.data.datasets[0].pointRadius = pointRadius();
 
             floatChart.data.labels = s.labels;
             floatChart.data.datasets[0].data = s.float;
-            floatChart.data.datasets[0].pointRadius = currentPeriod === 7 ? 3 : 0;
+            floatChart.data.datasets[0].pointRadius = pointRadius();
 
             statusChart.data.labels = s.labels;
             statusKeys.forEach((k, i) => { statusChart.data.datasets[i].data = s.statuses[k]; });
 
-            if (avgChart) { avgChart.data.labels = s.labels; avgChart.data.datasets[0].data = s.avgValue; avgChart.update(); }
-            if (cashChart) { cashChart.data.labels = s.labels; cashChart.data.datasets[0].data = s.cash; cashChart.update(); }
+            if (avgChart) {
+                avgChart.data.labels = s.labels;
+                avgChart.data.datasets[0].data = s.avgValue;
+                avgChart.data.datasets[0].pointRadius = pointRadius();
+                // Keep the reference line aligned with the average value series.
+                const vals = points(s.avgValue).filter(v => v !== null);
+                const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+                avgChart.data.datasets[1].data = s.labels.map(() => mean);
+                avgChart.update();
+            }
+            if (cashChart) { cashChart.data.labels = s.labels; cashChart.data.datasets[0].data = s.cash; cashChart.data.datasets[0].pointRadius = pointRadius(); cashChart.update(); }
             if (feesCommChart) {
                 feesCommChart.data.labels = s.labels;
                 feesCommChart.data.datasets[0].data = s.fees;
@@ -559,6 +718,7 @@
             floatChart.update();
             statusChart.update();
             renderBars(currentPeriod);
+            updateSummaries();
         }
 
         function bindPeriodToggle() {
@@ -572,7 +732,15 @@
         }
 
         (function initDashCharts() {
-            if (typeof Chart === 'undefined') { return; }
+            // Chart.js is served from a CDN. If it is blocked or the connection
+            // drops, every panel would otherwise render as an empty box with no
+            // explanation, so say what happened.
+            if (typeof Chart === 'undefined') {
+                document.querySelectorAll('.chart-box').forEach(box => {
+                    box.innerHTML = '<div class="empty-state"><p>Charts could not be loaded. Check your internet connection and refresh.</p></div>';
+                });
+                return;
+            }
 
             const baseOpts = {
                 responsive: true,
@@ -593,12 +761,20 @@
                         borderColor: PALETTE.volume,
                         backgroundColor: PALETTE.volumeFill,
                         fill: true,
-                        tension: .4,
-                        pointRadius: 0,
+                        tension: .35,
+                        cubicInterpolationMode: 'default',
+                        pointRadius: pointRadius(),
+                        pointHoverRadius: 5,
+                        pointBackgroundColor: PALETTE.volume,
                         borderWidth: 2,
                     }],
                 },
-                options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+                options: {
+                    ...baseOpts,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { ...baseOpts.plugins, tooltip: moneyTooltip() },
+                    scales: { x: categoryAxis(), y: moneyAxis() },
+                },
             });
 
             floatChart = new Chart(document.getElementById('floatChart'), {
@@ -623,9 +799,25 @@
                 type: 'bar',
                 data: {
                     labels: s.labels,
-                    datasets: statusKeys.map(k => ({ label: ucFirst(k), data: s.statuses[k], backgroundColor: statusColors[k] })),
+                    datasets: statusKeys.map(k => ({
+                        label: ucFirst(k),
+                        data: s.statuses[k],
+                        backgroundColor: statusColors[k],
+                        borderRadius: 4,
+                        borderSkipped: false,
+                    })),
                 },
-                options: { ...baseOpts, scales: { ...baseOpts.scales, x: { ...baseOpts.scales.x, stacked: true }, y: { ...baseOpts.scales.y, stacked: true, beginAtZero: true } } },
+                options: {
+                    ...baseOpts,
+                    plugins: {
+                        ...baseOpts.plugins,
+                        tooltip: moneyTooltip({
+                            label: ctx => ' ' + ctx.dataset.label + ': ' + dashInt.format(ctx.parsed.y),
+                            footer: items => 'Total: ' + dashInt.format(items.reduce((a, b) => a + b.parsed.y, 0)),
+                        }),
+                    },
+                    scales: { x: categoryAxis(true), y: countAxis(true) },
+                },
             });
 
             commissionChart = new Chart(document.getElementById('commissionChart'), {
@@ -668,10 +860,47 @@
 
             const avgEl = document.getElementById('avgChart');
             if (avgEl) {
+                const avgVals = points(s.avgValue).filter(v => v !== null);
+                const avgMean = avgVals.length ? avgVals.reduce((a, b) => a + b, 0) / avgVals.length : 0;
+
                 avgChart = new Chart(avgEl, {
                     type: 'line',
-                    data: { labels: s.labels, datasets: [{ label: 'Avg value (TZS)', data: s.avgValue, borderColor: PALETTE.avg, backgroundColor: 'rgba(138,100,24,.15)', fill: true, tension: .4, pointRadius: 0, borderWidth: 2 }] },
-                    options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+                    data: {
+                        labels: s.labels,
+                        datasets: [
+                            {
+                                label: 'Avg value (TZS)',
+                                data: s.avgValue,
+                                borderColor: PALETTE.avg,
+                                backgroundColor: PALETTE.avgFill,
+                                fill: true,
+                                tension: .35,
+                                // Days without customer activity are null: the
+                                // line breaks instead of faking a drop to zero.
+                                spanGaps: false,
+                                pointRadius: pointRadius(),
+                                pointHoverRadius: 5,
+                                pointBackgroundColor: PALETTE.avg,
+                                borderWidth: 2,
+                            },
+                            {
+                                label: 'Period average',
+                                data: s.labels.map(() => avgMean),
+                                borderColor: PALETTE.avgLine,
+                                borderDash: [5, 4],
+                                borderWidth: 1.5,
+                                pointRadius: 0,
+                                fill: false,
+                                tension: 0,
+                            },
+                        ],
+                    },
+                    options: {
+                        ...baseOpts,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: { ...baseOpts.plugins, tooltip: moneyTooltip() },
+                        scales: { x: categoryAxis(), y: moneyAxis() },
+                    },
                 });
             }
 
@@ -697,11 +926,27 @@
             if (feesEl) {
                 feesCommChart = new Chart(feesEl, {
                     type: 'bar',
-                    data: { labels: s.labels, datasets: [
-                        { label: 'Fees', data: s.fees, backgroundColor: PALETTE.fees },
-                        { label: 'Commission', data: s.commission, backgroundColor: PALETTE.commission },
-                    ]},
-                    options: { ...baseOpts, scales: { ...baseOpts.scales, x: { ...baseOpts.scales.x, stacked: false }, y: { ...baseOpts.scales.y, beginAtZero: true } } },
+                    data: {
+                        labels: s.labels,
+                        datasets: [
+                            { label: 'Fees', data: s.fees, backgroundColor: PALETTE.fees, borderRadius: 4, borderSkipped: false },
+                            { label: 'Commission', data: s.commission, backgroundColor: PALETTE.commission, borderRadius: 4, borderSkipped: false },
+                        ],
+                    },
+                    options: {
+                        ...baseOpts,
+                        interaction: { mode: 'index', intersect: false },
+                        plugins: {
+                            ...baseOpts.plugins,
+                            tooltip: moneyTooltip({
+                                footer: items => {
+                                    const total = items.reduce((a, b) => a + b.parsed.y, 0);
+                                    return 'Income: ' + dashMoney(total);
+                                },
+                            }),
+                        },
+                        scales: { x: categoryAxis(), y: moneyAxis() },
+                    },
                 });
             }
 
@@ -736,6 +981,7 @@
             }
 
             renderBars(currentPeriod);
+            updateSummaries();
             bindPeriodToggle();
         })();
 

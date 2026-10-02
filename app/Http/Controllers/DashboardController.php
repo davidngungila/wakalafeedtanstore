@@ -14,6 +14,27 @@ use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
+    /**
+     * Transaction types that represent money moved for a customer.
+     *
+     * Everything else recorded on the transactions table (float_deposit,
+     * float_topup, cash_to_float, commission_income) is an internal float or
+     * cash movement. Those are real rows but they are not customer activity, so
+     * they are kept out of the volume and average-value charts — otherwise a
+     * single 10,000,000 float top-up would swamp the scale and make the
+     * "average transaction value" meaningless.
+     */
+    private const CUSTOMER_TYPES = [
+        'deposit',
+        'withdrawal',
+        'send_money',
+        'bill_payment',
+        'airtime',
+        'data',
+        'bank_to_wallet',
+        'wallet_to_bank',
+    ];
+
     public function __invoke(): View
     {
         app(TransactionJournalService::class)->ensureSynced();
@@ -26,14 +47,17 @@ class DashboardController extends Controller
 
         $todayDeposits = Transaction::whereDate('created_at', $today)->whereIn('type', ['deposit', 'airtime', 'send_money', 'float_deposit'])->where('status', 'completed')->sum('amount');
         $todayWithdrawals = Transaction::whereDate('created_at', $today)->where('type', 'withdrawal')->where('status', 'completed')->sum('amount');
-        $todayCommission = Transaction::whereDate('created_at', $today)->where('status', 'completed')->sum('commission');
-        $todayFees = Transaction::whereDate('created_at', $today)->where('status', 'completed')->sum('fee');
+        // Fees and commission are earned from two ledgers: the transactions table and
+        // the float table (which books a fee on every top-up). Summing only
+        // transactions left the float income out of every total below.
+        $todayCommission = $this->income('commission', $today->copy()->startOfDay(), $today->copy()->endOfDay());
+        $todayFees = $this->income('fee', $today->copy()->startOfDay(), $today->copy()->endOfDay());
 
-        $monthCommission = Transaction::where('created_at', '>=', today()->startOfMonth())->where('status', 'completed')->sum('commission');
-        $monthFees = Transaction::where('created_at', '>=', today()->startOfMonth())->where('status', 'completed')->sum('fee');
+        $monthCommission = $this->income('commission', today()->startOfMonth());
+        $monthFees = $this->income('fee', today()->startOfMonth());
 
-        $totalCommission = Transaction::where('status', 'completed')->sum('commission');
-        $totalFees = Transaction::where('status', 'completed')->sum('fee');
+        $totalCommission = $this->income('commission');
+        $totalFees = $this->income('fee');
 
         $pendingCount = Transaction::where('status', 'pending')->count();
         $failedCount = Transaction::where('status', 'failed')->count();
@@ -148,9 +172,45 @@ class DashboardController extends Controller
     }
 
     /**
-     * Build daily chart data (labels, deposit/withdrawal volume, total value,
-     * completed counts, fees, commission, float/cash snapshots and status
-     * counts) for the last N days.
+     * Completed fee or commission income across both income ledgers.
+     *
+     * Fees and commission are earned from two separate tables: `transactions`
+     * and `float_transactions` (the latter books a fee on every top-up and a
+     * commission on every cash-to-float conversion). Reading only the
+     * transactions table left all float income out of the dashboard totals and
+     * out of the "Fees vs commission" chart.
+     *
+     * @param  'fee'|'commission'  $column
+     */
+    private function income(string $column, ?Carbon $from = null, ?Carbon $to = null): float
+    {
+        $sum = fn (string $model): float => (float) $model::query()
+            ->where('status', 'completed')
+            ->when($from, fn ($q) => $q->where('created_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('created_at', '<=', $to))
+            ->sum($column);
+
+        return $sum(Transaction::class) + $sum(FloatTransaction::class);
+    }
+
+    /**
+     * Build daily chart data for the last N days.
+     *
+     * `volume` and `counts` cover customer transactions only (see
+     * self::CUSTOMER_TYPES) so the volume trend and the average-value chart
+     * describe the same, meaningful population. `fees` and `commission` cover
+     * every source of income: both the transactions ledger and the float
+     * ledger, which records its own fee/commission on float top-ups.
+     *
+     * `avgValue` is null on days without customer activity — an average over
+     * zero transactions is undefined, and rendering it as 0 would draw a false
+     * collapse to zero on the chart.
+     *
+     * Rows are bucketed through an exact `Y-m-d` lookup rather than a day
+     * offset. `Carbon::diffInDays()` is signed (today minus the window start
+     * comes back negative), so using its result directly as an array index
+     * produced a negative key, `isset()` failed, and every row was silently
+     * discarded — which is why these charts rendered flat at zero.
      *
      * @return array{
      *     labels: array<int, string>,
@@ -160,6 +220,7 @@ class DashboardController extends Controller
      *     counts: array<int, int>,
      *     fees: array<int, float>,
      *     commission: array<int, float>,
+     *     avgValue: array<int, float|null>,
      *     float: array<int, float>,
      *     cash: array<int, float>,
      *     statuses: array<string, array<int, int>>,
@@ -176,13 +237,25 @@ class DashboardController extends Controller
             ->groupBy('day', 'type', 'status')
             ->get();
 
+        // Float movements carry their own fee (a network top-up charge) and
+        // commission (e.g. cash_to_float). Reading only the transactions table
+        // silently dropped all of it from the income charts.
+        $floatRows = FloatTransaction::whereBetween('created_at', [$start, $end])
+            ->where('status', 'completed')
+            ->selectRaw('DATE(created_at) as day, COALESCE(SUM(fee),0) as fees, COALESCE(SUM(commission),0) as commission')
+            ->groupBy('day')
+            ->get();
+
         $labels = [];
         $deposits = $withdrawals = $volume = $counts = $fees = $commission = [];
         $statuses = ['completed' => [], 'pending' => [], 'failed' => [], 'reversed' => []];
 
         // Chronological buckets: index 0 = oldest day, last index = today.
+        // $bucket maps a 'Y-m-d' day key straight to its series index.
+        $bucket = [];
         for ($i = 0; $i < $days; $i++) {
             $day = today()->subDays($days - 1 - $i);
+            $bucket[$day->toDateString()] = $i;
             $labels[$i] = $day->format('d M');
             $deposits[$i] = 0.0;
             $withdrawals[$i] = 0.0;
@@ -196,18 +269,20 @@ class DashboardController extends Controller
             }
         }
 
+        $indexOf = fn (string $day): ?int => $bucket[Carbon::parse($day)->startOfDay()->toDateString()] ?? null;
+
         // Re-key rows into the per-day buckets.
         foreach ($rows as $row) {
-            $day = Carbon::parse($row->day)->startOfDay();
-            $index = $day->diffInDays($start);
+            $index = $indexOf($row->day);
 
-            if (! isset($deposits[$index])) {
+            if ($index === null) {
                 continue;
             }
 
             $amount = (float) $row->total;
             $count = (int) $row->cnt;
             $isCompleted = $row->status === 'completed';
+            $isCustomer = in_array($row->type, self::CUSTOMER_TYPES, true);
 
             if ($isCompleted && in_array($row->type, ['deposit', 'airtime', 'send_money', 'float_deposit'], true)) {
                 $deposits[$index] += $amount;
@@ -216,10 +291,15 @@ class DashboardController extends Controller
             }
 
             if ($isCompleted) {
-                $volume[$index] += $amount;
-                $counts[$index] += $count;
+                // Income is earned on every completed row, customer or not.
                 $fees[$index] += (float) $row->fees;
                 $commission[$index] += (float) $row->commission;
+
+                // Volume and counts describe customer activity only.
+                if ($isCustomer) {
+                    $volume[$index] += $amount;
+                    $counts[$index] += $count;
+                }
             }
 
             if (array_key_exists($row->status, $statuses)) {
@@ -227,9 +307,20 @@ class DashboardController extends Controller
             }
         }
 
+        foreach ($floatRows as $row) {
+            $index = $indexOf($row->day);
+
+            if ($index === null) {
+                continue;
+            }
+
+            $fees[$index] += (float) $row->fees;
+            $commission[$index] += (float) $row->commission;
+        }
+
         $float = $this->balanceSeries($start, $labels, 'running_float_balance', NetworkBalance::sum('balance'));
         $cash = $this->balanceSeries($start, $labels, 'running_cash_balance', (float) (cash_point()?->cash_balance ?? 0));
-        $avgValue = array_map(fn (float $v, int $c) => $c > 0 ? $v / $c : 0.0, $volume, $counts);
+        $avgValue = array_map(fn (float $v, int $c): ?float => $c > 0 ? round($v / $c, 2) : null, $volume, $counts);
         $chartMax = max(1.0, max(array_merge($deposits, $withdrawals)));
 
         return [

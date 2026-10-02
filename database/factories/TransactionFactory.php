@@ -25,7 +25,7 @@ class TransactionFactory extends Factory
             'reference' => fake()->unique()->bothify('TXN-####-####'),
             'agent_id' => Agent::factory(),
             'network_id' => Network::factory(),
-            'type' => fake()->randomElement(['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'bank_transfer']),
+            'type' => fake()->randomElement(['deposit', 'withdrawal', 'send_money', 'bill_payment', 'airtime', 'data', 'bank_to_wallet', 'wallet_to_bank']),
             'customer_name' => fake()->name(),
             'customer_phone' => fake()->unique()->numerify('07########'),
             'amount' => $amount,
