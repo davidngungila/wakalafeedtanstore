@@ -196,7 +196,6 @@
 
             document.getElementById('auditModalWhen').textContent = tr.dataset.when;
             document.getElementById('auditModalUser').textContent = tr.dataset.user + (tr.dataset.useremail ? ' (' + tr.dataset.useremail + ')' : '');
-            document.getElementById('auditModalAction').textContent = tr.dataset.action;
             document.getElementById('auditModalActionTag').textContent = tr.dataset.action;
             document.getElementById('auditModalEntity').textContent = tr.dataset.entity || '—';
             document.getElementById('auditModalEntityId').textContent = tr.dataset.entityid || '—';
