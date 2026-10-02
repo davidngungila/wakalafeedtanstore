@@ -1052,11 +1052,13 @@ class TransactionController extends Controller
             return back()->with('error', 'Failed to update transaction: '.$e->getMessage());
         }
 
-        $this->recordAudit('Transaction updated', 'Transaction', $transaction->id, [
-            'reference' => $oldReference,
-            'old' => ['amount' => $oldAmount, 'type' => $oldType, 'network_id' => $oldNetworkId, 'date' => $oldDateStr],
-            'new' => ['amount' => $newAmount, 'type' => $newType, 'network_id' => $newNetworkId, 'date' => $newDateStr],
-        ]);
+        if ($isFinancialChange || $isDateChange || $isStatusChange || $transaction->wasChanged(['customer_name', 'customer_phone', 'notes', 'provider_reference'])) {
+            $this->recordAudit('Transaction updated', 'Transaction', $transaction->id, [
+                'reference' => $oldReference,
+                'old' => ['amount' => $oldAmount, 'type' => $oldType, 'network_id' => $oldNetworkId, 'date' => $oldDateStr],
+                'new' => ['amount' => $newAmount, 'type' => $newType, 'network_id' => $newNetworkId, 'date' => $newDateStr],
+            ]);
+        }
 
         if ($request->expectsJson()) {
             return response()->json(['success' => true, 'message' => 'Transaction updated successfully.', 'reference' => $transaction->reference]);

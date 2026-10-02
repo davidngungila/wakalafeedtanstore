@@ -87,6 +87,29 @@
             </div>
         @endif
     </div>
+
+    <div class="modal-backdrop" id="auditLogModal">
+        <div class="popup" style="max-width:520px; width:100%; margin:auto;">
+            <div class="modal-head">
+                <h3>Audit log entry</h3>
+                <button class="modal-close" onclick="closeModal('auditLogModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-list" style="margin-bottom:14px;">
+                    <div class="detail-row"><span class="dk">When</span><span class="dv" id="auditModalWhen">—</span></div>
+                    <div class="detail-row"><span class="dk">User</span><span class="dv" id="auditModalUser">—</span></div>
+                    <div class="detail-row"><span class="dk">Action</span><span class="dv"><span class="tag tag-terracotta" id="auditModalActionTag">—</span></span></div>
+                    <div class="detail-row"><span class="dk">Entity</span><span class="dv" id="auditModalEntity">—</span></div>
+                    <div class="detail-row"><span class="dk">Entity ID</span><span class="dv" id="auditModalEntityId">—</span></div>
+                    <div class="detail-row"><span class="dk">IP address</span><span class="dv" id="auditModalIp">—</span></div>
+                </div>
+                <div id="auditModalBody"></div>
+            </div>
+            <div class="modal-foot">
+                <button type="button" class="btn btn-primary" onclick="closeModal('auditLogModal')">Close</button>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @section('scripts')
@@ -98,24 +121,86 @@
             });
         }
 
-        bindRowClick('#logsBody tr[data-action]', tr => {
+        const AUDIT_FIELD_LABELS = {
+            amount: 'Amount', type: 'Type', network_id: 'Network ID', date: 'Date',
+            name: 'Name', email: 'Email', phone: 'Phone', role: 'Role', status: 'Status',
+            reference: 'Reference', method: 'Method', variance: 'Variance', tie_out: 'Tie-out',
+            opening_cash: 'Opening cash', deposits: 'Deposits', withdrawals: 'Withdrawals',
+            total_volume: 'Total volume', total_commission: 'Commission', cash: 'Cash',
+            float_total: 'Float total', count: 'Count', shift: 'Shift',
+        };
+
+        const auditLabel = (key) => AUDIT_FIELD_LABELS[key] || key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+
+        function auditValue(value) {
+            if (value === null || value === undefined) return '—';
+            if (typeof value === 'object') return JSON.stringify(value);
+            return String(value);
+        }
+
+        function buildAuditDetails(details) {
+            const keys = Object.keys(details).filter(k => k !== 'old' && k !== 'new');
+            const oldValues = (details.old && typeof details.old === 'object') ? details.old : null;
+            const newValues = (details.new && typeof details.new === 'object') ? details.new : null;
+
+            let html = '<div class="detail-list">';
+
+            keys.forEach(key => {
+                html += '<div class="detail-row"><span class="dk">' + auditEsc(auditLabel(key)) + '</span><span class="dv">' + auditEsc(auditValue(details[key])) + '</span></div>';
+            });
+
+            if (oldValues || newValues) {
+                const diffKeys = [...new Set([...Object.keys(oldValues || {}), ...Object.keys(newValues || {})])];
+                const changed = diffKeys.filter(key => auditValue(oldValues?.[key]) !== auditValue(newValues?.[key]));
+
+                html += '<div class="detail-row" style="padding-top:12px;margin-top:6px;border-top:1px solid var(--line);"><span class="dk">Changes</span><span class="dv">' +
+                    (changed.length === 0
+                        ? '<em style="color:var(--ink-soft);">No field values changed.</em>'
+                        : '</span></div>';
+
+                if (changed.length > 0) {
+                    html += '<div class="table-scroll" style="margin:8px 0 4px;"><table><thead><tr><th>Field</th><th>Old</th><th>New</th></tr></thead><tbody>';
+                    changed.forEach(key => {
+                        html += '<tr>' +
+                            '<td>' + auditEsc(auditLabel(key)) + '</td>' +
+                            '<td style="color:var(--danger);">' + auditEsc(auditValue(oldValues?.[key])) + '</td>' +
+                            '<td style="color:var(--acacia-600);font-weight:700;">' + auditEsc(auditValue(newValues?.[key])) + '</td>' +
+                            '</tr>';
+                    });
+                    html += '</tbody></table></div>';
+                }
+            }
+
+            if (keys.length === 0 && !oldValues && !newValues) {
+                html += '<div class="detail-row"><span class="dk">Details</span><span class="dv">—</span></div>';
+            }
+
+            return html + '</div>';
+        }
+
+        function auditEsc(value) {
+            return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function openAuditModal(tr) {
             let details = tr.dataset.details || '{}';
             try { details = JSON.parse(details); } catch (err) { details = {}; }
-            const detailEntries = Object.keys(details).map(k => [
-                k,
-                details[k] !== null && typeof details[k] === 'object'
-                    ? JSON.stringify(details[k])
-                    : String(details[k]),
-            ]);
-            return [
-                ['When', tr.dataset.when],
-                ['User', tr.dataset.user + (tr.dataset.useremail ? ' (' + tr.dataset.useremail + ')' : '')],
-                ['Action', { __html: '<span class="tag tag-terracotta">' + tr.dataset.action + '</span>' }],
-                ['Entity', tr.dataset.entity || '—'],
-                ['Entity ID', tr.dataset.entityid || '—'],
-                ['IP address', tr.dataset.ip || '—'],
-                ...detailEntries,
-            ];
-        }, 'Audit log entry');
+
+            document.getElementById('auditModalWhen').textContent = tr.dataset.when;
+            document.getElementById('auditModalUser').textContent = tr.dataset.user + (tr.dataset.useremail ? ' (' + tr.dataset.useremail + ')' : '');
+            document.getElementById('auditModalAction').textContent = tr.dataset.action;
+            document.getElementById('auditModalActionTag').textContent = tr.dataset.action;
+            document.getElementById('auditModalEntity').textContent = tr.dataset.entity || '—';
+            document.getElementById('auditModalEntityId').textContent = tr.dataset.entityid || '—';
+            document.getElementById('auditModalIp').textContent = tr.dataset.ip || '—';
+            document.getElementById('auditModalBody').innerHTML = buildAuditDetails(details);
+
+            openModal('auditLogModal');
+        }
+
+        document.querySelectorAll('#logsBody tr[data-action]').forEach(tr => {
+            tr.style.cursor = 'pointer';
+            tr.addEventListener('click', () => openAuditModal(tr));
+        });
     </script>
 @endsection
