@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -151,7 +152,9 @@ class UserController extends Controller
 
         $this->recordAudit('User account created', 'User', $user->id, ['email' => $user->email, 'role' => $user->role]);
 
-        app(SmsTemplates::class)->sendToUser($user, 'credentials', ['password' => $validated['password']]);
+        if ($request->boolean('send_credentials_sms', true)) {
+            app(SmsTemplates::class)->sendToUser($user, 'credentials', ['password' => $validated['password']]);
+        }
 
         if ($request->expectsJson()) {
             return response()->json(['success' => true, 'message' => 'User account created successfully.']);
@@ -202,6 +205,34 @@ class UserController extends Controller
         }
 
         return back()->with('status', 'User account updated successfully.');
+    }
+
+    public function create(): View
+    {
+        $agents = Agent::orderBy('name')->get(['id', 'name', 'code']);
+
+        return view('users.create', compact('agents'));
+    }
+
+    public function sendCredentialsSms(Request $request, User $user): JsonResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'password' => ['nullable', 'string', 'min:6'],
+        ]);
+
+        $password = $validated['password'] ?? Str::password(10);
+
+        $user->update(['password' => $password]);
+
+        app(SmsTemplates::class)->sendToUser($user, 'credentials', ['password' => $password]);
+
+        $this->recordAudit('Credentials SMS sent', 'User', $user->id);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Password updated and credentials SMS sent.']);
+        }
+
+        return back()->with('status', 'Password updated and credentials SMS sent.');
     }
 
     public function show(User $user, SmsSender $sender): View

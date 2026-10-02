@@ -12,6 +12,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\ExportService;
 use App\Services\SmsSender;
+use App\Support\Shift;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Dompdf\Dompdf;
 use Illuminate\Http\JsonResponse;
@@ -154,7 +155,10 @@ class ReconciliationController extends Controller
             try {
                 Carbon::parse($rawDate)->toDateString();
 
-                return redirect()->route('reconciliation.create', ['date' => $this->encryptDateParam($rawDate)]);
+                return redirect()->route('reconciliation.create', array_filter([
+                    'date' => $this->encryptDateParam($rawDate),
+                    'shift' => $request->input('shift'),
+                ], fn ($v) => $v !== null));
             } catch (\Throwable) {
             }
         }
@@ -175,10 +179,16 @@ class ReconciliationController extends Controller
             $viewDate = today()->toDateString();
         }
 
-        $run = $this->buildRun($agent, $viewDate);
+        $current = Shift::current();
+        $shift = in_array($request->input('shift'), ['full', 'morning', 'night'], true)
+            ? $request->input('shift')
+            : ($viewDate === $current['date'] ? $current['shift'] : Shift::FULL);
+
+        $run = $this->buildRun($agent, $viewDate, $shift);
 
         $existing = Reconciliation::where('agent_id', $agent->id)
             ->where('reconciliation_date', $viewDate)
+            ->where('shift', $shift)
             ->latest()
             ->first();
 
@@ -189,13 +199,17 @@ class ReconciliationController extends Controller
             ->map(fn ($d) => Carbon::parse($d)->toDateString())
             ->values();
 
-        // Load all opening data + transactions done for the selected date (admin request) — include reversed on both created and reversed dates so TXN-260923-8118 shows correctly on reversal day
-        $dayOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($viewDate))->first();
+        // Load all opening data + transactions done for the selected shift window
+        [$windowStart, $windowEnd] = Shift::window($viewDate, $shift);
+
+        $dayOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($viewDate))
+            ->whereIn('shift', [$shift, Shift::FULL])
+            ->first();
         $dayTransactions = Transaction::with(['network', 'operator', 'agent'])
             ->where('agent_id', $agent->id)
-            ->where(function ($q) use ($viewDate) {
-                $q->whereDate('created_at', $viewDate)
-                    ->orWhereDate('reversed_at', $viewDate);
+            ->where(function ($q) use ($windowStart, $windowEnd) {
+                $q->whereBetween('created_at', [$windowStart, $windowEnd])
+                    ->orWhereBetween('reversed_at', [$windowStart, $windowEnd]);
             })
             ->whereNotIn('type', ['float_topup', 'float_deposit', 'cash_to_float'])
             ->latest()
@@ -204,7 +218,7 @@ class ReconciliationController extends Controller
 
         $dayFloatTransactions = FloatTransaction::with(['network', 'operator'])
             ->where('agent_id', $agent->id)
-            ->whereDate('created_at', $viewDate)
+            ->whereBetween('created_at', [$windowStart, $windowEnd])
             ->latest()
             ->limit(50)
             ->get();
@@ -216,6 +230,7 @@ class ReconciliationController extends Controller
             'run' => $run,
             'existing' => $existing,
             'selectedDate' => $viewDate,
+            'selectedShift' => $shift,
             'selectedDateEncrypted' => $selectedDateEncrypted,
             'isAdmin' => $isAdmin,
             'availableDates' => $availableDates,
@@ -229,11 +244,14 @@ class ReconciliationController extends Controller
     {
         $validated = $request->validate([
             'reconciliation_date' => ['required', 'date'],
+            'shift' => ['nullable', 'in:full,morning,night'],
             'counted_cash' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:255'],
             'counted_floats' => ['nullable', 'array'],
             'counted_floats.*' => ['nullable', 'numeric', 'min:0'],
         ]);
+
+        $shift = $validated['shift'] ?? Shift::FULL;
 
         $agent = cash_point();
 
@@ -246,7 +264,7 @@ class ReconciliationController extends Controller
             return redirect()->route('cash-point.index')->with('error', $message);
         }
 
-        $run = $this->buildRun($agent, $validated['reconciliation_date']);
+        $run = $this->buildRun($agent, $validated['reconciliation_date'], $shift);
 
         $expectedCash = $run['expectedCash'];
         $countedCash = (float) $validated['counted_cash'];
@@ -284,6 +302,7 @@ class ReconciliationController extends Controller
         $record = Reconciliation::create([
             'agent_id' => $agent->id,
             'reconciliation_date' => $validated['reconciliation_date'],
+            'shift' => $shift,
             'opening_cash' => $run['openingCash'],
             'cash_deposits' => $run['cashDeposits'],
             'cash_withdrawals' => $run['cashWithdrawals'],
@@ -755,16 +774,20 @@ class ReconciliationController extends Controller
      *     }>,
      * }
      */
-    private function buildRun(Agent $agent, string $date): array
+    private function buildRun(Agent $agent, string $date, string $shift = 'full'): array
     {
         // Show float opening for ALL networks (active + inactive) as requested
         $networks = Network::orderBy('name')->get(['id', 'name', 'color']);
 
-        $dailyOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($date))->first();
+        [$windowStart, $windowEnd] = Shift::window($date, $shift);
+
+        $dailyOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($date))
+            ->whereIn('shift', [$shift, Shift::FULL])
+            ->first();
 
         $transactions = Transaction::query()
             ->where('agent_id', $agent->id)
-            ->whereDate('created_at', $date)
+            ->whereBetween('created_at', [$windowStart, $windowEnd])
             ->where('status', 'completed')
             ->get();
 
@@ -792,7 +815,7 @@ class ReconciliationController extends Controller
 
         // FloatTransaction top-ups for that date (e.g. 3×1M on 2026-09-21) — float is bank-replenished, must be added to expected
         $floatTransactions = FloatTransaction::where('agent_id', $agent->id)
-            ->whereDate('created_at', $date)
+            ->whereBetween('created_at', [$windowStart, $windowEnd])
             ->get();
         $floatTxTopupsByNetwork = $floatTransactions
             ->whereIn('type', ['float_topup', 'cash_in', 'cash_to_float'])

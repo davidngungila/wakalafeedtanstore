@@ -198,6 +198,14 @@
                         <input type="date" name="reconciliation_date" value="{{ old('reconciliation_date', $run['date']) }}" required>
                     </div>
                     <div class="field">
+                        <label>Shift</label>
+                        <select name="shift" onchange="window.location.href='{{ route('reconciliation.create') }}?date={{ urlencode($selectedDate) }}&shift='+this.value;">
+                            @foreach (['full' => 'Full day (08:00 – 07:59+)', 'morning' => 'Morning shift (08:00 – 19:59)', 'night' => 'Night shift (20:00 – 07:59)'] as $value => $label)
+                                <option value="{{ $value }}" {{ ($selectedShift ?? 'full') === $value ? 'selected' : '' }}>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="field">
                         <label>Counted closing cash in till (TZS)</label>
                         <input type="number" name="counted_cash" id="countedCash" min="0" step="0.01" value="{{ old('counted_cash', $run['expectedCash']) }}" class="cash-counted" placeholder="0.00" required>
                     </div>

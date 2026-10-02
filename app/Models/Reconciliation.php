@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Crypt;
 #[Fillable([
     'agent_id',
     'reconciliation_date',
+    'shift',
     'opening_cash',
     'cash_deposits',
     'cash_withdrawals',

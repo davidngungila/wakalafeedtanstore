@@ -18,6 +18,15 @@
         <form action="{{ route('daily-opening.store') }}" method="POST" data-opening-form>
             @csrf
             <div class="panel-body">
+                <div class="field" style="max-width:420px; margin-bottom:18px;">
+                    <label>Shift</label>
+                    <select name="shift" id="openingShift">
+                        @foreach (['morning' => 'Morning shift (08:00 – 19:59)', 'night' => 'Night shift (20:00 – 07:59)', 'full' => 'Full day (08:00 – 07:59+)'] as $value => $label)
+                            <option value="{{ $value }}" {{ old('shift', $currentShift['shift']) === $value ? 'selected' : '' }}>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <p style="font-size:12px; color:var(--ink-soft); margin-top:6px;">Shift date: {{ \Illuminate\Support\Carbon::parse($currentShift['date'])->format('l, j F Y') }}</p>
+                </div>
                 <div class="balance-strip">
                     <div class="balance-box" style="--stat-tint:var(--terracotta-100);">
                         <div class="bb-label">

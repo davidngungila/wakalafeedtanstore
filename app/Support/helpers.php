@@ -4,6 +4,8 @@ use App\Models\Agent;
 use App\Models\DailyOpening;
 use App\Models\Reconciliation;
 use App\Models\Transaction;
+use App\Support\Shift;
+use Illuminate\Support\Carbon;
 
 if (! function_exists('money')) {
     /**
@@ -294,20 +296,26 @@ if (! function_exists('cashier_shift_blockers')) {
 
         $blockers = [];
 
-        $opening = DailyOpening::forAgentAndDate($agent->id, today())->first();
+        $current = Shift::current();
+        [$shiftStart, $shiftEnd] = Shift::window($current['date'], $current['shift']);
+
+        $opening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($current['date']))
+            ->whereIn('shift', [$current['shift'], Shift::FULL])
+            ->first();
 
         if ($opening !== null && ! $opening->is_closed) {
             $blockers[] = 'Close today\'s daily opening.';
         }
 
         $reconciliation = Reconciliation::where('agent_id', $agent->id)
-            ->whereDate('reconciliation_date', today())
+            ->where('reconciliation_date', $current['date'])
+            ->whereIn('shift', [$current['shift'], Shift::FULL])
             ->latest()
             ->first();
 
         $hadActivity = Transaction::where('agent_id', $agent->id)
             ->where('status', 'completed')
-            ->whereDate('created_at', today())
+            ->whereBetween('created_at', [$shiftStart, $shiftEnd])
             ->exists();
 
         if ($hadActivity && $reconciliation === null) {

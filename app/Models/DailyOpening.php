@@ -13,6 +13,7 @@ use Illuminate\Support\Carbon;
     'agent_id',
     'user_id',
     'opening_date',
+    'shift',
     'cash_opening',
     'float_openings',
     'notes',

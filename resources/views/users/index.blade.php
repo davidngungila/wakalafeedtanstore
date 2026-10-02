@@ -10,7 +10,7 @@
         </div>
         <div class="view-actions">
             <a class="btn btn-ghost" href="{{ route('users.sessions') }}">View all active sessions</a>
-            <button class="btn btn-primary" onclick="openUserModal()">+ Add user</button>
+            <a class="btn btn-primary" href="{{ route('users.create') }}">+ Add user</a>
         </div>
         @include('exports._export-modal', ['route' => $exportRoute, 'columns' => $exportColumns, 'title' => 'Users'])
     </div>

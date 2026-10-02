@@ -8,6 +8,7 @@ use App\Models\Network;
 use App\Models\Reconciliation;
 use App\Models\Transaction;
 use App\Services\ExportService;
+use App\Support\Shift;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,7 +25,11 @@ class DailyOpeningController extends Controller
             return redirect()->route('cash-point.index')->with('error', 'Set up the cash point first.');
         }
 
-        $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())->first();
+        $current = Shift::current();
+
+        $todayOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($current['date']))
+            ->whereIn('shift', [$current['shift'], Shift::FULL])
+            ->first();
 
         if ($todayOpening) {
             return redirect()->route('daily-opening.show', $todayOpening);
@@ -37,10 +42,12 @@ class DailyOpeningController extends Controller
                 ->with('error', 'A reconciliation from a previous day is awaiting supervisor approval. It must be approved before a new shift can be opened.');
         }
 
+        $currentShift = Shift::current();
+
         $networks = Network::active()->orderBy('name')->get(['id', 'name', 'color']);
         $currentBalances = $agent->balances()->with('network')->get()->keyBy('network_id');
 
-        return view('daily_opening.create', compact('agent', 'networks', 'currentBalances'));
+        return view('daily_opening.create', compact('agent', 'networks', 'currentBalances', 'currentShift'));
     }
 
     public function store(Request $request): JsonResponse|RedirectResponse
@@ -61,6 +68,7 @@ class DailyOpeningController extends Controller
             'float_openings' => ['required', 'array'],
             'float_openings.*' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:500'],
+            'shift' => ['nullable', 'in:full,morning,night'],
         ]);
 
         if ($this->unapprovedReconciliationExists($agent->id)) {
@@ -72,10 +80,14 @@ class DailyOpeningController extends Controller
             return redirect()->route('reconciliation.index')->with('error', $message);
         }
 
+        $shiftInfo = Shift::current();
+        $shift = $validated['shift'] ?? $shiftInfo['shift'];
+
         $opening = DailyOpening::create([
             'agent_id' => $agent->id,
             'user_id' => auth()->id(),
-            'opening_date' => today(),
+            'opening_date' => $shiftInfo['date'],
+            'shift' => $shift,
             'cash_opening' => $validated['cash_opening'],
             'float_openings' => $validated['float_openings'],
             'notes' => $validated['notes'] ?? null,

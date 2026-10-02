@@ -3,8 +3,10 @@
 namespace App\Http\Middleware;
 
 use App\Models\DailyOpening;
+use App\Support\Shift;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureDailyOpeningSet
@@ -93,7 +95,10 @@ class EnsureDailyOpeningSet
             return $next($request);
         }
 
-        $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())
+        $current = Shift::current();
+
+        $todayOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($current['date']))
+            ->whereIn('shift', [$current['shift'], Shift::FULL])
             ->open()
             ->first();
 

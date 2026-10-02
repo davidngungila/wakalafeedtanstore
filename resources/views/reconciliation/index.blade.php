@@ -57,7 +57,7 @@
                         @foreach ($pendingDays as $day)
                             <tr>
                                 <td>{{ \Illuminate\Support\Carbon::parse($day)->format('l, j F Y') }}</td>
-                                <td><a href="{{ route('reconciliation.create', ['date' => $day]) }}" class="btn btn-ghost btn-sm">Reconcile</a></td>
+                                <td><a href="{{ route('reconciliation.create', ['date' => $day, 'shift' => \App\Support\Shift::current()['shift']]) }}" class="btn btn-ghost btn-sm">Reconcile</a></td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -96,7 +96,7 @@
                             data-notes="{{ $record->notes }}">
                             <td>
                                 <div class="cell-title">{{ $record->reconciliation_date }}</div>
-                                <div class="cell-sub">#{{ $record->code }}</div>
+                                <div class="cell-sub">#{{ $record->code }} · {{ ucfirst($record->shift ?? 'full') }} shift</div>
                             </td>
                             <td>@money($record->expected_cash)</td>
                             <td>@money($record->counted_cash)</td>

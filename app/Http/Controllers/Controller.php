@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\DailyOpening;
+use App\Support\Shift;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Request as RequestFacade;
 
@@ -69,7 +71,10 @@ abstract class Controller
             $agent = cash_point();
 
             if ($agent !== null) {
-                $todayOpening = DailyOpening::forAgentAndDate($agent->id, today())
+                $current = Shift::current();
+
+                $todayOpening = DailyOpening::forAgentAndDate($agent->id, Carbon::parse($current['date']))
+                    ->whereIn('shift', [$current['shift'], Shift::FULL])
                     ->open()
                     ->first();
 

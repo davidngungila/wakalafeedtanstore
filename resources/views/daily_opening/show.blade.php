@@ -6,7 +6,7 @@
     <div class="view-head">
         <div>
             <h2>Daily Opening — {{ $dailyOpening->opening_date->format('d M Y') }}</h2>
-            <p class="sub">{{ $dailyOpening->opening_date->format('l, j F Y') }} · {!! $dailyOpening->is_closed ? '<span class="tag tag-grey">Closed</span>' : '<span class="tag tag-green">Open</span>' !!} · {{ $isAdmin ? 'Admin view' : '' }}</p>
+            <p class="sub">{{ $dailyOpening->opening_date->format('l, j F Y') }} · <span class="tag tag-gold">{{ \App\Support\Shift::label($dailyOpening->shift ?? 'full') }}</span> · {!! $dailyOpening->is_closed ? '<span class="tag tag-grey">Closed</span>' : '<span class="tag tag-green">Open</span>' !!} · {{ $isAdmin ? 'Admin view' : '' }}</p>
         </div>
         <div class="view-actions">
             @if (! $dailyOpening->is_closed)

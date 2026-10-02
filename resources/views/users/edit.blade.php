@@ -75,12 +75,13 @@
                 @endphp
                 <div class="field" style="margin-bottom:14px;">
                     <label>Template (optional)</label>
-                    <select id="userSmsTemplate">
-                        <option value="">— Custom message —</option>
-                        @foreach (app(\App\Services\SmsTemplates::class)->all() as $key => $template)
-                            <option value="{{ $key }}">{{ $template['label'] }}</option>
-                        @endforeach
-                    </select>
+                        <select id="userSmsTemplate">
+                            <option value="">— Custom message —</option>
+                            @foreach (app(\App\Services\SmsTemplates::class)->all() as $key => $template)
+                                @continue($key === 'credentials')
+                                <option value="{{ $key }}">{{ $template['label'] }}</option>
+                            @endforeach
+                        </select>
                 </div>
                 <div class="field">
                     <label>Message</label>
@@ -99,6 +100,31 @@
                 </div>
             @else
                 <p style="font-size:13px; color:var(--ink-soft);">Add a phone number to this user to send SMS.</p>
+            @endif
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <h3>Login credentials SMS</h3>
+            <span class="link">{{ $user->phone ?: 'No phone on file' }}</span>
+        </div>
+        <div class="panel-body">
+            @if ($user->phone)
+                <p style="font-size:13px; color:var(--ink-soft); margin-bottom:12px;">Sets a new password for {{ $user->name }} and sends the login credentials by SMS. Leave the password blank to generate one automatically.</p>
+                <form method="POST" action="{{ route('users.credentials.sms', $user) }}" data-credentials-form>
+                    @csrf
+                    <div class="field">
+                        <label>New password</label>
+                        <input type="text" name="password" value="" minlength="6" placeholder="Leave blank to generate">
+                    </div>
+                    <div style="display:flex; gap:10px; margin-top:14px; align-items:center;">
+                        <button type="submit" class="btn btn-primary btn-sm">Reset password &amp; send SMS</button>
+                        <span id="credentialsSmsStatus" style="font-size:13px; color:var(--ink-soft);"></span>
+                    </div>
+                </form>
+            @else
+                <p style="font-size:13px; color:var(--ink-soft);">Add a phone number to this user to send the credentials SMS.</p>
             @endif
         </div>
     </div>
