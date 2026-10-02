@@ -186,6 +186,51 @@ class CloseDayPageTest extends TestCase
         $this->assertFalse($opening->fresh()->is_closed);
     }
 
+    public function test_a_rejected_close_shows_why_instead_of_reloading_silently(): void
+    {
+        $opening = $this->openDay();
+        $network = Network::firstWhere('name', 'M-Pesa');
+
+        $this->actingAs($this->user())
+            ->from(route('daily-opening.close-form', $opening))
+            ->post(route('daily-opening.close', $opening), [
+                '_method' => 'PUT',
+                'cash_closing' => 240000,
+                'float_closings' => [$network->id => 75000],
+            ])
+            ->assertRedirect(route('daily-opening.close-form', $opening))
+            ->assertSessionHas('error');
+
+        $this->assertFalse($opening->fresh()->is_closed);
+
+        $this->actingAs($this->user())
+            ->get(route('daily-opening.close-form', $opening))
+            ->assertOk()
+            ->assertSee('Add a note explaining the cash variance');
+    }
+
+    public function test_an_uncounted_network_explains_which_one_is_missing(): void
+    {
+        $opening = $this->openDay();
+        $counted = Network::firstWhere('name', 'M-Pesa');
+        Network::factory()->create(['name' => 'HaloPesa', 'color' => '#0000ff']);
+
+        $this->actingAs($this->user())
+            ->from(route('daily-opening.close-form', $opening))
+            ->post(route('daily-opening.close', $opening), [
+                '_method' => 'PUT',
+                'cash_closing' => 250000,
+                'float_closings' => [$counted->id => 75000],
+            ])
+            ->assertRedirect(route('daily-opening.close-form', $opening))
+            ->assertSessionHas('error');
+
+        $this->actingAs($this->user())
+            ->get(route('daily-opening.close-form', $opening))
+            ->assertOk()
+            ->assertSee('Missing: HaloPesa');
+    }
+
     public function test_day_page_links_to_the_close_day_page(): void
     {
         $opening = $this->openDay();

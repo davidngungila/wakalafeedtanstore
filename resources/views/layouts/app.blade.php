@@ -860,6 +860,9 @@
             </header>
 
             <div class="view-wrap">
+                @if (session('error'))
+                    <div style="background:var(--danger-100);color:var(--danger);border-radius:10px;padding:12px 16px;font-size:13.5px;font-weight:600;margin-bottom:20px;">{{ session('error') }}</div>
+                @endif
                 @if (session('status'))
                     <div style="background:var(--acacia-100);color:var(--acacia-600);border-radius:10px;padding:12px 16px;font-size:13.5px;font-weight:600;margin-bottom:20px;">{{ session('status') }}</div>
                 @endif

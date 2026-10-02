@@ -62,18 +62,6 @@ $system = (float) ($currentBalances[$network->id]->balance ?? 0);
         </div>
     @endif
 
-    @if ($errors->any())
-        <div class="panel" style="border-left:4px solid var(--danger);margin-bottom:18px;">
-            <div class="panel-body">
-                <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.8;color:var(--ink);">
-                    @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
-            </div>
-        </div>
-    @endif
-
     <form method="POST" action="{{ route('daily-opening.close', $dailyOpening) }}" id="closeDayForm">
         @csrf
         <input type="hidden" name="_method" value="PUT">
